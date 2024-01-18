@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2024 Khalil Estell
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -349,7 +349,8 @@ void static_list_test()
 
   "static_list::dtor() handles dandling list items"_test = []() {
     // Setup
-    auto destroy_list_keep_items = []() -> auto {
+    auto destroy_list_keep_items = []() -> auto
+    {
       static_list<int> list;
 
       return std::array<static_list<int>::item, 5>{

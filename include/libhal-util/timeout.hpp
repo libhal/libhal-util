@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2024 Khalil Estell
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -66,10 +66,10 @@ constexpr bool failed(work_state p_state)
 
 template<typename T>
 concept has_work_state = requires(T a) {
-  {
-    a.state()
-  } -> std::same_as<work_state>;
-};
+                           {
+                             a.state()
+                             } -> std::same_as<work_state>;
+                         };
 
 constexpr bool terminated(has_work_state auto p_worker)
 {
