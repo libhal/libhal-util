@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2024 Khalil Estell
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -160,7 +160,8 @@ void delay(hal::steady_clock& p_steady_clock, hal::time_duration p_duration);
  */
 inline auto timeout_generator(hal::steady_clock& p_steady_clock)
 {
-  return [&p_steady_clock](hal::time_duration p_duration) -> auto {
+  return [&p_steady_clock](hal::time_duration p_duration) -> auto
+  {
     return create_timeout(p_steady_clock, p_duration);
   };
 }
