@@ -106,19 +106,17 @@ inline std::basic_ostream<CharT, Traits>& operator<<(
  *
  * @param p_worker - worker function to repeatedly call
  * @param p_timeout - callable timeout object
- * @return result<work_state> - state of the worker function
+ * @return work_state - state of the worker function
  */
-inline result<work_state> try_until(worker auto& p_worker,
-                                    timeout auto p_timeout)
+inline work_state try_until(worker auto& p_worker, timeout auto p_timeout)
 {
   while (true) {
-    auto state = HAL_CHECK(p_worker());
+    p_timeout();
+    auto state = p_worker();
     if (hal::terminated(state)) {
       return state;
     }
-    HAL_CHECK(p_timeout());
   }
-  return new_error(std::errc::state_not_recoverable);
 };
 
 /**
@@ -128,10 +126,9 @@ inline result<work_state> try_until(worker auto& p_worker,
  *
  * @param p_worker - worker function to repeatedly call
  * @param p_timeout - callable timeout object
- * @return result<work_state> - state of the worker function
+ * @return work_state - state of the worker function
  */
-inline result<work_state> try_until(worker auto&& p_worker,
-                                    timeout auto p_timeout)
+inline work_state try_until(worker auto&& p_worker, timeout auto p_timeout)
 {
   worker auto& worker = p_worker;
   return try_until(worker, p_timeout);

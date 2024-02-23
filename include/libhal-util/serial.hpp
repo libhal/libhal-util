@@ -53,10 +53,9 @@ namespace hal {
  *
  * @param p_serial - the serial port that will be written to
  * @param p_data_out - the data to be written out the port
- * @return result<serial::write_t> - get the results of the uart port write
- * operation.
+ * @return serial::write_t - information about the write_t operation.
  */
-[[nodiscard]] inline result<serial::write_t> write_partial(
+[[nodiscard]] inline serial::write_t write_partial(
   serial& p_serial,
   std::span<const hal::byte> p_data_out)
 {
@@ -67,21 +66,26 @@ namespace hal {
  * @ingroup Serial
  * @brief Write bytes to a serial port
  *
+ * Unlike write_partial, this function will attempt to write bytes to the serial
+ * port until the timeout time has expired.
+ *
  * @param p_serial - the serial port that will be written to
  * @param p_data_out - the data to be written out the port
- * @return status - success or failure
+ * @param p_timeout - timeout callable that throws a std::errc::timed_out
+ * exception when the timeout expires.
+ * @throws std::errc::timed_out - if p_timeout expires
  */
-[[nodiscard]] inline status write(serial& p_serial,
-                                  std::span<const hal::byte> p_data_out)
+inline void write(serial& p_serial,
+                  std::span<const hal::byte> p_data_out,
+                  timeout auto p_timeout)
 {
   auto remaining = p_data_out;
 
   while (remaining.size() != 0) {
-    auto write_length = HAL_CHECK(p_serial.write(remaining)).data.size();
+    auto write_length = p_serial.write(remaining).data.size();
     remaining = remaining.subspan(write_length);
+    p_timeout();
   }
-
-  return success();
 }
 
 /**
@@ -90,11 +94,15 @@ namespace hal {
  *
  * @param p_serial - the serial port that will be written to
  * @param p_data_out - chars to be written out the port
- * @return status - success or failure
+ * @param p_timeout - timeout callable that throws a std::errc::timed_out
+ * exception when the timeout expires.
+ * @throws std::errc::timed_out - if p_timeout expires
  */
-[[nodiscard]] inline status write(serial& p_serial, std::string_view p_data_out)
+inline void write(serial& p_serial,
+                  std::string_view p_data_out,
+                  timeout auto p_timeout)
 {
-  return write(p_serial, as_bytes(p_data_out));
+  write(p_serial, as_bytes(p_data_out), p_timeout);
 }
 
 /**
@@ -102,26 +110,23 @@ namespace hal {
  * @brief Read bytes from a serial port
  *
  * @param p_serial - the serial port that will be read from
- * @param p_data_in - buffer to have bytes from the serial port read into
- * @param p_timeout - timeout callable that indicates when to bail out of the
- * read operation.
- * @return result<std::span<hal::byte>> - return an error if
- * a call to serial::read or delay() returns an error from the serial port or
- * a span with the number of bytes read and a pointer to where the read bytes
- * are.
+ * @param p_data_in - buffer to have bytes from the serial port read into. When
+ * this function completes, the full contents of p_data_in should contain
+ * @param p_timeout - timeout callable that throws a std::errc::timed_out
+ * exception when the timeout expires.
+ * @throws std::errc::timed_out - if p_timeout expires
  */
-[[nodiscard]] inline result<std::span<hal::byte>>
-read(serial& p_serial, std::span<hal::byte> p_data_in, timeout auto p_timeout)
+inline void read(serial& p_serial,
+                 std::span<hal::byte> p_data_in,
+                 timeout auto p_timeout)
 {
   auto remaining = p_data_in;
 
   while (remaining.size() != 0) {
-    auto read_length = HAL_CHECK(p_serial.read(remaining)).data.size();
+    auto read_length = p_serial.read(remaining).data.size();
     remaining = remaining.subspan(read_length);
-    HAL_CHECK(p_timeout());
+    p_timeout();
   }
-
-  return p_data_in;
 }
 
 /**
@@ -131,22 +136,20 @@ read(serial& p_serial, std::span<hal::byte> p_data_in, timeout auto p_timeout)
  * This call eliminates the boiler plate of creating an array and then passing
  * that to the read function.
  *
- * @tparam BytesToRead - the number of bytes to be read from the serial port.
+ * @tparam bytes_to_read - the number of bytes to be read from the serial port.
  * @param p_serial - the serial port to be read from
- * @param p_timeout - timeout callable that indicates when to bail out of the
- * read operation.
- * @return result<std::array<hal::byte, BytesToRead>> - return an
- * error if a call to serial::read or delay() returns an error from the
- * serial port or a span with the number of bytes read and a pointer to where
- * the read bytes are.
+ * @param p_timeout - timeout callable that throws a std::errc::timed_out
+ * exception when the timeout expires.
+ * @return std::array<hal::byte, bytes_to_read> - array containing the bytes
+ * read from the serial port.
+ * @throws std::errc::timed_out - if p_timeout expires
  */
-template<size_t BytesToRead>
-[[nodiscard]] result<std::array<hal::byte, BytesToRead>> read(
-  serial& p_serial,
-  timeout auto p_timeout)
+template<size_t bytes_to_read>
+[[nodiscard]] std::array<hal::byte, bytes_to_read> read(serial& p_serial,
+                                                        timeout auto p_timeout)
 {
-  std::array<hal::byte, BytesToRead> buffer;
-  HAL_CHECK(read(p_serial, buffer, p_timeout));
+  std::array<hal::byte, bytes_to_read> buffer;
+  read(p_serial, buffer, p_timeout);
   return buffer;
 }
 
@@ -160,19 +163,17 @@ template<size_t BytesToRead>
  * @param p_serial - the serial port to have the transaction occur on
  * @param p_data_out - the data to be written to the port
  * @param p_data_in - a buffer to receive the bytes back from the port
- * @param p_timeout - timeout callable that indicates when to bail out of the
- * read operation.
- * @return status - success or failure
- * or serial::write() returns an error from the serial port or success.
+ * @param p_timeout - timeout callable that throws a std::errc::timed_out
+ * exception when the timeout expires.
+ * @throws std::errc::timed_out - if p_timeout expires
  */
-[[nodiscard]] inline result<std::span<hal::byte>> write_then_read(
-  serial& p_serial,
-  std::span<const hal::byte> p_data_out,
-  std::span<hal::byte> p_data_in,
-  timeout auto p_timeout)
+inline void write_then_read(serial& p_serial,
+                            std::span<const hal::byte> p_data_out,
+                            std::span<hal::byte> p_data_in,
+                            timeout auto p_timeout)
 {
-  HAL_CHECK(write_partial(p_serial, p_data_out));
-  return read(p_serial, p_data_in, p_timeout);
+  write(p_serial, p_data_out, p_timeout);
+  read(p_serial, p_data_in, p_timeout);
 }
 
 /**
@@ -182,23 +183,23 @@ template<size_t BytesToRead>
  * This is especially useful for devices that use a command and response method
  * of communication.
  *
- * @tparam BytesToRead - the number of bytes to read back
+ * @tparam bytes_to_read - the number of bytes to read back
  * @param p_serial - the serial port to have the transaction occur on
  * @param p_data_out - the data to be written to the port
  * @param p_timeout - timeout callable that indicates when to bail out of the
  * read operation.
- * @return result<std::array<hal::byte, BytesToRead>> - return an
- * error if a call to serial::read or serial::write() returns an error from the
- * serial port or an array of read bytes.
+ * @return std::array<hal::byte, bytes_to_read> - array containing the bytes
+ * read from the serial port.
+ * @throws std::errc::timed_out - if p_timeout expires
  */
-template<size_t BytesToRead>
-[[nodiscard]] result<std::array<hal::byte, BytesToRead>> write_then_read(
+template<size_t bytes_to_read>
+[[nodiscard]] std::array<hal::byte, bytes_to_read> write_then_read(
   serial& p_serial,
   std::span<const hal::byte> p_data_out,
   timeout auto p_timeout)
 {
-  std::array<hal::byte, BytesToRead> buffer;
-  HAL_CHECK(write_then_read(p_serial, p_data_out, buffer, p_timeout));
+  std::array<hal::byte, bytes_to_read> buffer;
+  write_then_read(p_serial, p_data_out, buffer, p_timeout);
   return buffer;
 }
 
@@ -209,14 +210,14 @@ template<size_t BytesToRead>
  * Only use this with serial ports with infallible write operations, meaning
  * they will never return an error result.
  *
- * @tparam DataArray - data array type
+ * @tparam byte_array_t - data array type
  * @param p_serial - serial port to write data to
  * @param p_data - data to be sent over the serial port
  */
-template<typename DataArray>
-void print(serial& p_serial, DataArray&& p_data)
+template<typename byte_array_t>
+void print(serial& p_serial, byte_array_t&& p_data)
 {
-  (void)hal::write(p_serial, p_data);
+  hal::write(p_serial, p_data, hal::never_timeout());
 }
 
 /**
@@ -230,21 +231,21 @@ void print(serial& p_serial, DataArray&& p_data)
  * This function does NOT include the NULL character when transmitting the data
  * over the serial port.
  *
- * @tparam BufferSize - Size of the buffer to allocate on the stack to store the
- * formatted message.
+ * @tparam buffer_size - Size of the buffer to allocate on the stack to store
+ * the formatted message.
  * @tparam Parameters - printf arguments
  * @param p_serial - serial port to write data to
  * @param p_format - printf style null terminated format string
  * @param p_parameters - printf arguments
  */
-template<size_t BufferSize, typename... Parameters>
+template<size_t buffer_size, typename... Parameters>
 void print(serial& p_serial, const char* p_format, Parameters... p_parameters)
 {
-  static_assert(BufferSize > 2);
+  static_assert(buffer_size > 2);
+  constexpr int unterminated_max_string_size =
+    static_cast<int>(buffer_size) - 1;
 
-  std::array<char, BufferSize> buffer{};
-  constexpr int unterminated_max_string_size = static_cast<int>(BufferSize) - 1;
-
+  std::array<char, buffer_size> buffer{};
   int length =
     std::snprintf(buffer.data(), buffer.size(), p_format, p_parameters...);
 
@@ -253,6 +254,7 @@ void print(serial& p_serial, const char* p_format, Parameters... p_parameters)
     length = unterminated_max_string_size;
   }
 
-  (void)hal::write(p_serial, std::string_view(buffer.data(), length));
+  hal::write(
+    p_serial, std::string_view(buffer.data(), length), hal::never_timeout());
 }
 }  // namespace hal

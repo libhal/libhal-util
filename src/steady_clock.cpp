@@ -13,13 +13,14 @@
 // limitations under the License.
 
 #include <libhal-util/steady_clock.hpp>
+#include <libhal/error.hpp>
 
 namespace hal {
 std::uint64_t future_deadline(hal::steady_clock& p_steady_clock,
                               hal::time_duration p_duration)
 {
   using period = decltype(p_duration)::period;
-  const auto frequency = p_steady_clock.frequency().operating_frequency;
+  const auto frequency = p_steady_clock.frequency();
   const auto tick_period = wavelength<period>(frequency);
   auto ticks_required = p_duration / tick_period;
   using unsigned_ticks = std::make_unsigned_t<decltype(ticks_required)>;
@@ -29,46 +30,36 @@ std::uint64_t future_deadline(hal::steady_clock& p_steady_clock,
   }
 
   const auto ticks = static_cast<unsigned_ticks>(ticks_required);
-  const auto future_timestamp = ticks + p_steady_clock.uptime().ticks;
+  const auto future_timestamp = ticks + p_steady_clock.uptime();
 
   return future_timestamp;
 }
-steady_clock_timeout steady_clock_timeout::create(
-  hal::steady_clock& p_steady_clock,
-  hal::time_duration p_duration)
-{
-  const auto deadline = future_deadline(p_steady_clock, p_duration);
-  return { p_steady_clock, deadline };
-}
 
-status steady_clock_timeout::operator()()
+void steady_clock_timeout::operator()()
 {
-  auto current_count = m_counter->uptime().ticks;
-
+  auto current_count = m_counter->uptime();
   if (current_count >= m_cycles_until_timeout) {
-    return hal::new_error(std::errc::timed_out);
+    hal::safe_throw(hal::timed_out(this));
   }
-
-  return success();
 }
 
 steady_clock_timeout::steady_clock_timeout(hal::steady_clock& p_steady_clock,
-                                           std::uint64_t p_cycles_until_timeout)
+                                           hal::time_duration p_duration)
   : m_counter(&p_steady_clock)
-  , m_cycles_until_timeout(p_cycles_until_timeout)
+  , m_cycles_until_timeout(future_deadline(p_steady_clock, p_duration))
 {
 }
 
 steady_clock_timeout create_timeout(hal::steady_clock& p_steady_clock,
                                     hal::time_duration p_duration)
 {
-  return steady_clock_timeout::create(p_steady_clock, p_duration);
+  return { p_steady_clock, p_duration };
 }
 
 void delay(hal::steady_clock& p_steady_clock, hal::time_duration p_duration)
 {
   auto ticks_until_timeout = future_deadline(p_steady_clock, p_duration);
-  while (p_steady_clock.uptime().ticks < ticks_until_timeout) {
+  while (p_steady_clock.uptime() < ticks_until_timeout) {
     continue;
   }
 }

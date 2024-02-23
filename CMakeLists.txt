@@ -38,7 +38,6 @@ libhal_test_and_make_library(
   tests/serial.test.cpp
   tests/spi.test.cpp
   tests/static_callable.test.cpp
-
   tests/static_list.test.cpp
   tests/steady_clock.test.cpp
   tests/streams.test.cpp

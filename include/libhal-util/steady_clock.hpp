@@ -62,12 +62,13 @@ class steady_clock_timeout
 public:
   /**
    * @ingroup SteadyClock
-   * @brief Create a steady_clock_timeout
+   * @brief Construct a new counter timeout object
    *
-   * @return steady_clock_timeout - steady_clock_timeout object
+   * @param p_steady_clock - steady clock implementation
+   * @param p_duration - number of cycles until timeout
    */
-  static steady_clock_timeout create(hal::steady_clock& p_steady_clock,
-                                     hal::time_duration p_duration);
+  steady_clock_timeout(hal::steady_clock& p_steady_clock,
+                       hal::time_duration p_duration);
 
   /**
    * @ingroup SteadyClock
@@ -104,23 +105,11 @@ public:
   /**
    * @ingroup SteadyClock
    * @brief Call this object to check if it has timed out.
-   *
-   * @return status - success or failure
    * @throws std::errc::timed_out - if the timeout time has been exceeded.
    */
-  status operator()();
+  void operator()();
 
 private:
-  /**
-   * @ingroup SteadyClock
-   * @brief Construct a new counter timeout object
-   *
-   * @param p_steady_clock - steady clock implementation
-   * @param p_cycles_until_timeout - number of cycles until timeout
-   */
-  steady_clock_timeout(hal::steady_clock& p_steady_clock,
-                       std::uint64_t p_cycles_until_timeout);
-
   hal::steady_clock* m_counter;
   std::uint64_t m_cycles_until_timeout = 0;
 };

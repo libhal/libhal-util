@@ -1,4 +1,3 @@
-# THIS IS HERE FOR TESTING!
 name: 🚀 4.0.0-alpha.1
 
 on:
@@ -6,6 +5,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "NOP"
+    uses: libhal/ci/.github/workflows/deploy_all.yml@5.x.y
+    with:
+      version: 4.0.0-alpha.1
+    secrets: inherit

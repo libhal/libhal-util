@@ -30,10 +30,8 @@ void math_test()
       expect(that % 2147483648L == multiply(-1LL, -2147483648LL).value());
     };
     "Exceptions"_test = []() {
-      expect(
-        !bool{ multiply(std::uint32_t{ 5U }, std::uint32_t{ 4294967295U }) });
-      expect(
-        !bool{ multiply(std::uint32_t{ 4L }, std::uint32_t{ 1073741824L }) });
+      expect(!multiply(std::uint32_t{ 5U }, std::uint32_t{ 4294967295U }));
+      expect(!multiply(std::uint32_t{ 4L }, std::uint32_t{ 1073741824L }));
     };
     "Standard Usage"_test = []() {
       expect(that % 75 == multiply(15, 5).value());

@@ -14,6 +14,8 @@
 
 #include <libhal-util/timeout.hpp>
 
+#include <libhal/error.hpp>
+
 #include <boost/ut.hpp>
 
 namespace hal {
@@ -24,22 +26,22 @@ void timeout_test()
     // Setup
     constexpr int timeout_call_limit = 10;
     int counts = 0;
-    auto timeout_callback = [&counts]() mutable -> status {
-      counts++;
-      if (counts >= timeout_call_limit) {
-        return hal::new_error(std::errc::timed_out);
-      }
-      return {};
-    };
-    std::function<result<work_state>()> callback = [&counts]() {
+    auto callback = [&counts]() -> work_state {
       if (counts >= 5) {
         return work_state::finished;
       }
       return work_state::in_progress;
     };
 
+    auto timeout_callback = [&counts]() -> void {
+      counts++;
+      if (counts >= timeout_call_limit) {
+        throw std::errc::timed_out;
+      }
+    };
+
     // Exercise
-    auto result = hal::try_until(callback, timeout_callback).value();
+    auto result = hal::try_until(callback, timeout_callback);
 
     // Verify
     expect(that % work_state::finished == result);
@@ -50,32 +52,34 @@ void timeout_test()
     // Setup
     constexpr int timeout_call_limit = 10;
     int counts = 0;
-    auto timeout_callback = [&counts]() mutable -> status {
-      counts++;
-      if (counts >= timeout_call_limit) {
-        return hal::new_error(std::errc::timed_out);
-      }
-      return {};
-    };
-    std::function<result<work_state>()> callback = [&counts]() {
+
+    auto callback = [&counts]() -> work_state {
       if (counts >= 11) {
         return work_state::finished;
       }
       return work_state::in_progress;
     };
 
+    auto timeout_callback = [&counts]() mutable {
+      counts++;
+      if (counts >= timeout_call_limit) {
+        safe_throw(hal::timed_out(nullptr));
+      }
+    };
+
     // Exercise
-    auto result = hal::try_until(callback, timeout_callback);
+    expect(throws<hal::timed_out>([&callback, &timeout_callback]() {
+      hal::try_until(callback, timeout_callback);
+    }));
 
     // Verify
-    expect(!bool{ result });
     expect(that % 10 == counts);
   };
 
   "hal::try_until(callback, timeout) with never_timeout"_test = []() {
     // Setup
     int counts = 0;
-    std::function<result<work_state>()> callback = [&counts]() {
+    auto callback = [&counts]() -> work_state {
       counts++;
       if (counts >= 5) {
         return work_state::finished;
@@ -84,7 +88,7 @@ void timeout_test()
     };
 
     // Exercise
-    auto result = hal::try_until(callback, never_timeout()).value();
+    auto result = hal::try_until(callback, never_timeout());
 
     // Verify
     expect(that % work_state::finished == result);
@@ -95,40 +99,25 @@ void timeout_test()
     // Setup
     constexpr int timeout_call_limit = 10;
     int counts = 0;
-    auto timeout_callback = [&counts]() mutable -> status {
-      counts++;
-      if (counts >= timeout_call_limit) {
-        return hal::new_error(std::errc::timed_out);
-      }
-      return {};
-    };
-    std::function<result<work_state>()> callback = []() {
-      return hal::new_error(std::errc::resource_unavailable_try_again);
+
+    auto callback = []() -> work_state {
+      safe_throw(hal::resource_unavailable_try_again(nullptr));
+      return work_state::in_progress;
     };
 
-    bool callback_error = false;
-    auto error_catcher =
-      [&callback_error](
-        hal::match<std::errc, std::errc::resource_unavailable_try_again> p_errc)
-      -> status {
-      (void)p_errc;
-      callback_error = true;
-      return {};
+    auto timeout_callback = [&counts]() mutable {
+      counts++;
+      if (counts >= timeout_call_limit) {
+        safe_throw(hal::timed_out(nullptr));
+      }
     };
 
     // Exercise
-    auto result = hal::attempt(
-      [&callback, &timeout_callback]() -> status {
-        while (true) {
-          HAL_CHECK(hal::try_until(callback, timeout_callback));
-        }
-        // Unreachable!
-        return {};
-      },
-      error_catcher);
-
     // Verify
-    expect(that % true == callback_error);
+    expect(throws<hal::resource_unavailable_try_again>(
+      [&callback, &timeout_callback]() {
+        hal::try_until(callback, timeout_callback);
+      }));
   };
 
   "hal::work_state helper functions"_test = []() {

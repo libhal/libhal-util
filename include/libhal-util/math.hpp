@@ -21,6 +21,7 @@
 
 #include <concepts>
 #include <limits>
+#include <optional>
 
 #include <libhal/error.hpp>
 
@@ -34,11 +35,11 @@ namespace hal {
  * @tparam T - integer arithmetic type
  * @param p_lhs - left hand side integer
  * @param p_rhs - right hand side integer
- * @return result<T> - either the resultant or an error
- * `std::errc::result_out_of_range`
+ * @returns std::optional<T> - the resultant, std::nullopt if the operation
+ * overflows.
  */
 template<typename T>
-[[nodiscard]] result<T> multiply(T p_lhs, T p_rhs)
+[[nodiscard]] std::optional<T> multiply(T p_lhs, T p_rhs)
 {
   if (p_lhs == 0 || p_rhs == 0) {
     return T{ 0 };
@@ -47,7 +48,7 @@ template<typename T>
   T result = p_lhs * p_rhs;
 
   if (p_lhs != result / p_rhs) {
-    return hal::new_error(std::errc::result_out_of_range);
+    return std::nullopt;
   }
 
   return result;
@@ -69,10 +70,10 @@ template<typename T>
  *
  * @tparam T - integral type
  * @param p_value - integer value to be made positive
- * @return constexpr auto - positive representation of the integer
+ * @return T - positive representation of the integer
  */
 template<typename T>
-[[nodiscard]] constexpr T absolute_value(T p_value)
+[[nodiscard]] constexpr T absolute_value(T p_value) noexcept
 {
   if constexpr (std::is_unsigned_v<T>) {
     return p_value;
@@ -95,7 +96,7 @@ template<typename T>
  * @tparam T - integral type of the two operands
  * @param p_numerator - the value to be divided
  * @param p_denominator - the value to divide the numerator against
- * @return constexpr T - rounded quotient between numerator and denominator.
+ * @return T - rounded quotient between numerator and denominator.
  * Returns 0 if the denominator is greater than the numerator.
  */
 template<typename T>
@@ -196,9 +197,9 @@ template<std::integral T>
  * @return true - difference is less than epsilon
  * @return false - difference is more than epsilon
  */
-constexpr static bool equals(std::floating_point auto p_value1,
-                             std::floating_point auto p_value2,
-                             float p_epsilon = 1e-9f)
+[[nodiscard]] constexpr bool equals(std::floating_point auto p_value1,
+                                    std::floating_point auto p_value2,
+                                    float p_epsilon = 1e-9f)
 {
   if (p_value1 == p_value2) {
     return true;
