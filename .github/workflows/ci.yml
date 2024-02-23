@@ -6,8 +6,6 @@ on:
   push:
     branches:
       - main
-      # Remove before merging with main
-      - exceptions
   schedule:
     - cron: "0 12 * * 0"
 
