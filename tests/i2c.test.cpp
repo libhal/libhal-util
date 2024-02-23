@@ -14,8 +14,10 @@
 
 #include <libhal-util/i2c.hpp>
 
-#include <libhal/functional.hpp>
 #include <vector>
+
+#include <libhal/error.hpp>
+#include <libhal/functional.hpp>
 
 #include <boost/ut.hpp>
 
@@ -30,10 +32,9 @@ void i2c_util_test()
 
   struct test_timeout_t
   {
-    status operator()()
+    void operator()()
     {
       was_called = true;
-      return {};
     }
     bool was_called = false;
   };
@@ -41,11 +42,11 @@ void i2c_util_test()
   class test_i2c : public hal::i2c
   {
   public:
-    [[nodiscard]] status driver_configure(const settings&) override
+    void driver_configure(const settings&) override
     {
-      return {};
     }
-    [[nodiscard]] result<transaction_t> driver_transaction(
+
+    void driver_transaction(
       hal::byte p_address,
       std::span<const hal::byte> p_out,
       std::span<hal::byte> p_in,
@@ -58,12 +59,10 @@ void i2c_util_test()
       std::fill(m_in.begin(), m_in.end(), filler_byte);
 
       if (m_address == failure_address) {
-        return hal::new_error();
+        safe_throw(hal::no_such_device(m_address, this));
       }
 
-      (void)p_timeout();
-
-      return transaction_t{};
+      p_timeout();
     }
 
     ~test_i2c() override = default;
@@ -94,12 +93,9 @@ void i2c_util_test()
     const std::array<hal::byte, 4> expected_payload{};
 
     // Exercise
-    auto result =
-      write(i2c, successful_address, expected_payload, std::ref(test_timeout));
-    bool successful = static_cast<bool>(result);
+    write(i2c, successful_address, expected_payload, std::ref(test_timeout));
 
     // Verify
-    expect(successful);
     expect(successful_address == i2c.m_address);
     expect(that % expected_payload.data() == i2c.m_out.data());
     expect(that % expected_payload.size() == i2c.m_out.size());
@@ -115,12 +111,12 @@ void i2c_util_test()
     const std::array<hal::byte, 4> expected_payload{};
 
     // Exercise
-    auto result =
-      write(i2c, failure_address, expected_payload, std::ref(test_timeout));
-    bool successful = static_cast<bool>(result);
+    expect(
+      throws<hal::no_such_device>([&i2c, &expected_payload, &test_timeout]() {
+        write(i2c, failure_address, expected_payload, std::ref(test_timeout));
+      }));
 
     // Verify
-    expect(!successful);
     expect(failure_address == i2c.m_address);
     expect(that % expected_payload.data() == i2c.m_out.data());
     expect(that % expected_payload.size() == i2c.m_out.size());
@@ -136,12 +132,9 @@ void i2c_util_test()
     std::array<hal::byte, 4> expected_buffer;
 
     // Exercise
-    auto result =
-      read(i2c, successful_address, expected_buffer, std::ref(test_timeout));
-    bool successful = static_cast<bool>(result);
+    read(i2c, successful_address, expected_buffer, std::ref(test_timeout));
 
     // Verify
-    expect(successful);
     expect(successful_address == i2c.m_address);
     expect(that % expected_buffer.data() == i2c.m_in.data());
     expect(that % expected_buffer.size() == i2c.m_in.size());
@@ -157,12 +150,12 @@ void i2c_util_test()
     std::array<hal::byte, 4> expected_buffer;
 
     // Exercise
-    auto result =
-      read(i2c, failure_address, expected_buffer, std::ref(test_timeout));
-    bool successful = static_cast<bool>(result);
+    expect(
+      throws<hal::no_such_device>([&i2c, &expected_buffer, &test_timeout]() {
+        read(i2c, failure_address, expected_buffer, std::ref(test_timeout));
+      }));
 
     // Verify
-    expect(!successful);
     expect(failure_address == i2c.m_address);
     expect(that % expected_buffer.data() == i2c.m_in.data());
     expect(that % expected_buffer.size() == i2c.m_in.size());
@@ -175,19 +168,16 @@ void i2c_util_test()
     // Setup
     test_i2c i2c;
     test_timeout_t test_timeout;
-    std::array<hal::byte, 5> expected_buffer;
-    expected_buffer.fill(filler_byte);
+    std::array<hal::byte, 5> expected;
+    expected.fill(filler_byte);
 
     // Exercise
-    auto result = read<expected_buffer.size()>(
-      i2c, successful_address, std::ref(test_timeout));
-    bool successful = static_cast<bool>(result);
+    auto actual =
+      read<expected.size()>(i2c, successful_address, std::ref(test_timeout));
 
     // Verify
-    expect(successful);
     expect(successful_address == i2c.m_address);
-    expect(std::equal(
-      expected_buffer.begin(), expected_buffer.end(), result.value().begin()));
+    expect(std::equal(expected.begin(), expected.end(), actual.begin()));
     expect(that % nullptr == i2c.m_out.data());
     expect(that % 0 == i2c.m_out.size());
     expect(that % true == test_timeout.was_called);
@@ -199,11 +189,12 @@ void i2c_util_test()
     test_timeout_t test_timeout;
 
     // Exercise
-    auto result = read<5>(i2c, failure_address, never_timeout());
-    bool successful = static_cast<bool>(result);
+    expect(throws<hal::no_such_device>([&i2c]() {
+      [[maybe_unused]] auto result =
+        read<5>(i2c, failure_address, never_timeout());
+    }));
 
     // Verify
-    expect(!successful);
     expect(failure_address == i2c.m_address);
     expect(that % nullptr == i2c.m_out.data());
     expect(that % 0 == i2c.m_out.size());
@@ -218,15 +209,13 @@ void i2c_util_test()
     std::array<hal::byte, 4> expected_buffer;
 
     // Exercise
-    auto result = write_then_read(i2c,
-                                  successful_address,
-                                  expected_payload,
-                                  expected_buffer,
-                                  std::ref(test_timeout));
-    bool successful = static_cast<bool>(result);
+    write_then_read(i2c,
+                    successful_address,
+                    expected_payload,
+                    expected_buffer,
+                    std::ref(test_timeout));
 
     // Verify
-    expect(successful);
     expect(successful_address == i2c.m_address);
     expect(that % expected_payload.data() == i2c.m_out.data());
     expect(that % expected_payload.size() == i2c.m_out.size());
@@ -244,15 +233,16 @@ void i2c_util_test()
     expected_buffer.fill(filler_byte);
 
     // Exercise
-    auto result = write_then_read(i2c,
-                                  failure_address,
-                                  expected_payload,
-                                  expected_buffer,
-                                  std::ref(test_timeout));
-    bool successful = static_cast<bool>(result);
+    expect(throws<hal::no_such_device>(
+      [&i2c, &expected_payload, &expected_buffer, &test_timeout]() {
+        write_then_read(i2c,
+                        failure_address,
+                        expected_payload,
+                        expected_buffer,
+                        std::ref(test_timeout));
+      }));
 
     // Verify
-    expect(!successful);
     expect(failure_address == i2c.m_address);
     expect(that % expected_payload.data() == i2c.m_out.data());
     expect(that % expected_payload.size() == i2c.m_out.size());
@@ -266,22 +256,18 @@ void i2c_util_test()
     test_i2c i2c;
     test_timeout_t test_timeout;
     const std::array<hal::byte, 4> expected_payload{};
-    std::array<hal::byte, 4> expected_buffer{};
-    expected_buffer.fill(filler_byte);
+    std::array<hal::byte, 4> expected{};
+    expected.fill(filler_byte);
 
     // Exercise
-    auto result = write_then_read<5>(
+    auto actual = write_then_read<5>(
       i2c, successful_address, expected_payload, std::ref(test_timeout));
-    bool successful = static_cast<bool>(result);
-    auto actual_array = result.value();
 
     // Verify
-    expect(successful);
     expect(successful_address == i2c.m_address);
     expect(that % expected_payload.data() == i2c.m_out.data());
     expect(that % expected_payload.size() == i2c.m_out.size());
-    expect(std::equal(
-      expected_buffer.begin(), expected_buffer.end(), actual_array.begin()));
+    expect(std::equal(expected.begin(), expected.end(), actual.begin()));
     expect(that % true == test_timeout.was_called);
   };
 
@@ -292,12 +278,13 @@ void i2c_util_test()
     const std::array<hal::byte, 4> expected_payload{};
 
     // Exercise
-    auto result = write_then_read<5>(
-      i2c, failure_address, expected_payload, std::ref(test_timeout));
-    bool successful = static_cast<bool>(result);
+    expect(
+      throws<hal::no_such_device>([&i2c, &expected_payload, &test_timeout]() {
+        [[maybe_unused]] auto result = write_then_read<5>(
+          i2c, failure_address, expected_payload, std::ref(test_timeout));
+      }));
 
     // Verify
-    expect(!successful);
     expect(failure_address == i2c.m_address);
     expect(that % expected_payload.data() == i2c.m_out.data());
     expect(that % expected_payload.size() == i2c.m_out.size());
@@ -309,11 +296,10 @@ void i2c_util_test()
     test_i2c i2c;
 
     // Exercise
-    auto result = probe(i2c, successful_address);
-    bool successful = static_cast<bool>(result);
+    auto exists = probe(i2c, successful_address);
 
     // Verify
-    expect(successful);
+    expect(exists);
     expect(successful_address == i2c.m_address);
     expect(that % 1 == i2c.m_in.size());
     expect(that % nullptr != i2c.m_in.data());
@@ -326,11 +312,10 @@ void i2c_util_test()
     test_i2c i2c;
 
     // Exercise
-    auto result = probe(i2c, failure_address);
-    bool successful = static_cast<bool>(result);
+    auto exists = probe(i2c, failure_address);
 
     // Verify
-    expect(!successful);
+    expect(!exists);
     expect(failure_address == i2c.m_address);
     expect(that % 1 == i2c.m_in.size());
     expect(that % nullptr != i2c.m_in.data());
@@ -346,20 +331,13 @@ void i2c_util_test()
     std::array<hal::byte, 4> read_data{};
 
     // Exercise
-    auto result_write = write(i2c, successful_address, write_data);
-    auto result_read = read(i2c, successful_address, read_data);
-    auto result_wr =
-      write_then_read(i2c, successful_address, write_data, read_data);
-    auto result_read_buffer = read<2>(i2c, successful_address);
-    auto result_wr_buffer =
-      write_then_read<2>(i2c, successful_address, write_data);
-
     // Verify
-    expect(bool{ result_read });
-    expect(bool{ result_write });
-    expect(bool{ result_wr });
-    expect(bool{ result_read_buffer });
-    expect(bool{ result_wr_buffer });
+    write(i2c, successful_address, write_data);
+    read(i2c, successful_address, read_data);
+    write_then_read(i2c, successful_address, write_data, read_data);
+    [[maybe_unused]] auto r_array = read<2>(i2c, successful_address);
+    [[maybe_unused]] auto wr_array =
+      write_then_read<2>(i2c, successful_address, write_data);
   };
 };
 }  // namespace hal

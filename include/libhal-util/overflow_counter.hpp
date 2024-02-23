@@ -31,15 +31,15 @@ namespace hal {
  * overflow counter which is combined with the current count in order create a
  * count up to 64-bits in length.
  *
- * @tparam CountBitWidth - the bit width of the counter before the count value
+ * @tparam count_bit_width - the bit width of the counter before the count value
  * overflows.
  */
-template<size_t CountBitWidth = 32>
+template<size_t count_bit_width = 32>
 class overflow_counter
 {
 public:
-  static_assert(CountBitWidth <= 32, "Bit width cannot exceed 32-bits");
-  static_assert(CountBitWidth > 1, "Bit width must be greater than 1");
+  static_assert(count_bit_width <= 32, "Bit width cannot exceed 32-bits");
+  static_assert(count_bit_width > 1, "Bit width must be greater than 1");
   /**
    * @ingroup OverflowCounter
    * @brief update the overflow counter, detect if an overflow has occurred, and
@@ -56,7 +56,7 @@ public:
     // designated bit width. Without this check when the count is combined with
     // the overflow value the upper bits may effect the bits of the overflow
     // count, getting an incorrect count value.
-    constexpr auto mask = generate_field_of_ones<CountBitWidth, uint32_t>();
+    constexpr auto mask = generate_field_of_ones<count_bit_width, uint32_t>();
     p_new_count = p_new_count & mask;
 
     // Detect the overflow by checking if the new count is smaller than the
@@ -71,9 +71,9 @@ public:
     m_previous_count = p_new_count;
 
     // Move overflow count up to the upper bits of the 64-bit number based on
-    // CountBitWidth
+    // count_bit_width
     uint64_t combined_count = m_overflow_count;
-    combined_count <<= CountBitWidth;
+    combined_count <<= count_bit_width;
     // Add the p_new_count into the combined count to complete it.
     combined_count |= p_new_count;
 

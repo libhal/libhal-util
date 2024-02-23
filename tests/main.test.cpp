@@ -32,7 +32,6 @@ extern void static_list_test();
 extern void steady_clock_utility_test();
 extern void timeout_test();
 extern void units_test();
-
 extern void stream_terminated_test();
 extern void parse_stream_test();
 extern void find_stream_test();
@@ -61,7 +60,6 @@ int main()
   hal::steady_clock_utility_test();
   hal::timeout_test();
   hal::units_test();
-
   hal::stream_terminated_test();
   hal::parse_stream_test();
   hal::find_stream_test();

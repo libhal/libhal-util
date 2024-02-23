@@ -150,19 +150,19 @@ public:
    *
    * Call this function again to resume reading from the port.
    *
-   * @return result<work_state> - work_state::in_progress if the sequence hasn't
+   * @return work_state - work_state::in_progress if the sequence hasn't
    * been met and the buffer still has space.
-   * @return result<work_state> - work_state::finished if the sequence was
+   * @return work_state - work_state::finished if the sequence was
    * found before the buffer was filled completely.
    */
-  result<work_state> operator()()
+  work_state operator()()
   {
     for (size_t read_limit = 0; read_limit < m_read_limit; read_limit++) {
       if (m_buffer.empty()) {
         return work_state::finished;
       }
 
-      auto read_result = HAL_CHECK(m_serial->read(m_buffer));
+      auto read_result = m_serial->read(m_buffer);
       // Set the m_buffer to the amount of bytes remaining to be read.
       m_buffer = m_buffer.subspan(read_result.data.size());
 
@@ -221,14 +221,14 @@ public:
    *
    * Call this function again to resume reading from the port.
    *
-   * @return result<work_state> - work_state::in_progress if the sequence hasn't
-   * been met and the buffer still has space.
-   * @return result<work_state> - work_state::failed if the sequence wasn't
-   * found before the buffer was filled completely.
-   * @return result<work_state> - work_state::finished if the sequence was
-   * found before the buffer was filled completely.
+   * @return work_state - work_state::in_progress if the sequence hasn't been
+   * met and the buffer still has space.
+   * @return work_state - work_state::failed if the sequence wasn't found before
+   * the buffer was filled completely.
+   * @return work_state - work_state::finished if the sequence was found before
+   * the buffer was filled completely.
    */
-  result<work_state> operator()()
+  work_state operator()()
   {
     static constexpr size_t read_length = 1;
     if (m_search_index == m_sequence.size()) {
@@ -239,8 +239,7 @@ public:
     }
 
     for (size_t read_limit = 0; read_limit < m_read_limit; read_limit++) {
-      auto read_result =
-        HAL_CHECK(m_serial->read(m_buffer.subspan(0, read_length)));
+      auto read_result = m_serial->read(m_buffer.subspan(0, read_length));
 
       if (read_result.data.size() == 0) {
         return work_state::in_progress;
@@ -307,12 +306,12 @@ public:
    *
    * Call this function again to resume reading from the port.
    *
-   * @return result<work_state> - work_state::in_progress - if an integer hasn't
+   * @return work_state - work_state::in_progress - if an integer hasn't
    * been found
-   * @return result<work_state> - work_state::finished - integer has been found
+   * @return work_state - work_state::finished - integer has been found
    * and a non-integer byte has also been found.
    */
-  result<work_state> operator()()
+  work_state operator()()
   {
     if (m_finished) {
       return work_state::finished;
@@ -320,7 +319,7 @@ public:
 
     for (size_t read_limit = 0; read_limit < m_read_limit; read_limit++) {
       std::array<hal::byte, 1> buffer;
-      auto read_result = HAL_CHECK(m_serial->read(buffer));
+      auto read_result = m_serial->read(buffer);
 
       if (read_result.data.size() != buffer.size()) {
         return work_state::in_progress;

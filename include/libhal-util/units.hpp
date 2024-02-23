@@ -113,12 +113,12 @@ constexpr float wavelength(hertz p_source)
  *
  * @param p_source - the frequency to compute the cycles from
  * @param p_cycles - number of cycles within the time duration
- * @return std::chrono::nanoseconds - time duration based on this frequency
- * and the number of cycles
+ * @return std::optional<std::chrono::nanoseconds> - time duration based on this
+ * frequency and the number of cycles. Will return std::nullopt if the duration
+ * exceeds
  */
-[[nodiscard]] inline result<std::chrono::nanoseconds> duration_from_cycles(
-  hertz p_source,
-  uint32_t p_cycles)
+[[nodiscard]] inline std::optional<std::chrono::nanoseconds>
+duration_from_cycles(hertz p_source, uint32_t p_cycles)
 {
   // Full Equation (based on the equation in cycles_per()):
   //
@@ -141,7 +141,8 @@ constexpr float wavelength(hertz p_source)
   if (float_int_min <= nanoseconds && nanoseconds <= float_int_max) {
     return std::chrono::nanoseconds(static_cast<std::int64_t>(nanoseconds));
   }
-  return new_error(std::errc::result_out_of_range);
+
+  return std::nullopt;
 }
 
 /**

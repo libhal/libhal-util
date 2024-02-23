@@ -44,39 +44,35 @@ namespace hal {
 
 /**
  * @ingroup SPI
- * @brief Write data to the SPI bus and ignore data sent from peripherals on the
- * bus.
+ * @brief Write data to the spi bus, ignore data on the peripherals receive line
+ *
+ * This command is useful for spi operations where data, such as a command,
+ * must be sent to a device and the device does not respond with anything or the
+ * response is not necessary.
  *
  * @param p_spi - spi driver
- * @param p_data_out - data to be written to the SPI bus
- * @return result<hal::spi::transfer_t> - success or failure
+ * @param p_data_out - data to be written to the spi bus
  */
-[[nodiscard]] inline result<hal::spi::transfer_t> write(
-  spi& p_spi,
-  std::span<const hal::byte> p_data_out)
+inline void write(spi& p_spi, std::span<const hal::byte> p_data_out)
 {
-  return p_spi.transfer(
-    p_data_out, std::span<hal::byte>{}, spi::default_filler);
+  p_spi.transfer(p_data_out, std::span<hal::byte>{}, spi::default_filler);
 }
 
 /**
  * @ingroup SPI
  * @brief Read data from the SPI bus.
  *
- * Filler bytes will be placed on the write line.
+ * Filler bytes will be placed on the write/transmit line.
  *
  * @param p_spi - spi driver
- * @param p_data_in - buffer to receive bytes back from the SPI bus
- * @param p_filler - filler data placed on the bus in place of actual write
- * data.
- * @return result<hal::spi::transfer_t> - success or failure
+ * @param p_data_in - buffer to receive bytes back from the spi bus
+ * @param p_filler - filler data placed on the bus in place of actual data.
  */
-[[nodiscard]] inline result<hal::spi::transfer_t> read(
-  spi& p_spi,
-  std::span<hal::byte> p_data_in,
-  hal::byte p_filler = spi::default_filler)
+inline void read(spi& p_spi,
+                 std::span<hal::byte> p_data_in,
+                 hal::byte p_filler = spi::default_filler)
 {
-  return p_spi.transfer(std::span<hal::byte>{}, p_data_in, p_filler);
+  p_spi.transfer(std::span<hal::byte>{}, p_data_in, p_filler);
 }
 /**
  * @ingroup SPI
@@ -84,20 +80,20 @@ namespace hal {
  *
  * Filler bytes will be placed on the write line.
  *
- * @tparam BytesToRead - Number of bytes to read
+ * @tparam bytes_to_read - Number of bytes to read
  * @param p_spi - spi driver
  * @param p_filler - filler data placed on the bus in place of actual write
  * data.
- * @return result<std::array<hal::byte, BytesToRead>> - any errors
- * associated with this call
+ * @return std::array<hal::byte, bytes_to_read> - array containing bytes read
+ * from the spi bus
  */
-template<size_t BytesToRead>
-[[nodiscard]] result<std::array<hal::byte, BytesToRead>> read(
+template<size_t bytes_to_read>
+[[nodiscard]] std::array<hal::byte, bytes_to_read> read(
   spi& p_spi,
   hal::byte p_filler = spi::default_filler)
 {
-  std::array<hal::byte, BytesToRead> buffer;
-  HAL_CHECK(p_spi.transfer(std::span<hal::byte>{}, buffer, p_filler));
+  std::array<hal::byte, bytes_to_read> buffer;
+  p_spi.transfer(std::span<hal::byte>{}, buffer, p_filler);
   return buffer;
 }
 
@@ -106,30 +102,28 @@ template<size_t BytesToRead>
  * @brief Write data to the SPI bus and ignore data sent from peripherals on the
  * bus then read data from the SPI and fill the write line with filler bytes.
  *
- * This utility function that fits the use case of many SPI devices where a
- * transaction is not full duplex. In many spi devices, full duplex means that
- * as data is being written to the SPI bus, the peripheral device is sending
- * data back on the read line. In most cases, the protocol is to write data to
- * the bus, and ignore the read line because the peripheral is not writing
- * anything meaningful to that line, then reading from SPI bus and writing
- * nothing meaningful to the write line as the peripheral is ignoring that line.
+ * This utility function that fits the use case of many spi devices where a spi
+ * transfer is not full duplex. In many spi devices, full duplex means that
+ * as data is being written to the spi bus, the peripheral device is sending
+ * data back on the receive line. In most cases, the device's communication
+ * protocol is simply:
+ *
+ *    1. Write data to the bus, ignore the receive line
+ *    2. Read from spi bus, filling the write line with filler
  *
  * @param p_spi - spi driver
  * @param p_data_out - bytes to write to the bus
- * @param p_data_in - buffer to receive bytes back from the SPI bus
+ * @param p_data_in - buffer to receive bytes back from the spi bus
  * @param p_filler - filler data placed on the bus when the read operation
  * begins.
- * @return result<hal::spi::transfer_t> - success or failure
  */
-[[nodiscard]] inline result<hal::spi::transfer_t> write_then_read(
-  spi& p_spi,
-  std::span<const hal::byte> p_data_out,
-  std::span<hal::byte> p_data_in,
-  hal::byte p_filler = spi::default_filler)
+inline void write_then_read(spi& p_spi,
+                            std::span<const hal::byte> p_data_out,
+                            std::span<hal::byte> p_data_in,
+                            hal::byte p_filler = spi::default_filler)
 {
-  HAL_CHECK(write(p_spi, p_data_out));
-  HAL_CHECK(read(p_spi, p_data_in, p_filler));
-  return {};
+  write(p_spi, p_data_out);
+  read(p_spi, p_data_in, p_filler);
 }
 
 /**
@@ -138,20 +132,23 @@ template<size_t BytesToRead>
  * bus then read data from the SPI, fill the write line with filler bytes and
  * return an array of bytes.
  *
- * @tparam BytesToRead - Number of bytes to read from the bus
+ * See write_then_read() for details about this function.
+ *
+ * @tparam bytes_to_read - Number of bytes to read from the bus
  * @param p_spi - spi driver
  * @param p_data_out - bytes to write to the bus
  * @param p_filler - filler data placed on the bus when the read operation
  * begins.
- * @return result<std::array<hal::byte, BytesToRead>>
+ * @return std::array<hal::byte, bytes_to_read> - array containing the bytes
+ * read from the spi bus.
  */
-template<size_t BytesToRead>
-[[nodiscard]] result<std::array<hal::byte, BytesToRead>> write_then_read(
+template<size_t bytes_to_read>
+[[nodiscard]] std::array<hal::byte, bytes_to_read> write_then_read(
   spi& p_spi,
   std::span<const hal::byte> p_data_out,
   hal::byte p_filler = spi::default_filler)
 {
-  HAL_CHECK(write(p_spi, p_data_out));
-  return read<BytesToRead>(p_spi, p_filler);
+  write(p_spi, p_data_out);
+  return read<bytes_to_read>(p_spi, p_filler);
 }
 }  // namespace hal
