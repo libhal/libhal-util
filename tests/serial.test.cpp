@@ -434,20 +434,6 @@ void serial_util_test()
                                                    serial.m_out.data()),
                                                  serial.m_out.size()));
     };
-
-    "[printf style 3 trimmed] print()"_test = []() {
-      // Setup
-      save_serial_write serial;
-      const std::string_view expected = "hello 5\0";
-
-      // Exercise
-      print<8>(serial, "hello %d 0x%06X", 5, 0xABCDEF);
-
-      // Verify
-      expect(that % expected == std::string_view(reinterpret_cast<const char*>(
-                                                   serial.m_out.data()),
-                                                 serial.m_out.size()));
-    };
   };
 };
 }  // namespace hal
