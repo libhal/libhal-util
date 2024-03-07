@@ -349,8 +349,7 @@ void static_list_test()
 
   "static_list::dtor() handles dandling list items"_test = []() {
     // Setup
-    auto destroy_list_keep_items = []() -> auto
-    {
+    auto destroy_list_keep_items = []() {
       static_list<int> list;
 
       return std::array<static_list<int>::item, 5>{

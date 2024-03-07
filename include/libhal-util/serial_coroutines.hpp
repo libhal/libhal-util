@@ -73,12 +73,12 @@ public:
    *
    * Call this function again to resume reading from the port.
    *
-   * @return result<work_state> - work_state::in_progress if the sequence hasn't
+   * @return work_state::in_progress - if the sequence hasn't
    * been met and the buffer still has space.
-   * @return result<work_state> - work_state::finished if the sequence was
+   * @return work_state::finished - if the sequence was
    * found before the buffer was filled completely.
    */
-  result<work_state> operator()()
+  work_state operator()()
   {
     if (m_search_index == m_sequence.size()) {
       return work_state::finished;
@@ -86,7 +86,7 @@ public:
 
     for (size_t read_limit = 0; read_limit < m_read_limit; read_limit++) {
       std::array<hal::byte, 1> buffer;
-      auto read_result = HAL_CHECK(m_serial->read(buffer));
+      auto read_result = m_serial->read(buffer);
 
       if (read_result.data.size() != buffer.size()) {
         return work_state::in_progress;
