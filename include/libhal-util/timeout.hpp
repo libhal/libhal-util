@@ -63,13 +63,15 @@ constexpr bool failed(work_state p_state)
 {
   return p_state == work_state::failed;
 }
-
+// Turning off clang-format because concepts because give it an aneurysm.
+// clang-format off
 template<typename T>
 concept has_work_state = requires(T a) {
                            {
                              a.state()
                              } -> std::same_as<work_state>;
                          };
+// clang-format on
 
 constexpr bool terminated(has_work_state auto p_worker)
 {

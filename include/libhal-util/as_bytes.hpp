@@ -49,11 +49,14 @@ constexpr std::span<const hal::byte> as_bytes(const T* p_address,
   return std::span<const hal::byte>(start, number_of_bytes);
 }
 
+// Turning off clang-format because concepts because give it an aneurysm.
+// clang-format off
 template<typename T>
 concept convertible_to_bytes = requires(T a) {
                                  *a.data();
                                  a.size();
                                };
+// clang-format on
 
 constexpr std::span<hal::byte> as_writable_bytes(
   convertible_to_bytes auto& p_container)

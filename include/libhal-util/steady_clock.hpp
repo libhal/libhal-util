@@ -149,8 +149,7 @@ void delay(hal::steady_clock& p_steady_clock, hal::time_duration p_duration);
  */
 inline auto timeout_generator(hal::steady_clock& p_steady_clock)
 {
-  return [&p_steady_clock](hal::time_duration p_duration) -> auto
-  {
+  return [&p_steady_clock](hal::time_duration p_duration) {
     return create_timeout(p_steady_clock, p_duration);
   };
 }
