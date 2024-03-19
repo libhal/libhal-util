@@ -27,7 +27,6 @@ required_conan_version = ">=2.0.14"
 class libhal_util_conan(ConanFile):
     name = "libhal-util"
     license = "Apache-2.0"
-    url = "https://github.com/conan-io/conan-center-index"
     homepage = "https://github.com/libhal/libhal-util"
     description = ("A collection of interfaces and abstractions for embedded "
                    "peripherals and devices using modern C++")
