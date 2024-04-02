@@ -15,14 +15,7 @@ cmake_minimum_required(VERSION 3.15)
 
 project(libhal-util LANGUAGES CXX)
 
-libhal_test_and_make_library(
-  LIBRARY_NAME libhal-util
-
-  SOURCES
-  src/steady_clock.cpp
-  src/streams.cpp
-
-  TEST_SOURCES
+set(TEST_SOURCES_LIST
   tests/as_bytes.test.cpp
   tests/can.test.cpp
   tests/bit.test.cpp
@@ -45,6 +38,32 @@ libhal_test_and_make_library(
   tests/timeout.test.cpp
   tests/units.test.cpp
   tests/main.test.cpp
+)
+
+set(SOURCES_LIST
+  src/steady_clock.cpp
+  src/streams.cpp
+)
+
+if(NOT ${CMAKE_CROSSCOMPILING})
+  libhal_unit_test(
+    SOURCES
+    ${SOURCES_LIST}
+    ${TEST_SOURCES_LIST}
+
+    PACKAGES
+    libhal
+
+    LINK_LIBRARIES
+    libhal::libhal
+  )
+endif()
+
+libhal_make_library(
+  LIBRARY_NAME libhal-util
+
+  SOURCES
+  ${SOURCES_LIST}
 
   PACKAGES
   libhal
