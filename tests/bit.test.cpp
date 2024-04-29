@@ -27,6 +27,7 @@ void bit_test()
     constexpr auto enable_bit = bit_mask::from<1>();
     constexpr auto high_power_mode = bit_mask::from<15>();
     constexpr auto clock_divider = bit_mask::from<20, 23>();
+    constexpr auto phase_delay = bit_mask::from<24, 27>();
     constexpr auto extractor_mask = bit_mask::from<16, 23>();
     constexpr auto single_bit_mask = bit_mask::from<1>();
 
@@ -34,14 +35,15 @@ void bit_test()
     bit_modify(control_register)
       .set<enable_bit>()
       .clear<high_power_mode>()
-      .insert<clock_divider>(0xAU);
+      .insert<clock_divider>(0xAU)
+      .insert<phase_delay, 0x3U>();
     auto extracted = bit_extract<extractor_mask>(control_register);
     auto probed = bit_extract<single_bit_mask>(control_register);
     auto probed_inline =
       bit_extract<bit_mask{ .position = 15, .width = 1 }>(control_register);
 
     // Verify
-    expect(that % 0x00A1'0002 == control_register);
+    expect(that % 0x03A1'0002 == control_register);
     expect(that % 0xA1 == extracted);
     expect(that % 1 == probed);
     expect(that % 0 == probed_inline);

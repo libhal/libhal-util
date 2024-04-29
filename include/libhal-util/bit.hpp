@@ -264,7 +264,7 @@ constexpr auto bit_extract(bit_mask p_field,
   return static_cast<T>(masked);
 }
 
-template<std::unsigned_integral T>
+template<std::unsigned_integral T = std::uint32_t>
 class bit_value
 {
 public:
@@ -359,6 +359,22 @@ public:
   }
 
   constexpr auto& insert(bit_mask p_field, std::unsigned_integral auto p_value)
+  {
+    // AND value with mask to remove any bits beyond the specified width.
+    // Shift masked value into bit position and OR with target value.
+    auto shifted_field = static_cast<T>(p_value) << p_field.position;
+    auto new_value = shifted_field & p_field.value<T>();
+
+    // Clear width's number of bits in the target value at the bit position
+    // specified.
+    m_value = m_value & ~p_field.value<T>();
+    m_value = m_value | static_cast<T>(new_value);
+
+    return *this;
+  }
+
+  template<bit_mask p_field, std::unsigned_integral auto p_value>
+  constexpr auto& insert()
   {
     // AND value with mask to remove any bits beyond the specified width.
     // Shift masked value into bit position and OR with target value.
