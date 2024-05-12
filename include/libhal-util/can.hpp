@@ -15,10 +15,11 @@
 #pragma once
 
 #include <cmath>
+#include <cstdlib>
+#include <optional>
 
 #include <libhal/can.hpp>
 
-#include "comparison.hpp"
 #include "math.hpp"
 
 /**
@@ -29,23 +30,109 @@
 namespace hal {
 /**
  * @ingroup CAN_Utilities
- * @brief Compares two CAN bus states.
+ * @brief Compares two CAN bus settings.
  *
- * @param p_lhs A CAN bus.
- * @param p_rhs A CAN bus.
+ * @param p_lhs CAN bus settings
+ * @param p_rhs A CAN bus setting to compare against another
  * @return A boolean if they are the same or not.
  */
 [[nodiscard]] constexpr auto operator==(const can::settings& p_lhs,
                                         const can::settings& p_rhs)
 {
-  return equals(p_lhs.baud_rate, p_rhs.baud_rate) &&
+  return equals(p_lhs.baud_rate, p_rhs.baud_rate);
+}
+
+/**
+ * @brief Generic settings for a can peripheral
+ * @ingroup CAN_Utilities
+ *
+ * CAN Bit Quanta Timing Diagram of:
+ *
+ *                               | <--- sjw ---> |
+ *         ____    ______    __________    __________
+ *      _/ SYNC \/  PROP  \/   PHASE1   \/   PHASE2   \_
+ *       \______/\________/\____________/\____________/
+ *                                       ^ Sample point
+ */
+struct can_bus_divider_t
+{
+  /**
+   * @brief Bus clock rate in hertz
+   *
+   */
+  std::uint8_t clock_divider;
+
+  /**
+   * @brief Sync Segment (always 1qt)
+   *
+   * Initial sync transition, the start of a CAN bit
+   */
+  static constexpr std::uint8_t sync_segment = 1;
+
+  /**
+   * @brief Propagation Delay (1qt ... 8qt)
+   *
+   * Propagation time It is used to compensate for signal delays across the
+   * network.
+   */
+  std::uint8_t propagation_delay;
+
+  /**
+   * @brief Length of Phase Segment 1 (1qt ... 8qt)
+   *
+   * Determines the bit rate, phase segment 1 acts as a buffer that can be
+   * lengthened to resynchronize with the bit stream via the
+   * synchronization_jump_width. Includes propagation delay
+   */
+  std::uint8_t phase_segment1;
+
+  /**
+   * @brief Length of Phase Segment 2 (1qt ... 8qt)
+   *
+   * Determines the bit rate and is like phase segment 1 and occurs after the
+   * sampling point. Phase segment 2 can be shortened to resynchronize with
+   * the bit stream via the synchronization_jump_width.
+   */
+  std::uint8_t phase_segment2;
+
+  /**
+   * @brief Synchronization jump width (1qt ... 4qt)
+   *
+   * This is the maximum time by which the bit sampling period may be
+   * lengthened or shortened during each cycle to adjust for oscillator
+   * mismatch between nodes.
+   *
+   * This value must be smaller than phase_segment1 and phase_segment2
+   */
+  std::uint8_t synchronization_jump_width;
+
+  /**
+   * @brief The total tq of the structure
+   *
+   */
+  std::uint8_t total_tq;
+};
+
+/**
+ * @ingroup CAN_Utilities
+ * @brief Compares two CAN bus settings.
+ *
+ * @param p_lhs CAN bus settings
+ * @param p_rhs A CAN bus setting to compare against another
+ * @return A boolean if they are the same or not.
+ */
+[[nodiscard]] constexpr auto operator==(const can_bus_divider_t& p_lhs,
+                                        const can_bus_divider_t& p_rhs)
+{
+  return p_lhs.clock_divider == p_rhs.clock_divider &&
          p_lhs.propagation_delay == p_rhs.propagation_delay &&
          p_lhs.phase_segment1 == p_rhs.phase_segment1 &&
          p_lhs.phase_segment2 == p_rhs.phase_segment2 &&
          p_lhs.synchronization_jump_width == p_rhs.synchronization_jump_width;
 }
 
-[[nodiscard]] constexpr std::uint16_t bit_width(const can::settings& p_settings)
+[[nodiscard]] constexpr std::uint16_t bit_width(
+  const can_bus_divider_t& p_settings)
 {
   // The sum of 4x 8-bit numbers can never exceed uint16_t and thus this
   // operation is always safe.
@@ -55,70 +142,67 @@ namespace hal {
 }
 
 /**
+ * @brief Calculates the can bus divider values
  * @ingroup CAN_Utilities
- * @brief Validate configuration settings against an operating frequency
  *
- * The settings and frequency must follow the following rules:
+ * Preferred method of calculating the bus divider values for a can bus
+ * peripheral or device. The algorithm checks each possible time quanta (tq)
+ * width from 25tq to 8tq. The algorithm always checks starting with the
+ * greatest time quanta in order to achieve the longest bit width and sync jump
+ * value. The aim is to provide the most flexibility in the sync jump value
+ * which should help in most topologies.
  *
- * 1. propagation_delay, phase_segment1, phase_segment2 and
- *    synchronization_jump_width must be nonzero.
- * 2. synchronization_jump_width must be the lesser between phase_segment1
- *    and phase_segment2.
- * 3. The total bit width must be equal to or greater than 8 Tq/bit; the sum
- *    of sync_segment, propagation_delay, phase_segment1 and phase_segment2.
- * 4. The CAN device's operating frequency must be at least 8 times the baud
- *    rate to give the minimum.
- * 5. The ratio between the CAN device's operating frequency and the bit
- *    width must be close enough to an integer to produce a usable baud
- *    rate prescaler.
- *
- * @param p_settings - settings object to check
- * @param p_operating_frequency - CAN device operating frequency
- * @return std::optional<std::uint32_t> - baud rate prescaler
+ * @param p_operating_frequency - frequency of the input clock to the can bus
+ * bit timing module.
+ * @param p_target_baud_rate - the baud (bit) rate to set the can bus to.
+ * @return std::optional<can_bus_divider_t> - the resulting dividers for the can
+ * bus peripheral. Returns std::nullopt if the target baud rate is not
+ * achievable with the provided operating frequency.
  */
-[[nodiscard]] constexpr std::optional<std::uint32_t> is_valid(
-  const can::settings& p_settings,
-  hertz p_operating_frequency)
+[[nodiscard]] inline std::optional<can_bus_divider_t> calculate_can_bus_divider(
+  hertz p_operating_frequency,
+  hertz p_target_baud_rate)
 {
-  // 1. propagation_delay, phase_segment1, phase_segment2 and
-  //    synchronization_jump_width must be nonzero.
-  if (p_settings.propagation_delay == 0 || p_settings.phase_segment1 == 0 ||
-      p_settings.phase_segment2 == 0 ||
-      p_settings.synchronization_jump_width == 0) {
+  can_bus_divider_t timing;
+
+  // Set phase segments and propagation delay to balanced values
+  timing.propagation_delay = 1;
+
+  // use a value of zero in total tq to know if no tq and divider combo worked
+  timing.total_tq = 0;
+
+  if (p_operating_frequency < 0.0f || p_target_baud_rate < 0.0f ||
+      p_operating_frequency <= p_target_baud_rate) {
     return std::nullopt;
   }
 
-  // 2. synchronization_jump_width must be the lesser between phase_segment1
-  //    and phase_segment2.
-  if (p_settings.synchronization_jump_width > 4 ||
-      p_settings.synchronization_jump_width > p_settings.phase_segment1 ||
-      p_settings.synchronization_jump_width > p_settings.phase_segment2) {
+  std::int32_t operating_frequency = p_operating_frequency;
+  std::int32_t desired_baud_rate = p_target_baud_rate;
+
+  std::div_t division{};
+
+  for (std::uint32_t total_tq = 25; total_tq >= 8; total_tq--) {
+    division = std::div(operating_frequency, (desired_baud_rate * total_tq));
+    if (division.rem == 0) {
+      timing.total_tq = total_tq;
+      break;
+    }
+  }
+
+  if (timing.total_tq == 0) {
     return std::nullopt;
   }
 
-  const std::uint16_t bit_width_v = bit_width(p_settings);
+  timing.clock_divider = division.quot;
+  timing.phase_segment1 = (timing.total_tq - timing.sync_segment) / 2U;
+  timing.phase_segment2 = timing.total_tq - timing.sync_segment -
+                          timing.phase_segment1 - timing.propagation_delay;
 
-  // 3. The total bit width must be equal to or greater than 8 Tq/bit; the
-  //    sum of sync_segment, propagation_delay, phase_segment1 and
-  //    phase_segment2.
-  if (bit_width_v < 8) {
-    return std::nullopt;
-  }
+  // Adjust synchronization jump width (sjw) to a safe value
+  timing.synchronization_jump_width =
+    std::min<std::uint8_t>(timing.phase_segment1, 4U);
 
-  // 4. The CAN device's operating frequency must be at least 8 times the
-  //    bit rate to give the minimum.
-  // 5. The ratio between the CAN device's operating frequency and the bit
-  //    width must be close enough to an integer to produce a usable BRP.
-  const float bit_width_float = bit_width_v;
-  const float scaled_baud = p_settings.baud_rate * bit_width_float;
-  const float baud_rate_prescaler = p_operating_frequency / scaled_baud;
-  const auto final_prescaler = std::lround(baud_rate_prescaler);
-
-  if (final_prescaler == 0) {
-    return std::nullopt;
-  }
-
-  return final_prescaler;
+  return timing;
 }
 
 /**
