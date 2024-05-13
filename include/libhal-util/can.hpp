@@ -179,10 +179,13 @@ struct can_bus_divider_t
   std::int32_t operating_frequency = p_operating_frequency;
   std::int32_t desired_baud_rate = p_target_baud_rate;
 
-  std::div_t division{};
+  using inner_div_t =
+    decltype(std::div(operating_frequency, desired_baud_rate));
+  inner_div_t division{};
 
   for (std::uint32_t total_tq = 25; total_tq >= 8; total_tq--) {
     division = std::div(operating_frequency, (desired_baud_rate * total_tq));
+
     if (division.rem == 0) {
       timing.total_tq = total_tq;
       break;

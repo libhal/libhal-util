@@ -1,0 +1,11 @@
+name: 🚀 5.0.1
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    uses: libhal/ci/.github/workflows/deploy_all.yml@5.x.y
+    with:
+      version: 5.0.1
+    secrets: inherit
