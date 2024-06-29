@@ -34,11 +34,11 @@ void serial_util_test()
   class fake_serial : public hal::serial
   {
   public:
-    void driver_configure(const settings&) override
+    void driver_configure(settings const&) override
     {
     }
 
-    write_t driver_write(std::span<const hal::byte> p_data) override
+    write_t driver_write(std::span<hal::byte const> p_data) override
     {
       m_write_call_count++;
       if (p_data[0] == write_failure_byte) {
@@ -85,7 +85,7 @@ void serial_util_test()
 
     ~fake_serial() override = default;
 
-    std::span<const hal::byte> m_out{};
+    std::span<hal::byte const> m_out{};
     int m_write_call_count = 0;
     bool m_read_was_called = false;
     bool m_flush_called = false;
@@ -111,7 +111,7 @@ void serial_util_test()
     "[success] write_partial full"_test = []() {
       // Setup
       fake_serial serial;
-      const std::array<hal::byte, 4> expected{};
+      std::array<hal::byte, 4> const expected{};
 
       // Exercise
       auto result = write_partial(serial, expected);
@@ -127,7 +127,7 @@ void serial_util_test()
     "[success] write_partial single byte at a time"_test = []() {
       // Setup
       fake_serial serial;
-      const std::array<hal::byte, 4> expected{};
+      std::array<hal::byte, 4> const expected{};
       serial.m_single_byte_out = true;
 
       // Exercise
@@ -144,7 +144,7 @@ void serial_util_test()
     "[failure] write_partial"_test = []() {
       // Setup
       fake_serial serial;
-      const std::array<hal::byte, 4> expected{ write_failure_byte };
+      std::array<hal::byte, 4> const expected{ write_failure_byte };
 
       // Exercise
       expect(throws<hal::io_error>([&serial, &expected]() {
@@ -161,7 +161,7 @@ void serial_util_test()
     "[success] write"_test = []() {
       // Setup
       fake_serial serial;
-      const std::array<hal::byte, 4> expected{};
+      std::array<hal::byte, 4> const expected{};
       serial.m_single_byte_out = true;
 
       // Exercise
@@ -264,7 +264,7 @@ void serial_util_test()
     "[success] write_then_read"_test = []() {
       // Setup
       fake_serial serial;
-      const std::array<hal::byte, 4> write_buffer{};
+      std::array<hal::byte, 4> const write_buffer{};
       std::array<hal::byte, 4> expected_read{};
       expected_read.fill(filler_byte);
       std::array<hal::byte, 4> actual;
@@ -284,7 +284,7 @@ void serial_util_test()
     "[failure read] write_then_read"_test = []() {
       // Setup
       fake_serial serial;
-      const std::array<hal::byte, 4> expected{};
+      std::array<hal::byte, 4> const expected{};
       std::array<hal::byte, 4> actual{};
       actual.fill(filler_byte);
       std::array<hal::byte, 4> actual_buffer;
@@ -307,7 +307,7 @@ void serial_util_test()
     "[failure on write] write_then_read"_test = []() {
       // Setup
       fake_serial serial;
-      const std::array<hal::byte, 4> expected{ write_failure_byte };
+      std::array<hal::byte, 4> const expected{ write_failure_byte };
       std::array<hal::byte, 4> actual{};
 
       // Exercise
@@ -325,7 +325,7 @@ void serial_util_test()
     "[success] write_then_read<Length>"_test = []() {
       // Setup
       fake_serial serial;
-      const std::array<hal::byte, 4> expected_write{};
+      std::array<hal::byte, 4> const expected_write{};
       std::array<hal::byte, 5> expected_read{};
       expected_read.fill(filler_byte);
 
@@ -344,7 +344,7 @@ void serial_util_test()
     "[failure on write] write_then_read<Length>"_test = []() {
       // Setup
       fake_serial serial;
-      const std::array<hal::byte, 4> expected{ write_failure_byte };
+      std::array<hal::byte, 4> const expected{ write_failure_byte };
 
       // Exercise
       expect(throws<hal::io_error>([&serial, &expected]() {
@@ -362,11 +362,11 @@ void serial_util_test()
 
   struct save_serial_write : public hal::serial
   {
-    void driver_configure(const settings&) override
+    void driver_configure(settings const&) override
     {
     }
 
-    write_t driver_write(std::span<const hal::byte> p_data) override
+    write_t driver_write(std::span<hal::byte const> p_data) override
     {
       m_out.assign(p_data.begin(), p_data.end());
       return write_t{ p_data };
@@ -396,13 +396,13 @@ void serial_util_test()
     "print()"_test = []() {
       // Setup
       save_serial_write serial;
-      const std::string_view expected = "hello, world!";
+      std::string_view const expected = "hello, world!";
 
       // Exercise
       print(serial, expected);
 
       // Verify
-      expect(that % expected == std::string_view(reinterpret_cast<const char*>(
+      expect(that % expected == std::string_view(reinterpret_cast<char const*>(
                                                    serial.m_out.data()),
                                                  serial.m_out.size()));
     };
@@ -410,13 +410,13 @@ void serial_util_test()
     "[printf style 1] print()"_test = []() {
       // Setup
       save_serial_write serial;
-      const std::string_view expected = "hello 5";
+      std::string_view const expected = "hello 5";
 
       // Exercise
       print<128>(serial, "hello %d", 5);
 
       // Verify
-      expect(that % expected == std::string_view(reinterpret_cast<const char*>(
+      expect(that % expected == std::string_view(reinterpret_cast<char const*>(
                                                    serial.m_out.data()),
                                                  serial.m_out.size()));
     };
@@ -424,13 +424,13 @@ void serial_util_test()
     "[printf style 2] print()"_test = []() {
       // Setup
       save_serial_write serial;
-      const std::string_view expected = "hello 5 ABCDEF";
+      std::string_view const expected = "hello 5 ABCDEF";
 
       // Exercise
       print<128>(serial, "hello %d %06X", 5, 0xABCDEF);
 
       // Verify
-      expect(that % expected == std::string_view(reinterpret_cast<const char*>(
+      expect(that % expected == std::string_view(reinterpret_cast<char const*>(
                                                    serial.m_out.data()),
                                                  serial.m_out.size()));
     };

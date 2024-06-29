@@ -31,8 +31,8 @@ struct example_stream
   work_state m_state;
 };
 
-std::span<const hal::byte> operator|(
-  const std::span<const hal::byte>& p_input_data,
+std::span<hal::byte const> operator|(
+  std::span<hal::byte const> const& p_input_data,
   [[maybe_unused]] example_stream& p_self)
 {
   return p_input_data;
@@ -52,7 +52,7 @@ void stream_terminated_test()
   //          [-Werror,-Wunneeded-internal-declaration]
   //
   example_stream compiler_error_bypass_error;
-  std::span<const hal::byte>() | compiler_error_bypass_error;
+  std::span<hal::byte const>() | compiler_error_bypass_error;
 
   "hal::terminate(byte_stream) -> true with finished state"_test = []() {
     // Setup
@@ -141,7 +141,7 @@ void parse_stream_test()
     hal::stream_parse<std::uint32_t> parse_int;
 
     // Exercise
-    auto remaining = std::span<const hal::byte>() | parse_int;
+    auto remaining = std::span<hal::byte const>() | parse_int;
 
     expect(that % work_state::in_progress == parse_int.state());
     expect(that % 0 == parse_int.value());

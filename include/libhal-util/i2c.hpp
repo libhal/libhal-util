@@ -35,8 +35,8 @@ namespace hal {
  * @param p_rhs A I2C bus.
  * @return A boolean if they are the same or not.
  */
-[[nodiscard]] constexpr auto operator==(const i2c::settings& p_lhs,
-                                        const i2c::settings& p_rhs)
+[[nodiscard]] constexpr auto operator==(i2c::settings const& p_lhs,
+                                        i2c::settings const& p_rhs)
 {
   return equals(p_lhs.clock_rate, p_rhs.clock_rate);
 }
@@ -54,7 +54,7 @@ namespace hal {
  */
 inline void write(i2c& p_i2c,
                   hal::byte p_address,
-                  std::span<const hal::byte> p_data_out,
+                  std::span<hal::byte const> p_data_out,
                   timeout auto p_timeout)
 {
   p_i2c.transaction(p_address, p_data_out, std::span<hal::byte>{}, p_timeout);
@@ -73,7 +73,7 @@ inline void write(i2c& p_i2c,
  */
 inline void write(i2c& p_i2c,
                   hal::byte p_address,
-                  std::span<const hal::byte> p_data_out)
+                  std::span<hal::byte const> p_data_out)
 {
   write(p_i2c, p_address, p_data_out, hal::never_timeout());
 }
@@ -174,7 +174,7 @@ template<size_t bytes_to_read>
  */
 inline void write_then_read(i2c& p_i2c,
                             hal::byte p_address,
-                            std::span<const hal::byte> p_data_out,
+                            std::span<hal::byte const> p_data_out,
                             std::span<hal::byte> p_data_in,
                             timeout auto p_timeout = hal::never_timeout())
 {
@@ -197,7 +197,7 @@ inline void write_then_read(i2c& p_i2c,
  */
 inline void write_then_read(i2c& p_i2c,
                             hal::byte p_address,
-                            std::span<const hal::byte> p_data_out,
+                            std::span<hal::byte const> p_data_out,
                             std::span<hal::byte> p_data_in)
 {
   return write_then_read(
@@ -223,7 +223,7 @@ template<size_t bytes_to_read>
 [[nodiscard]] std::array<hal::byte, bytes_to_read> write_then_read(
   i2c& p_i2c,
   hal::byte p_address,
-  std::span<const hal::byte> p_data_out,
+  std::span<hal::byte const> p_data_out,
   timeout auto p_timeout)
 {
   std::array<hal::byte, bytes_to_read> buffer;
@@ -248,7 +248,7 @@ template<size_t bytes_to_read>
 [[nodiscard]] std::array<hal::byte, bytes_to_read> write_then_read(
   i2c& p_i2c,
   hal::byte p_address,
-  std::span<const hal::byte> p_data_out)
+  std::span<hal::byte const> p_data_out)
 {
   return write_then_read<bytes_to_read>(
     p_i2c, p_address, p_data_out, hal::never_timeout());
@@ -278,7 +278,7 @@ template<size_t bytes_to_read>
 
   try {
     p_i2c.transaction(p_address, std::span<hal::byte>{}, data_in, timeout);
-  } catch (const hal::no_such_device& p_error) {
+  } catch (hal::no_such_device const& p_error) {
     device_acknowledged = false;
   }
 

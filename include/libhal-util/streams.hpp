@@ -43,16 +43,16 @@ public:
    * pointed to by this span must outlive this object, or not be used when the
    * lifetime of that data is no longer available.
    */
-  explicit stream_find(std::span<const hal::byte> p_sequence);
+  explicit stream_find(std::span<hal::byte const> p_sequence);
 
-  friend std::span<const hal::byte> operator|(
-    const std::span<const hal::byte>& p_input_data,
+  friend std::span<hal::byte const> operator|(
+    std::span<hal::byte const> const& p_input_data,
     stream_find& p_self);
 
   work_state state();
 
 private:
-  std::span<const hal::byte> m_sequence;
+  std::span<hal::byte const> m_sequence;
   size_t m_search_index = 0;
 };
 
@@ -80,17 +80,17 @@ public:
    * @param p_fill_amount - reference to a size value to limit the fill amount
    * by.
    */
-  stream_fill(std::span<hal::byte> p_buffer, const size_t& p_fill_amount);
+  stream_fill(std::span<hal::byte> p_buffer, size_t const& p_fill_amount);
 
-  friend std::span<const hal::byte> operator|(
-    const std::span<const hal::byte>& p_input_data,
+  friend std::span<hal::byte const> operator|(
+    std::span<hal::byte const> const& p_input_data,
     stream_fill& p_self);
 
   work_state state();
 
 private:
   std::span<hal::byte> m_buffer;
-  const size_t* m_fill_amount = nullptr;
+  size_t const* m_fill_amount = nullptr;
 };
 
 /**
@@ -110,11 +110,11 @@ public:
    * lifetime of that data is no longer available.
    * @param p_buffer - buffer to fill data into
    */
-  stream_fill_upto(std::span<const hal::byte> p_sequence,
+  stream_fill_upto(std::span<hal::byte const> p_sequence,
                    std::span<hal::byte> p_buffer);
 
-  friend std::span<const hal::byte> operator|(
-    const std::span<const hal::byte>& p_input_data,
+  friend std::span<hal::byte const> operator|(
+    std::span<hal::byte const> const& p_input_data,
     stream_fill_upto& p_self);
 
   work_state state();
@@ -123,7 +123,7 @@ public:
   std::span<hal::byte> unfilled();
 
 private:
-  std::span<const hal::byte> m_sequence;
+  std::span<hal::byte const> m_sequence;
   std::span<hal::byte> m_buffer;
   size_t m_fill_amount = 0;
   size_t m_search_index = 0;
@@ -144,8 +144,8 @@ public:
    */
   explicit stream_parse() = default;
 
-  friend std::span<const hal::byte> operator|(
-    const std::span<const hal::byte>& p_input_data,
+  friend std::span<hal::byte const> operator|(
+    std::span<hal::byte const> const& p_input_data,
     stream_parse& p_self)
   {
     if (p_self.m_finished) {
@@ -174,7 +174,7 @@ public:
   /**
    * @return T& - return an immutable reference to the value
    */
-  const T& value()
+  T const& value()
   {
     return m_value;
   }
@@ -200,8 +200,8 @@ public:
    */
   explicit stream_skip(size_t p_skip);
 
-  friend std::span<const hal::byte> operator|(
-    const std::span<const hal::byte>& p_input_data,
+  friend std::span<hal::byte const> operator|(
+    std::span<hal::byte const> const& p_input_data,
     stream_skip& p_self);
 
   work_state state();

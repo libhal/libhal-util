@@ -23,13 +23,13 @@
 #include <libhal/units.hpp>
 
 namespace hal {
-stream_find::stream_find(std::span<const hal::byte> p_sequence)
+stream_find::stream_find(std::span<hal::byte const> p_sequence)
   : m_sequence(p_sequence)
 {
 }
 
-std::span<const hal::byte> operator|(
-  const std::span<const hal::byte>& p_input_data,
+std::span<hal::byte const> operator|(
+  std::span<hal::byte const> const& p_input_data,
   stream_find& p_self)
 {
   if (p_input_data.empty()) {
@@ -71,14 +71,14 @@ stream_fill::stream_fill(std::span<hal::byte> p_buffer)
 }
 
 stream_fill::stream_fill(std::span<hal::byte> p_buffer,
-                         const size_t& p_fill_amount)
+                         size_t const& p_fill_amount)
   : m_buffer(p_buffer)
   , m_fill_amount(&p_fill_amount)
 {
 }
 
-std::span<const hal::byte> operator|(
-  const std::span<const hal::byte>& p_input_data,
+std::span<hal::byte const> operator|(
+  std::span<hal::byte const> const& p_input_data,
   stream_fill& p_self)
 {
   if (p_input_data.empty() || p_self.m_buffer.empty()) {
@@ -109,15 +109,15 @@ work_state stream_fill::state()
   return work_state::in_progress;
 }
 
-stream_fill_upto::stream_fill_upto(std::span<const hal::byte> p_sequence,
+stream_fill_upto::stream_fill_upto(std::span<hal::byte const> p_sequence,
                                    std::span<hal::byte> p_buffer)
   : m_sequence(p_sequence)
   , m_buffer(p_buffer)
 {
 }
 
-std::span<const hal::byte> operator|(
-  const std::span<const hal::byte>& p_input_data,
+std::span<hal::byte const> operator|(
+  std::span<hal::byte const> const& p_input_data,
   stream_fill_upto& p_self)
 {
   if (p_input_data.empty() ||
@@ -176,8 +176,8 @@ stream_skip::stream_skip(size_t p_skip)
 {
 }
 
-std::span<const hal::byte> operator|(
-  const std::span<const hal::byte>& p_input_data,
+std::span<hal::byte const> operator|(
+  std::span<hal::byte const> const& p_input_data,
   stream_skip& p_self)
 {
   if (p_input_data.empty()) {

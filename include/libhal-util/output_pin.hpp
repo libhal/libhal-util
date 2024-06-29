@@ -30,8 +30,8 @@ namespace hal {
  * @param p_rhs An output pin
  * @return A boolean if they are the same or not.
  */
-[[nodiscard]] constexpr auto operator==(const output_pin::settings& p_lhs,
-                                        const output_pin::settings& p_rhs)
+[[nodiscard]] constexpr auto operator==(output_pin::settings const& p_lhs,
+                                        output_pin::settings const& p_rhs)
 {
   return p_lhs.resistor == p_rhs.resistor &&
          p_lhs.open_drain == p_rhs.open_drain;

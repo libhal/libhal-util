@@ -76,7 +76,7 @@ public:
    *
    * @param p_timeout - other steady_clock_timeout
    */
-  steady_clock_timeout(const steady_clock_timeout& p_timeout) = default;
+  steady_clock_timeout(steady_clock_timeout const& p_timeout) = default;
   /**
    * @ingroup SteadyClock
    * @brief Assign construct a new counter timeout object
@@ -84,7 +84,7 @@ public:
    * @param p_timeout - other steady_clock_timeout
    * @return steady_clock_timeout&
    */
-  steady_clock_timeout& operator=(const steady_clock_timeout& p_timeout) =
+  steady_clock_timeout& operator=(steady_clock_timeout const& p_timeout) =
     default;
   /**
    * @ingroup SteadyClock

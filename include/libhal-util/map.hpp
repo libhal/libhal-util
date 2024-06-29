@@ -58,14 +58,14 @@ namespace hal {
    * y = (x - a) * | --------| + c
    *                \ b - a /
    */
-  const float x = p_target;
-  const auto [a, b] = std::minmax(p_input_range.first, p_input_range.second);
-  const auto [c, d] = std::minmax(p_output_range.first, p_output_range.second);
+  float const x = p_target;
+  auto const [a, b] = std::minmax(p_input_range.first, p_input_range.second);
+  auto const [c, d] = std::minmax(p_output_range.first, p_output_range.second);
 
-  const float shift_input = x - a;
-  const float ratio = (d - c) / (b - a);
-  const float y = (shift_input * ratio) + c;
-  const float clamped_y = std::clamp(y, c, d);
+  float const shift_input = x - a;
+  float const ratio = (d - c) / (b - a);
+  float const y = (shift_input * ratio) + c;
+  float const clamped_y = std::clamp(y, c, d);
 
   return clamped_y;
 }

@@ -96,7 +96,7 @@ constexpr bool failed(has_work_state auto p_worker)
 template<class CharT, class Traits>
 inline std::basic_ostream<CharT, Traits>& operator<<(
   std::basic_ostream<CharT, Traits>& p_ostream,
-  const work_state& p_state)
+  work_state const& p_state)
 {
   return p_ostream << to_string(p_state);
 }

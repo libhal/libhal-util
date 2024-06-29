@@ -326,7 +326,7 @@ void static_list_test()
 
     {
       // Exercise
-      for (const auto& item : list) {
+      for (auto const& item : list) {
         // Verify
         expect(that % (count++ + offset) == item);
       }

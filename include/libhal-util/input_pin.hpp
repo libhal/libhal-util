@@ -29,8 +29,8 @@ namespace hal {
  * @param p_rhs An input pin
  * @return A boolean if they are the same or not.
  */
-[[nodiscard]] constexpr auto operator==(const input_pin::settings& p_lhs,
-                                        const input_pin::settings& p_rhs)
+[[nodiscard]] constexpr auto operator==(input_pin::settings const& p_lhs,
+                                        input_pin::settings const& p_rhs)
 {
   return p_lhs.resistor == p_rhs.resistor;
 }

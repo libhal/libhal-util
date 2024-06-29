@@ -34,8 +34,8 @@ namespace hal {
  * @param p_rhs A SPI object
  * @return A boolean if they are the same or not.
  */
-[[nodiscard]] constexpr auto operator==(const spi::settings& p_lhs,
-                                        const spi::settings& p_rhs)
+[[nodiscard]] constexpr auto operator==(spi::settings const& p_lhs,
+                                        spi::settings const& p_rhs)
 {
   return p_lhs.clock_idles_high == p_rhs.clock_idles_high &&
          p_lhs.clock_rate == p_rhs.clock_rate &&
@@ -53,7 +53,7 @@ namespace hal {
  * @param p_spi - spi driver
  * @param p_data_out - data to be written to the spi bus
  */
-inline void write(spi& p_spi, std::span<const hal::byte> p_data_out)
+inline void write(spi& p_spi, std::span<hal::byte const> p_data_out)
 {
   p_spi.transfer(p_data_out, std::span<hal::byte>{}, spi::default_filler);
 }
@@ -118,7 +118,7 @@ template<size_t bytes_to_read>
  * begins.
  */
 inline void write_then_read(spi& p_spi,
-                            std::span<const hal::byte> p_data_out,
+                            std::span<hal::byte const> p_data_out,
                             std::span<hal::byte> p_data_in,
                             hal::byte p_filler = spi::default_filler)
 {
@@ -145,7 +145,7 @@ inline void write_then_read(spi& p_spi,
 template<size_t bytes_to_read>
 [[nodiscard]] std::array<hal::byte, bytes_to_read> write_then_read(
   spi& p_spi,
-  std::span<const hal::byte> p_data_out,
+  std::span<hal::byte const> p_data_out,
   hal::byte p_filler = spi::default_filler)
 {
   write(p_spi, p_data_out);

@@ -20,11 +20,11 @@
 class stub_serial : public hal::serial
 {
 public:
-  void driver_configure(const settings&) override
+  void driver_configure(settings const&) override
   {
   }
 
-  write_t driver_write(std::span<const hal::byte> p_data) override
+  write_t driver_write(std::span<hal::byte const> p_data) override
   {
     return write_t{ .data = p_data.subspan(0, 0) };
   }

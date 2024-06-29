@@ -41,8 +41,8 @@ namespace hal {
  * @param p_rhs A serial object
  * @return A boolean if they are the same or not.
  */
-[[nodiscard]] constexpr auto operator==(const serial::settings& p_lhs,
-                                        const serial::settings& p_rhs)
+[[nodiscard]] constexpr auto operator==(serial::settings const& p_lhs,
+                                        serial::settings const& p_rhs)
 {
   return equals(p_lhs.baud_rate, p_rhs.baud_rate) &&
          p_lhs.parity == p_rhs.parity && p_lhs.stop == p_rhs.stop;
@@ -57,7 +57,7 @@ namespace hal {
  */
 [[nodiscard]] inline serial::write_t write_partial(
   serial& p_serial,
-  std::span<const hal::byte> p_data_out)
+  std::span<hal::byte const> p_data_out)
 {
   return p_serial.write(p_data_out);
 }
@@ -76,7 +76,7 @@ namespace hal {
  * @throws std::errc::timed_out - if p_timeout expires
  */
 inline void write(serial& p_serial,
-                  std::span<const hal::byte> p_data_out,
+                  std::span<hal::byte const> p_data_out,
                   timeout auto p_timeout)
 {
   auto remaining = p_data_out;
@@ -168,7 +168,7 @@ template<size_t bytes_to_read>
  * @throws std::errc::timed_out - if p_timeout expires
  */
 inline void write_then_read(serial& p_serial,
-                            std::span<const hal::byte> p_data_out,
+                            std::span<hal::byte const> p_data_out,
                             std::span<hal::byte> p_data_in,
                             timeout auto p_timeout)
 {
@@ -195,7 +195,7 @@ inline void write_then_read(serial& p_serial,
 template<size_t bytes_to_read>
 [[nodiscard]] std::array<hal::byte, bytes_to_read> write_then_read(
   serial& p_serial,
-  std::span<const hal::byte> p_data_out,
+  std::span<hal::byte const> p_data_out,
   timeout auto p_timeout)
 {
   std::array<hal::byte, bytes_to_read> buffer;
@@ -239,7 +239,7 @@ void print(serial& p_serial, byte_array_t&& p_data)
  * @param p_parameters - printf arguments
  */
 template<size_t buffer_size, typename... Parameters>
-void print(serial& p_serial, const char* p_format, Parameters... p_parameters)
+void print(serial& p_serial, char const* p_format, Parameters... p_parameters)
 {
   static_assert(buffer_size > 2);
   constexpr int unterminated_max_string_size =
