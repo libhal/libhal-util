@@ -42,13 +42,13 @@ void i2c_util_test()
   class test_i2c : public hal::i2c
   {
   public:
-    void driver_configure(const settings&) override
+    void driver_configure(settings const&) override
     {
     }
 
     void driver_transaction(
       hal::byte p_address,
-      std::span<const hal::byte> p_out,
+      std::span<hal::byte const> p_out,
       std::span<hal::byte> p_in,
       hal::function_ref<hal::timeout_function> p_timeout) override
     {
@@ -68,7 +68,7 @@ void i2c_util_test()
     ~test_i2c() override = default;
 
     hal::byte m_address = hal::byte{ 0 };
-    std::span<const hal::byte> m_out = std::span<const hal::byte>{};
+    std::span<hal::byte const> m_out = std::span<hal::byte const>{};
     std::span<hal::byte> m_in = std::span<hal::byte>{};
   };
 
@@ -90,7 +90,7 @@ void i2c_util_test()
     // Setup
     test_i2c i2c;
     test_timeout_t test_timeout;
-    const std::array<hal::byte, 4> expected_payload{};
+    std::array<hal::byte, 4> const expected_payload{};
 
     // Exercise
     write(i2c, successful_address, expected_payload, std::ref(test_timeout));
@@ -108,7 +108,7 @@ void i2c_util_test()
     // Setup
     test_i2c i2c;
     test_timeout_t test_timeout;
-    const std::array<hal::byte, 4> expected_payload{};
+    std::array<hal::byte, 4> const expected_payload{};
 
     // Exercise
     expect(
@@ -205,7 +205,7 @@ void i2c_util_test()
     // Setup
     test_i2c i2c;
     test_timeout_t test_timeout;
-    const std::array<hal::byte, 4> expected_payload{};
+    std::array<hal::byte, 4> const expected_payload{};
     std::array<hal::byte, 4> expected_buffer;
 
     // Exercise
@@ -228,7 +228,7 @@ void i2c_util_test()
     // Setup
     test_i2c i2c;
     test_timeout_t test_timeout;
-    const std::array<hal::byte, 4> expected_payload{};
+    std::array<hal::byte, 4> const expected_payload{};
     std::array<hal::byte, 4> expected_buffer;
     expected_buffer.fill(filler_byte);
 
@@ -255,7 +255,7 @@ void i2c_util_test()
     // Setup
     test_i2c i2c;
     test_timeout_t test_timeout;
-    const std::array<hal::byte, 4> expected_payload{};
+    std::array<hal::byte, 4> const expected_payload{};
     std::array<hal::byte, 4> expected{};
     expected.fill(filler_byte);
 
@@ -275,7 +275,7 @@ void i2c_util_test()
     // Setup
     test_i2c i2c;
     test_timeout_t test_timeout;
-    const std::array<hal::byte, 4> expected_payload{};
+    std::array<hal::byte, 4> const expected_payload{};
 
     // Exercise
     expect(
@@ -327,7 +327,7 @@ void i2c_util_test()
     // Setup
     test_i2c i2c;
 
-    const std::array<hal::byte, 4> write_data{};
+    std::array<hal::byte, 4> const write_data{};
     std::array<hal::byte, 4> read_data{};
 
     // Exercise

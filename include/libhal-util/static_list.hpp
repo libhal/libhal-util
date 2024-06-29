@@ -67,7 +67,7 @@ public:
     friend class item_iterator;
     friend class static_list;
 
-    constexpr item(static_list* p_list, const Object& p_object)
+    constexpr item(static_list* p_list, Object const& p_object)
       : m_list(p_list)
       , m_object(p_object)
     {
@@ -128,7 +128,7 @@ public:
       return m_object;
     }
 
-    const auto& get() const
+    auto const& get() const
     {
       return m_object;
     }
@@ -138,12 +138,12 @@ public:
       return m_object;
     }
 
-    const auto& operator*() const
+    auto const& operator*() const
     {
       return m_object;
     }
 
-    const auto* list() const
+    auto const* list() const
     {
       return m_list;
     }
@@ -219,7 +219,7 @@ public:
     using pointer = value_type*;
     using reference = value_type&;
 
-    explicit item_iterator(item* p_item, const static_list* p_list = nullptr)
+    explicit item_iterator(item* p_item, static_list const* p_list = nullptr)
       : m_self(p_item)
       , m_list(p_list)
     {
@@ -257,12 +257,12 @@ public:
       return old;        // return old value
     }
 
-    bool operator==(const item_iterator& p_other) const
+    bool operator==(item_iterator const& p_other) const
     {
       return m_self == p_other.m_self;
     }
 
-    bool operator!=(const item_iterator& p_other) const
+    bool operator!=(item_iterator const& p_other) const
     {
       return m_self != p_other.m_self;
     }
@@ -289,18 +289,18 @@ public:
 
   private:
     item* m_self;
-    const static_list* m_list;
+    static_list const* m_list;
   };
 
   using value_type = Object;
   using reference = Object&;
-  using const_reference = const Object&;
+  using const_reference = Object const&;
   using iterator = item_iterator;
-  using const_iterator = const item_iterator;
+  using const_iterator = item_iterator const;
   using difference_type = std::ptrdiff_t;
   using size_type = std::size_t;
   using pointer = value_type*;
-  using const_pointer = const value_type*;
+  using const_pointer = value_type const*;
 
   constexpr static_list()
   {
@@ -356,7 +356,7 @@ public:
    */
   [[nodiscard("List item must be saved, otherwise, the value will be discarded "
               "from the list")]] constexpr item
-  push_back(const Object& p_value)
+  push_back(Object const& p_value)
   {
     return item(this, p_value);
   }

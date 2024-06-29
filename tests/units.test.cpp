@@ -19,7 +19,7 @@
 // must be above <boost/ut.hpp> to print chrono duration objects
 template<typename Rep, typename Period>
 std::ostream& operator<<(std::ostream& p_os,
-                         const std::chrono::duration<Rep, Period>& p_duration)
+                         std::chrono::duration<Rep, Period> const& p_duration)
 {
   return p_os << p_duration.count() << " * (" << Period::num << "/"
               << Period::den << ")s";

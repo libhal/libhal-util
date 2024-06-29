@@ -23,7 +23,7 @@ void bit_test()
 
   "hal::bit<template> standard usage"_test = []() {
     // Setup
-    volatile std::uint32_t control_register = 1 << 15 | 1 << 16;
+    std::uint32_t volatile control_register = 1 << 15 | 1 << 16;
     constexpr auto enable_bit = bit_mask::from<1>();
     constexpr auto high_power_mode = bit_mask::from<15>();
     constexpr auto clock_divider = bit_mask::from<20, 23>();
@@ -51,7 +51,7 @@ void bit_test()
 
   "hal::bit standard usage "_test = []() {
     // Setup
-    volatile std::uint32_t control_register = 1 << 15 | 1 << 16;
+    std::uint32_t volatile control_register = 1 << 15 | 1 << 16;
     constexpr auto enable_bit = bit_mask::from<1>();
     constexpr auto high_power_mode = bit_mask::from<15>();
     constexpr auto clock_divider = bit_mask::from<20, 23>();

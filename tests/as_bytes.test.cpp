@@ -27,7 +27,7 @@ void as_bytes_test()
   "hal::as_bytes()"_test = []() {
     "Zero"_test = []() {
       // Setup
-      std::span<const hal::byte> expected_const{};
+      std::span<hal::byte const> expected_const{};
       std::span<hal::byte> expected_writable{};
       std::vector<float> empty_vector;
 
@@ -60,8 +60,8 @@ void as_bytes_test()
       std::vector<std::int32_t> vector;
       vector.push_back(1);
 
-      auto* array_pointer = reinterpret_cast<const hal::byte*>(array.data());
-      auto* vector_pointer = reinterpret_cast<const hal::byte*>(vector.data());
+      auto* array_pointer = reinterpret_cast<hal::byte const*>(array.data());
+      auto* vector_pointer = reinterpret_cast<hal::byte const*>(vector.data());
 
       auto vector_byte_size =
         sizeof(decltype(vector)::value_type) * vector.size();
@@ -100,14 +100,14 @@ void as_bytes_test()
       vector.push_back(4);
       vector.push_back(10293);
 
-      auto* array_pointer = reinterpret_cast<const hal::byte*>(array.data());
-      auto* vector_pointer = reinterpret_cast<const hal::byte*>(vector.data());
+      auto* array_pointer = reinterpret_cast<hal::byte const*>(array.data());
+      auto* vector_pointer = reinterpret_cast<hal::byte const*>(vector.data());
 
       constexpr auto array_element_size = sizeof(decltype(array)::value_type);
       constexpr auto array_byte_size = array_element_size * array.size();
 
       constexpr auto vector_element_size = sizeof(decltype(vector)::value_type);
-      const auto vector_byte_size = vector_element_size * vector.size();
+      auto const vector_byte_size = vector_element_size * vector.size();
 
       {
         // Exercise

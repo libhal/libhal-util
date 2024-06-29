@@ -30,8 +30,8 @@ namespace hal {
  * @param p_rhs An interrupt pin
  * @return A boolean if they are the same or not.
  */
-[[nodiscard]] constexpr auto operator==(const interrupt_pin::settings& p_lhs,
-                                        const interrupt_pin::settings& p_rhs)
+[[nodiscard]] constexpr auto operator==(interrupt_pin::settings const& p_lhs,
+                                        interrupt_pin::settings const& p_rhs)
 {
   return p_lhs.resistor == p_rhs.resistor && p_lhs.trigger == p_rhs.trigger;
 }

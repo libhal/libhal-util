@@ -30,10 +30,10 @@ void spi_util_test()
   class test_spi : public hal::spi
   {
   public:
-    void driver_configure(const settings&) override
+    void driver_configure(settings const&) override
     {
     }
-    void driver_transfer(std::span<const hal::byte> p_out,
+    void driver_transfer(std::span<hal::byte const> p_out,
                          std::span<hal::byte> p_in,
                          hal::byte p_filler) override
     {
@@ -55,7 +55,7 @@ void spi_util_test()
 
     ~test_spi() override = default;
 
-    std::span<const hal::byte> m_out = std::span<const hal::byte>{};
+    std::span<hal::byte const> m_out = std::span<hal::byte const>{};
     std::span<hal::byte> m_in = std::span<hal::byte>{};
     hal::byte m_filler = hal::byte{ 0xFF };
   };
@@ -63,7 +63,7 @@ void spi_util_test()
   "[success] write"_test = []() {
     // Setup
     test_spi spi;
-    const std::array<hal::byte, 4> expected_payload{};
+    std::array<hal::byte, 4> const expected_payload{};
 
     // Exercise
     write(spi, expected_payload);

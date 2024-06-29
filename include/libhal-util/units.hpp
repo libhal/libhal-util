@@ -52,9 +52,9 @@ namespace hal {
   // std::chrono::nanoseconds::period::num == 1
   // std::chrono::nanoseconds::period::den == 1,000,000
 
-  const auto denominator = decltype(p_duration)::period::den;
-  const auto float_count = static_cast<float>(p_duration.count());
-  const auto cycle_count = (float_count * p_source) / denominator;
+  auto const denominator = decltype(p_duration)::period::den;
+  auto const float_count = static_cast<float>(p_duration.count());
+  auto const cycle_count = (float_count * p_source) / denominator;
 
   return static_cast<std::int64_t>(cycle_count);
 }
@@ -134,9 +134,9 @@ duration_from_cycles(hertz p_source, uint32_t p_cycles)
   constexpr auto float_int_min = static_cast<float>(int_min);
   constexpr auto float_int_max = static_cast<float>(int_max);
 
-  const auto source = std::abs(p_source);
-  const auto float_cycles = static_cast<float>(p_cycles);
-  const auto nanoseconds = (float_cycles * ratio_den) / (source * ratio_num);
+  auto const source = std::abs(p_source);
+  auto const float_cycles = static_cast<float>(p_cycles);
+  auto const nanoseconds = (float_cycles * ratio_den) / (source * ratio_num);
 
   if (float_int_min <= nanoseconds && nanoseconds <= float_int_max) {
     return std::chrono::nanoseconds(static_cast<std::int64_t>(nanoseconds));
@@ -162,7 +162,7 @@ duration_from_cycles(hertz p_source, uint32_t p_cycles)
 template<class CharT, class Traits>
 inline std::basic_ostream<CharT, Traits>& operator<<(
   std::basic_ostream<CharT, Traits>& p_ostream,
-  const hal::byte& p_byte)
+  hal::byte const& p_byte)
 {
   return p_ostream << std::hex << "0x" << unsigned(p_byte);
 }

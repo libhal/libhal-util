@@ -20,8 +20,8 @@ std::uint64_t future_deadline(hal::steady_clock& p_steady_clock,
                               hal::time_duration p_duration)
 {
   using period = decltype(p_duration)::period;
-  const auto frequency = p_steady_clock.frequency();
-  const auto tick_period = wavelength<period>(frequency);
+  auto const frequency = p_steady_clock.frequency();
+  auto const tick_period = wavelength<period>(frequency);
   auto ticks_required = p_duration / tick_period;
   using unsigned_ticks = std::make_unsigned_t<decltype(ticks_required)>;
 
@@ -29,8 +29,8 @@ std::uint64_t future_deadline(hal::steady_clock& p_steady_clock,
     ticks_required = 1;
   }
 
-  const auto ticks = static_cast<unsigned_ticks>(ticks_required);
-  const auto future_timestamp = ticks + p_steady_clock.uptime();
+  auto const ticks = static_cast<unsigned_ticks>(ticks_required);
+  auto const future_timestamp = ticks + p_steady_clock.uptime();
 
   return future_timestamp;
 }

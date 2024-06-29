@@ -187,7 +187,7 @@ struct bit_mask
    * @return true - the masks are the same
    * @return false - the masks are not the same
    */
-  constexpr bool operator==(const bit_mask& other)
+  constexpr bool operator==(bit_mask const& other)
   {
     return other.position == position && other.width == width;
   }
@@ -245,9 +245,9 @@ constexpr auto bit_extract(std::unsigned_integral auto p_value)
 {
   using T = decltype(p_value);
   // Shift desired value to the right to position 0
-  const auto shifted = p_value >> field.position;
+  auto const shifted = p_value >> field.position;
   // Mask away any bits left of the value based on the field width
-  const auto masked = shifted & field.origin<T>();
+  auto const masked = shifted & field.origin<T>();
   // Leaving only the desired bits
   return static_cast<T>(masked);
 }
@@ -257,9 +257,9 @@ constexpr auto bit_extract(bit_mask p_field,
 {
   using T = decltype(p_value);
   // Shift desired value to the right to position 0
-  const auto shifted = p_value >> p_field.position;
+  auto const shifted = p_value >> p_field.position;
   // Mask away any bits left of the value based on the field width
-  const auto masked = shifted & p_field.origin<T>();
+  auto const masked = shifted & p_field.origin<T>();
   // Leaving only the desired bits
   return static_cast<T>(masked);
 }
@@ -289,7 +289,7 @@ public:
 
   constexpr auto& set(bit_mask p_field)
   {
-    const auto mask = static_cast<T>(1U << p_field.position);
+    auto const mask = static_cast<T>(1U << p_field.position);
 
     m_value = m_value | mask;
 
@@ -311,8 +311,8 @@ public:
 
   constexpr auto& clear(bit_mask p_field)
   {
-    const auto mask = static_cast<T>(1U << p_field.position);
-    const auto inverted_mask = ~mask;
+    auto const mask = static_cast<T>(1U << p_field.position);
+    auto const inverted_mask = ~mask;
 
     m_value = m_value & inverted_mask;
 
@@ -334,7 +334,7 @@ public:
 
   constexpr auto& toggle(bit_mask p_field)
   {
-    const auto mask = static_cast<T>(1U << p_field.position);
+    auto const mask = static_cast<T>(1U << p_field.position);
 
     m_value = m_value ^ mask;
 
@@ -344,11 +344,11 @@ public:
   template<bit_mask field>
   constexpr auto& insert(std::unsigned_integral auto p_value)
   {
-    const auto value_to_insert = static_cast<T>(p_value);
+    auto const value_to_insert = static_cast<T>(p_value);
     // AND value with mask to remove any bits beyond the specified width.
     // Shift masked value into bit position and OR with target value.
-    const auto shifted_field = value_to_insert << field.position;
-    const auto new_value = shifted_field & field.value<T>();
+    auto const shifted_field = value_to_insert << field.position;
+    auto const new_value = shifted_field & field.value<T>();
 
     // Clear width's number of bits in the target value at the bit position
     // specified.
@@ -408,7 +408,7 @@ template<std::unsigned_integral T>
 class bit_modify : public bit_value<T>
 {
 public:
-  constexpr bit_modify(volatile T& p_register_reference)
+  constexpr bit_modify(T volatile& p_register_reference)
     : bit_value<T>(p_register_reference)
     , m_pointer(&p_register_reference)
   {
@@ -420,6 +420,6 @@ public:
   }
 
 private:
-  volatile T* m_pointer;
+  T volatile* m_pointer;
 };
 }  // namespace hal

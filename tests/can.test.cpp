@@ -9,7 +9,7 @@ namespace hal {
 template<class CharT, class Traits>
 std::basic_ostream<CharT, Traits>& operator<<(
   std::basic_ostream<CharT, Traits>& p_ostream,
-  const hal::can_bus_divider_t& p_settings)
+  hal::can_bus_divider_t const& p_settings)
 {
   p_ostream << "{ clock_divider: " << int(p_settings.clock_divider);
   p_ostream << ", sync: " << int(p_settings.sync_segment);
@@ -25,7 +25,7 @@ std::basic_ostream<CharT, Traits>& operator<<(
 template<class CharT, class Traits>
 std::basic_ostream<CharT, Traits>& operator<<(
   std::basic_ostream<CharT, Traits>& p_ostream,
-  const std::optional<hal::can_bus_divider_t>& p_settings)
+  std::optional<hal::can_bus_divider_t> const& p_settings)
 {
   if (p_settings) {
     p_ostream << p_settings.value();
@@ -50,7 +50,7 @@ void check_validity(hal::hertz p_operating_frequency,
 
   auto test_subject = call_result.value();
 
-  const auto bit_width = hal::bit_width(test_subject);
+  auto const bit_width = hal::bit_width(test_subject);
 
   auto calculated_baud_rate =
     p_operating_frequency /

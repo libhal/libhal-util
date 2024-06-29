@@ -36,8 +36,8 @@ namespace hal {
  * @param p_rhs A CAN bus setting to compare against another
  * @return A boolean if they are the same or not.
  */
-[[nodiscard]] constexpr auto operator==(const can::settings& p_lhs,
-                                        const can::settings& p_rhs)
+[[nodiscard]] constexpr auto operator==(can::settings const& p_lhs,
+                                        can::settings const& p_rhs)
 {
   return equals(p_lhs.baud_rate, p_rhs.baud_rate);
 }
@@ -121,8 +121,8 @@ struct can_bus_divider_t
  * @param p_rhs A CAN bus setting to compare against another
  * @return A boolean if they are the same or not.
  */
-[[nodiscard]] constexpr auto operator==(const can_bus_divider_t& p_lhs,
-                                        const can_bus_divider_t& p_rhs)
+[[nodiscard]] constexpr auto operator==(can_bus_divider_t const& p_lhs,
+                                        can_bus_divider_t const& p_rhs)
 {
   return p_lhs.clock_divider == p_rhs.clock_divider &&
          p_lhs.propagation_delay == p_rhs.propagation_delay &&
@@ -132,7 +132,7 @@ struct can_bus_divider_t
 }
 
 [[nodiscard]] constexpr std::uint16_t bit_width(
-  const can_bus_divider_t& p_settings)
+  can_bus_divider_t const& p_settings)
 {
   // The sum of 4x 8-bit numbers can never exceed uint16_t and thus this
   // operation is always safe.
@@ -216,8 +216,8 @@ struct can_bus_divider_t
  * @param p_rhs A CAN message.
  * @return A boolean if they are the same or not.
  */
-[[nodiscard]] constexpr auto operator==(const can::message_t& p_lhs,
-                                        const can::message_t& p_rhs)
+[[nodiscard]] constexpr auto operator==(can::message_t const& p_lhs,
+                                        can::message_t const& p_rhs)
 {
   bool payload_equal = p_lhs.payload == p_rhs.payload;
   return payload_equal && p_lhs.id == p_rhs.id &&

@@ -41,12 +41,12 @@ constexpr std::span<hal::byte> as_writable_bytes(T* p_address,
 }
 
 template<typename T>
-constexpr std::span<const hal::byte> as_bytes(const T* p_address,
+constexpr std::span<hal::byte const> as_bytes(T const* p_address,
                                               size_t p_number_of_elements)
 {
-  auto* start = reinterpret_cast<const hal::byte*>(p_address);
+  auto* start = reinterpret_cast<hal::byte const*>(p_address);
   size_t number_of_bytes = sizeof(T) * p_number_of_elements;
-  return std::span<const hal::byte>(start, number_of_bytes);
+  return std::span<hal::byte const>(start, number_of_bytes);
 }
 
 // Turning off clang-format because concepts because give it an aneurysm.
@@ -64,8 +64,8 @@ constexpr std::span<hal::byte> as_writable_bytes(
   return as_writable_bytes(p_container.data(), p_container.size());
 }
 
-constexpr std::span<const hal::byte> as_bytes(
-  const convertible_to_bytes auto& p_container)
+constexpr std::span<hal::byte const> as_bytes(
+  convertible_to_bytes auto const& p_container)
 {
   return as_bytes(p_container.data(), p_container.size());
 }

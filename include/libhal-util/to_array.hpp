@@ -38,7 +38,7 @@ template<size_t N>
 [[nodiscard]] constexpr std::array<char, N + 1> to_array(
   std::string_view p_view)
 {
-  const size_t min = std::min(N, p_view.size());
+  size_t const min = std::min(N, p_view.size());
   std::array<char, N + 1> result;
 
   auto out_iterator = std::copy_n(p_view.begin(), min, result.begin());

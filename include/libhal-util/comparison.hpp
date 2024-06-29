@@ -31,8 +31,8 @@
  */
 
 template<typename T, size_t size>
-constexpr bool operator==(const std::array<T, size>& p_array,
-                          const std::span<T>& p_span)
+constexpr bool operator==(std::array<T, size> const& p_array,
+                          std::span<T> const& p_span)
 {
   if (p_span.size() != size) {
     return false;
@@ -42,22 +42,22 @@ constexpr bool operator==(const std::array<T, size>& p_array,
 }
 
 template<typename T, size_t size>
-constexpr bool operator==(const std::span<T>& p_span,
-                          const std::array<T, size>& p_array)
+constexpr bool operator==(std::span<T> const& p_span,
+                          std::array<T, size> const& p_array)
 {
   return p_array == p_span;
 }
 
 template<typename T, size_t size>
-constexpr bool operator!=(const std::array<T, size>& p_array,
-                          const std::span<T>& p_span)
+constexpr bool operator!=(std::array<T, size> const& p_array,
+                          std::span<T> const& p_span)
 {
   return !(p_array == p_span);
 }
 
 template<typename T, size_t size>
-constexpr bool operator!=(const std::span<T>& p_span,
-                          const std::array<T, size>& p_array)
+constexpr bool operator!=(std::span<T> const& p_span,
+                          std::array<T, size> const& p_array)
 {
   return !(p_array == p_span);
 }

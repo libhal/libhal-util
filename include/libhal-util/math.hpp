@@ -112,8 +112,8 @@ template<typename T>
     return T{ 0 };
   }
 
-  const T remainder = numerator % denominator;
-  const T half_denominator = (denominator / 2);
+  T const remainder = numerator % denominator;
+  T const half_denominator = (denominator / 2);
   T quotient = numerator / denominator;
   // Round if remainder is greater than half of the denominator
   if (half_denominator != 0 && remainder >= half_denominator) {

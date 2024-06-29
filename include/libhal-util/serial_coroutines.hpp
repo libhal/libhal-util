@@ -56,7 +56,7 @@ public:
    * returning. A value 0 will result in no reads from the serial port.
    */
   skip_past(serial& p_serial,
-            std::span<const hal::byte> p_sequence,
+            std::span<hal::byte const> p_sequence,
             size_t p_read_limit = 32)
     : m_serial(&p_serial)
     , m_sequence(p_sequence)
@@ -110,7 +110,7 @@ public:
 
 private:
   serial* m_serial;
-  std::span<const hal::byte> m_sequence;
+  std::span<hal::byte const> m_sequence;
   size_t m_read_limit;
   size_t m_search_index = 0;
 };
@@ -202,7 +202,7 @@ public:
    * serial port.
    */
   read_upto(serial& p_serial,
-            std::span<const hal::byte> p_sequence,
+            std::span<hal::byte const> p_sequence,
             std::span<hal::byte> p_buffer,
             size_t p_read_limit = 32)
     : m_serial(&p_serial)
@@ -269,7 +269,7 @@ public:
 
 private:
   serial* m_serial;
-  std::span<const hal::byte> m_sequence;
+  std::span<hal::byte const> m_sequence;
   std::span<hal::byte> m_buffer;
   size_t m_read_limit;
   size_t m_search_index = 0;
