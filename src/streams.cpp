@@ -152,7 +152,7 @@ std::span<hal::byte const> operator|(
 
 work_state stream_fill_upto::state()
 {
-  if (m_buffer.empty() && m_search_index != m_sequence.size()) {
+  if (m_fill_amount == m_buffer.size() && m_search_index != m_sequence.size()) {
     return work_state::failed;
   }
   if (m_search_index == m_sequence.size()) {
