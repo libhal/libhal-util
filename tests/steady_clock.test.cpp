@@ -200,5 +200,20 @@ void steady_clock_utility_test()
     expect(that % expected.count() == test_steady_clock.m_uptime - 1);
     expect(that % expected_frequency == test_steady_clock.frequency());
   };
+
+  "hal::future_deadline(hal::steady_clock, relative_time)"_test = []() {
+    // Setup
+    using namespace std::chrono_literals;
+
+    dummy_steady_clock test_steady_clock;
+    static constexpr auto expected = 1'000'000;  // 1ms in nanoseconds
+    test_steady_clock.m_uptime = 0;
+
+    // Exercise
+    auto future_deadline_value = hal::future_deadline(test_steady_clock, 1ms);
+
+    // Verify
+    expect(that % expected == future_deadline_value);
+  };
 };
 }  // namespace hal
