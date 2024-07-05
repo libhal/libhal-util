@@ -46,8 +46,8 @@ namespace hal {
  * less than or equal to 1, it will be set to 1 to ensure at least one tick is
  * waited.
  */
-inline std::uint64_t future_deadline(hal::steady_clock& p_steady_clock,
-                                     hal::time_duration p_duration);
+std::uint64_t future_deadline(hal::steady_clock& p_steady_clock,
+                              hal::time_duration p_duration);
 
 /**
  * @ingroup SteadyClock
