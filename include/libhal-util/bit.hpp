@@ -48,6 +48,9 @@ struct bit_mask
    * position1 and position2 can be in any order so long as they span the
    * distance from the start and end of the bit_mask range.
    *
+   * Use this when you REQUIRE the bit mask to be generated at compile time,
+   * because template arguments are required to be known at compile time.
+   *
    * @tparam position1 - bit position 1
    * @tparam position2 - bit position 2
    * @return consteval bit_mask - bit bit_mask represented by the two bit
@@ -70,12 +73,15 @@ struct bit_mask
    * @ingroup Bit
    * @brief Generate, at compile time, a single bit width bit_mask at position
    *
+   * Use this when you REQUIRE the bit mask to be generated at compile time,
+   * because template arguments are required to be known at compile time.
+   *
    * @tparam position - the bit to make the bit_mask for
    * @return constexpr bit_mask - bit bit_mask with the position bit set to
    * position
    */
   template<std::uint32_t position>
-  static constexpr bit_mask from()
+  static consteval bit_mask from()
   {
     return bit_mask{ .position = position, .width = 1U };
   }
@@ -96,7 +102,7 @@ struct bit_mask
    * @return consteval bit_mask - bit bit_mask represented by the two bit
    * positions
    */
-  static consteval bit_mask from(std::uint32_t position1,
+  static constexpr bit_mask from(std::uint32_t position1,
                                  std::uint32_t position2)
   {
     constexpr std::uint32_t plus_one = 1;
