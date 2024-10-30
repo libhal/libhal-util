@@ -15,9 +15,11 @@
 #pragma once
 
 #include <climits>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
+
+#include <algorithm>
+#include <concepts>
 #include <limits>
 
 /**
@@ -56,34 +58,16 @@ struct bit_mask
    * @return consteval bit_mask - bit bit_mask represented by the two bit
    * positions
    */
-  template<std::uint32_t position1, std::uint32_t position2>
+  template<std::uint32_t position1, std::uint32_t position2 = position1>
   static consteval bit_mask from()
   {
-    constexpr std::uint32_t plus_one = 1;
     if constexpr (position1 < position2) {
       return bit_mask{ .position = position1,
-                       .width = plus_one + (position2 - position1) };
+                       .width = 1 + (position2 - position1) };
     } else {
       return bit_mask{ .position = position2,
-                       .width = plus_one + (position1 - position2) };
+                       .width = 1 + (position1 - position2) };
     }
-  }
-
-  /**
-   * @ingroup Bit
-   * @brief Generate, at compile time, a single bit width bit_mask at position
-   *
-   * Use this when you REQUIRE the bit mask to be generated at compile time,
-   * because template arguments are required to be known at compile time.
-   *
-   * @tparam position - the bit to make the bit_mask for
-   * @return constexpr bit_mask - bit bit_mask with the position bit set to
-   * position
-   */
-  template<std::uint32_t position>
-  static consteval bit_mask from()
-  {
-    return bit_mask{ .position = position, .width = 1U };
   }
 
   /**
@@ -105,13 +89,12 @@ struct bit_mask
   static constexpr bit_mask from(std::uint32_t position1,
                                  std::uint32_t position2)
   {
-    constexpr std::uint32_t plus_one = 1;
     if (position1 < position2) {
       return bit_mask{ .position = position1,
-                       .width = plus_one + (position2 - position1) };
+                       .width = 1 + (position2 - position1) };
     } else {
       return bit_mask{ .position = position2,
-                       .width = plus_one + (position1 - position2) };
+                       .width = 1 + (position1 - position2) };
     }
   }
 
@@ -154,7 +137,7 @@ struct bit_mask
     constexpr T field_of_ones = std::numeric_limits<T>::max();
 
     // At compile time calculate the number of bits in the target parameter.
-    constexpr size_t target_width = sizeof(T) * 8;
+    constexpr std::size_t target_width = sizeof(T) * 8;
 
     // Create bit_mask by shifting the set of 1s down so that the number of 1s
     // from bit position 0 is equal to the width parameter.
@@ -204,50 +187,95 @@ struct bit_mask
  * @ingroup Bit
  * @brief Helper for generating byte position masks
  *
- * @tparam ByteIndex - the byte position to make a mask for
+ * This type can be used to make a byte mask for a single byte or for multiple
+ * bytes.
+ *
+ * USAGE:
+ *
+ *      // Equivalent to:
+ *      //     hal::bit_mask::from(8, 23)
+ *      //     or
+ *      //     hal::bit_mask{ position = 8, width = 16 }
+ *      auto mask = byte_mask<1, 2>::value;
+ *
+ * Note that the order of the mask indexes do not matter. If you order this <2,
+ * 1> or <1, 2> you will get the same result which is a mask of bytes from one
+ * end to the other.
+ *
+ * @tparam ByteIndex1 - starting byte position
+ * @tparam ByteIndex2 - ending byte position
  */
-template<size_t ByteIndex>
+template<size_t ByteIndex1, size_t ByteIndex2 = ByteIndex1>
 struct byte_mask
 {
+  static constexpr auto bits_per_byte = 8;
+  static constexpr auto start_byte = std::min(ByteIndex1, ByteIndex2);
+  static constexpr auto end_byte = std::max(ByteIndex1, ByteIndex2);
   /**
    * @ingroup Bit
    * @brief Mask value defined at compile time
    *
    */
-  static constexpr hal::bit_mask value{ .position = ByteIndex, .width = 8 };
+  static constexpr hal::bit_mask value{
+    .position = bits_per_byte * start_byte,
+    .width = bits_per_byte * (1 + (end_byte - start_byte)),
+  };
 };
 
 /**
  * @ingroup Bit
  * @brief Shorthand for using hal::byte_mask<N>::value
  *
- * @tparam ByteIndex - the byte position to make a mask for
+ * @tparam ByteIndex1 - the byte position to make a mask for
+ * @tparam ByteIndex2 - the byte position to make a mask for
  */
-template<size_t ByteIndex>
-constexpr hal::bit_mask byte_m = byte_mask<ByteIndex>::value;
+template<size_t ByteIndex1, size_t ByteIndex2 = ByteIndex1>
+constexpr hal::bit_mask byte_m = byte_mask<ByteIndex1, ByteIndex2>::value;
 
 /**
  * @ingroup Bit
  * @brief Helper for generating nibble position masks
  *
- * A nibble is considered 4 bits or half a byte's width in bits.
+ * This type can be used to make a nibble mask for a single nibble or for
+ * multiple nibbles.
  *
- * @tparam NibbleIndex - the nibble position to make a mask for
+ * USAGE:
+ *
+ *      // Equivalent to:
+ *      //     hal::bit_mask::from(4, 12)
+ *      //     or
+ *      //     hal::bit_mask{ position = 4, width = 8 }
+ *      auto mask = nibble_mask<1, 2>::value;
+ *
+ * Note that the order of the mask indexes do not matter. If you order this <2,
+ * 1> or <1, 2> you will get the same result which is a mask of nibbles from one
+ * end to the other.
+ *
+ * @tparam NibbleIndex1 - starting nibble position
+ * @tparam NibbleIndex2 - ending nibble position
  */
-template<size_t NibbleIndex>
+template<std::size_t NibbleIndex1, std::size_t NibbleIndex2 = NibbleIndex1>
 struct nibble_mask
 {
-  static constexpr hal::bit_mask value{ .position = NibbleIndex, .width = 4 };
+  static constexpr auto bits_per_nibble = 4;
+  static constexpr auto start_nibble = std::min(NibbleIndex1, NibbleIndex2);
+  static constexpr auto end_nibble = std::max(NibbleIndex1, NibbleIndex2);
+  static constexpr hal::bit_mask value{
+    .position = bits_per_nibble * start_nibble,
+    .width = bits_per_nibble * (1 + (end_nibble - start_nibble)),
+  };
 };
 
 /**
  * @ingroup Bit
- * @brief Shorthand for using hal::nibble_mask<N>::value
+ * @brief Shorthand for using hal::nibble_mask<N, M>::value
  *
- * @tparam NibbleIndex - the nibble position to make a mask for
+ * @tparam NibbleIndex1 - starting nibble position
+ * @tparam NibbleIndex2 - ending nibble position
  */
-template<size_t NibbleIndex>
-constexpr hal::bit_mask nibble_m = nibble_mask<NibbleIndex>::value;
+template<std::size_t NibbleIndex1, std::size_t NibbleIndex2 = NibbleIndex1>
+constexpr hal::bit_mask nibble_m =
+  nibble_mask<NibbleIndex1, NibbleIndex2>::value;
 
 /**
  * @ingroup Bit
