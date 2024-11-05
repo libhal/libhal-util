@@ -14,10 +14,14 @@
 
 #pragma once
 
+#if 0
+#include <cmath>
 #include <cstdlib>
 #include <optional>
 
-#include <libhal/can.hpp>
+#include <libhal/buffered_can.hpp>
+
+#include "math.hpp"
 
 /**
  * @defgroup CAN_Utilities CAN Utilities
@@ -25,6 +29,20 @@
  */
 
 namespace hal {
+/**
+ * @ingroup CAN_Utilities
+ * @brief Compares two CAN bus settings.
+ *
+ * @param p_lhs CAN bus settings
+ * @param p_rhs A CAN bus setting to compare against another
+ * @return A boolean if they are the same or not.
+ */
+[[nodiscard]] constexpr auto operator==(can::settings const& p_lhs,
+                                        can::settings const& p_rhs)
+{
+  return equals(p_lhs.baud_rate, p_rhs.baud_rate);
+}
+
 /**
  * @brief Generic settings for a can peripheral
  * @ingroup CAN_Utilities
@@ -190,4 +208,22 @@ struct can_bus_divider_t
 
   return timing;
 }
+
+/**
+ * @ingroup CAN_Utilities
+ * @brief Compares two CAN message states.
+ *
+ * @param p_lhs A CAN message.
+ * @param p_rhs A CAN message.
+ * @return A boolean if they are the same or not.
+ */
+[[nodiscard]] constexpr auto operator==(can::message_t const& p_lhs,
+                                        can::message_t const& p_rhs)
+{
+  bool payload_equal = p_lhs.payload == p_rhs.payload;
+  return payload_equal && p_lhs.id == p_rhs.id &&
+         p_lhs.length == p_rhs.length &&
+         p_lhs.is_remote_request == p_rhs.is_remote_request;
+}
 }  // namespace hal
+#endif

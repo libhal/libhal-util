@@ -101,7 +101,8 @@ void i2c_util_test()
     expect(that % expected_payload.size() == i2c.m_out.size());
     expect(that % nullptr == i2c.m_in.data());
     expect(that % 0 == i2c.m_in.size());
-    expect(that % true == test_timeout.was_called);
+    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
+    expect(that % false == test_timeout.was_called);
   };
 
   "[failure] write"_test = []() {
@@ -140,7 +141,8 @@ void i2c_util_test()
     expect(that % expected_buffer.size() == i2c.m_in.size());
     expect(that % nullptr == i2c.m_out.data());
     expect(that % 0 == i2c.m_out.size());
-    expect(that % true == test_timeout.was_called);
+    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
+    expect(that % false == test_timeout.was_called);
   };
 
   "[failure] read"_test = []() {
@@ -180,7 +182,8 @@ void i2c_util_test()
     expect(std::equal(expected.begin(), expected.end(), actual.begin()));
     expect(that % nullptr == i2c.m_out.data());
     expect(that % 0 == i2c.m_out.size());
-    expect(that % true == test_timeout.was_called);
+    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
+    expect(that % false == test_timeout.was_called);
   };
 
   "[failure] read<Length>"_test = []() {
@@ -221,7 +224,8 @@ void i2c_util_test()
     expect(that % expected_payload.size() == i2c.m_out.size());
     expect(that % expected_buffer.data() == i2c.m_in.data());
     expect(that % expected_buffer.size() == i2c.m_in.size());
-    expect(that % true == test_timeout.was_called);
+    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
+    expect(that % false == test_timeout.was_called);
   };
 
   "[failure] write_then_read"_test = []() {
@@ -268,7 +272,8 @@ void i2c_util_test()
     expect(that % expected_payload.data() == i2c.m_out.data());
     expect(that % expected_payload.size() == i2c.m_out.size());
     expect(std::equal(expected.begin(), expected.end(), actual.begin()));
-    expect(that % true == test_timeout.was_called);
+    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
+    expect(that % false == test_timeout.was_called);
   };
 
   "[failure] write_then_read<Length>"_test = []() {
