@@ -12,14 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include <libhal-util/inert_drivers/inert_distance_sensor.hpp>
 
-#include <libhal/interrupt_pin.hpp>
+#include <boost/ut.hpp>
 
-/**
- * @defgroup InterruptPin Interrupt Pin
- *
- */
 namespace hal {
-// Nothing yet
+boost::ut::suite inert_distance_sensor_test = []() {
+  using namespace boost::ut;
+  "inert_distance_sensor"_test = []() {
+    // Setup
+    constexpr hal::meters expected_read = 0.1f;
+    inert_distance_sensor test(expected_read);
+
+    // Exercise
+    auto result = test.read();
+
+    // Verify
+    expect(that % expected_read == result);
+  };
+};
 }  // namespace hal

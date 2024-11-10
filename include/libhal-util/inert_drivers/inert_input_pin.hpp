@@ -14,12 +14,36 @@
 
 #pragma once
 
-#include <libhal/interrupt_pin.hpp>
+#include <libhal/input_pin.hpp>
 
+namespace hal {
 /**
- * @defgroup InterruptPin Interrupt Pin
+ * @brief Inert implementation of digital input pin hardware
  *
  */
-namespace hal {
-// Nothing yet
+class inert_input_pin : public hal::input_pin
+{
+public:
+  /**
+   * @brief Create inert_input_pin object
+   *
+   * @param p_level - what will be returned from the level function.
+   */
+  constexpr inert_input_pin(bool p_level)
+    : m_level(p_level)
+  {
+  }
+
+private:
+  void driver_configure([[maybe_unused]] settings const& p_settings)
+  {
+  }
+
+  bool driver_level()
+  {
+    return m_level;
+  }
+
+  bool m_level;
+};
 }  // namespace hal

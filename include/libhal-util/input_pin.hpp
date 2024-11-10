@@ -21,17 +21,5 @@
  *
  */
 namespace hal {
-/**
- * @ingroup InputPin
- * @brief Compares two input pin states
- *
- * @param p_lhs An input pin
- * @param p_rhs An input pin
- * @return A boolean if they are the same or not.
- */
-[[nodiscard]] constexpr auto operator==(input_pin::settings const& p_lhs,
-                                        input_pin::settings const& p_rhs)
-{
-  return p_lhs.resistor == p_rhs.resistor;
-}
+// Nothing yet
 }  // namespace hal

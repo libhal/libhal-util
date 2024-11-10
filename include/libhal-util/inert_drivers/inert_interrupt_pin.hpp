@@ -16,10 +16,27 @@
 
 #include <libhal/interrupt_pin.hpp>
 
+namespace hal {
 /**
- * @defgroup InterruptPin Interrupt Pin
+ * @brief Inert implementation of digital interrupt pin hardware
  *
  */
-namespace hal {
-// Nothing yet
+class inert_interrupt_pin : public hal::interrupt_pin
+{
+public:
+  /**
+   * @brief Create inert_interrupt_pin object
+   */
+  constexpr inert_interrupt_pin()
+  {
+  }
+
+private:
+  void driver_configure([[maybe_unused]] settings const& p_settings)
+  {
+  }
+  void driver_on_trigger([[maybe_unused]] hal::callback<handler> p_callback)
+  {
+  }
+};
 }  // namespace hal

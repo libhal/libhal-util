@@ -12,14 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include <libhal-util/inert_drivers/inert_magnetometer.hpp>
 
-#include <libhal/interrupt_pin.hpp>
+#include <boost/ut.hpp>
 
-/**
- * @defgroup InterruptPin Interrupt Pin
- *
- */
 namespace hal {
-// Nothing yet
+boost::ut::suite inert_magnetometer_test = []() {
+  using namespace boost::ut;
+  "inert_magnetometer"_test = []() {
+    // Setup
+    constexpr auto expected_read = magnetometer::read_t{ 0.1f, 0.2f, 0.3f };
+    inert_magnetometer test(expected_read);
+
+    // Exercise
+    auto result = test.read();
+
+    // Verify
+    expect(that % expected_read.x == result.x);
+    expect(that % expected_read.y == result.y);
+    expect(that % expected_read.z == result.z);
+  };
+};
 }  // namespace hal

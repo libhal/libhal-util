@@ -14,12 +14,30 @@
 
 #pragma once
 
-#include <libhal/interrupt_pin.hpp>
+#include <libhal/pwm.hpp>
 
+namespace hal {
 /**
- * @defgroup InterruptPin Interrupt Pin
+ * @brief Inert implementation of Pulse Width Modulation (PWM) channel hardware
  *
  */
-namespace hal {
-// Nothing yet
+class inert_pwm : public hal::pwm
+{
+public:
+  /**
+   * @brief Create inert_pwm object
+   *
+   */
+  constexpr inert_pwm()
+  {
+  }
+
+private:
+  void driver_frequency([[maybe_unused]] hertz p_frequency)
+  {
+  }
+  void driver_duty_cycle([[maybe_unused]] float p_duty_cycle)
+  {
+  }
+};
 }  // namespace hal

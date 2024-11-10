@@ -12,14 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include <libhal-util/inert_drivers/inert_temperature_sensor.hpp>
 
-#include <libhal/interrupt_pin.hpp>
+#include <boost/ut.hpp>
 
-/**
- * @defgroup InterruptPin Interrupt Pin
- *
- */
 namespace hal {
-// Nothing yet
+boost::ut::suite inert_temperature_sensor_test = []() {
+  using namespace boost::ut;
+  "inert_temperature_sensor"_test = []() {
+    // Setup
+    constexpr hal::celsius expected_temp = 0.5f;
+    inert_temperature_sensor test(expected_temp);
+
+    // Exercise
+    auto result = test.read();
+
+    // Verify
+    expect(that % expected_temp == result);
+  };
+};
 }  // namespace hal

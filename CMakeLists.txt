@@ -16,6 +16,21 @@ cmake_minimum_required(VERSION 3.15)
 project(libhal-util LANGUAGES CXX)
 
 set(TEST_SOURCES_LIST
+  tests/inert_drivers/inert_accelerometer.test.cpp
+  tests/inert_drivers/inert_adc.test.cpp
+  tests/inert_drivers/inert_dac.test.cpp
+  tests/inert_drivers/inert_distance_sensor.test.cpp
+  tests/inert_drivers/inert_gyroscope.test.cpp
+  tests/inert_drivers/inert_input_pin.test.cpp
+  tests/inert_drivers/inert_interrupt_pin.test.cpp
+  tests/inert_drivers/inert_magnetometer.test.cpp
+  tests/inert_drivers/inert_motor.test.cpp
+  tests/inert_drivers/inert_pwm.test.cpp
+  tests/inert_drivers/inert_output_pin.test.cpp
+  tests/inert_drivers/inert_rotation_sensor.test.cpp
+  tests/inert_drivers/inert_steady_clock.test.cpp
+  tests/inert_drivers/inert_temperature_sensor.test.cpp
+  tests/inert_drivers/inert_timer.test.cpp
   tests/as_bytes.test.cpp
   tests/can.test.cpp
   tests/bit.test.cpp

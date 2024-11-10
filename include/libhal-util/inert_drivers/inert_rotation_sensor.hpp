@@ -14,12 +14,32 @@
 
 #pragma once
 
-#include <libhal/interrupt_pin.hpp>
+#include <libhal/rotation_sensor.hpp>
 
+namespace hal {
 /**
- * @defgroup InterruptPin Interrupt Pin
+ * @brief Inert implementation of rotation measuring hardware
  *
  */
-namespace hal {
-// Nothing yet
+class inert_rotation_sensor : public hal::rotation_sensor
+{
+public:
+  /**
+   * @brief Create inert_rotation_sensor object
+   *
+   * @param p_position - what will be returned from the read function.
+   */
+  constexpr inert_rotation_sensor(read_t p_position)
+    : m_position(p_position)
+  {
+  }
+
+private:
+  read_t driver_read()
+  {
+    return m_position;
+  }
+
+  read_t m_position;
+};
 }  // namespace hal

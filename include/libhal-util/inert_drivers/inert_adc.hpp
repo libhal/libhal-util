@@ -14,12 +14,35 @@
 
 #pragma once
 
-#include <libhal/interrupt_pin.hpp>
+#include <libhal/adc.hpp>
 
+#include <algorithm>
+
+namespace hal {
 /**
- * @defgroup InterruptPin Interrupt Pin
+ * @brief Inert implementation of Analog to Digital Converter (ADC) hardware
  *
  */
-namespace hal {
-// Nothing yet
+class inert_adc : public hal::adc
+{
+public:
+  /**
+   * @brief Create inert_adc object
+   *
+   * @param p_result - What will be returned from inert_adc's read function,
+   * clamped to -1.0f to 1.0f.
+   */
+  constexpr inert_adc(float p_result)
+    : m_result(std::clamp(p_result, -1.0f, 1.0f))
+  {
+  }
+
+private:
+  float driver_read()
+  {
+    return m_result;
+  }
+
+  float m_result;
+};
 }  // namespace hal

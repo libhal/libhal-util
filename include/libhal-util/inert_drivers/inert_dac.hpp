@@ -14,12 +14,26 @@
 
 #pragma once
 
-#include <libhal/interrupt_pin.hpp>
+#include <libhal/dac.hpp>
 
+namespace hal {
 /**
- * @defgroup InterruptPin Interrupt Pin
+ * @brief Inert implementation of Digital to Analog Converter (DAC) hardware
  *
  */
-namespace hal {
-// Nothing yet
+class inert_dac : public hal::dac
+{
+public:
+  /**
+   * @brief Create inert_dac object
+   */
+  constexpr inert_dac()
+  {
+  }
+
+private:
+  void driver_write(float)
+  {
+  }
+};
 }  // namespace hal

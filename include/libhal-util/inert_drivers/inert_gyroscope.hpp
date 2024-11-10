@@ -14,12 +14,32 @@
 
 #pragma once
 
-#include <libhal/interrupt_pin.hpp>
+#include <libhal/gyroscope.hpp>
 
+namespace hal {
 /**
- * @defgroup InterruptPin Interrupt Pin
+ * @brief Inert implementation of angular velocity sensing hardware
  *
  */
-namespace hal {
-// Nothing yet
+class inert_gyroscope : public hal::gyroscope
+{
+public:
+  /**
+   * @brief Create inert_gyroscope object
+   *
+   * @param p_result - what will be returned from the read function.
+   */
+  constexpr inert_gyroscope(read_t p_result)
+    : m_result(p_result)
+  {
+  }
+
+private:
+  read_t driver_read()
+  {
+    return m_result;
+  }
+
+  read_t m_result;
+};
 }  // namespace hal

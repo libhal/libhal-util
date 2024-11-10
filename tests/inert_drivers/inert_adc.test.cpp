@@ -12,14 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include <libhal-util/inert_drivers/inert_adc.hpp>
 
-#include <libhal/interrupt_pin.hpp>
+#include <boost/ut.hpp>
 
-/**
- * @defgroup InterruptPin Interrupt Pin
- *
- */
 namespace hal {
-// Nothing yet
+boost::ut::suite inert_adc_test = []() {
+  using namespace boost::ut;
+  "inert_adc"_test = []() {
+    // Setup
+    constexpr auto expected = 0.5f;
+    inert_adc test(expected);
+
+    // Exercise
+    auto result = test.read();
+
+    // Verify
+    expect(that % expected == result);
+  };
+};
 }  // namespace hal
