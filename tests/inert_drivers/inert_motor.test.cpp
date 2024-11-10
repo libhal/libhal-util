@@ -12,14 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include <libhal-util/inert_drivers/inert_motor.hpp>
 
-#include <libhal/interrupt_pin.hpp>
+#include <boost/ut.hpp>
 
-/**
- * @defgroup InterruptPin Interrupt Pin
- *
- */
 namespace hal {
-// Nothing yet
+boost::ut::suite inert_motor_test = []() {
+  using namespace boost::ut;
+  "inert_motor"_test = []() {
+    // Setup
+    inert_motor test;
+
+    // Exercise
+    // Verify
+    test.power(0.1f);
+  };
+};
 }  // namespace hal

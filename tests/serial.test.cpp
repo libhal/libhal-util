@@ -206,7 +206,7 @@ void serial_util_test()
       expect(!serial.m_flush_called);
       expect(that % nullptr == serial.m_out.data());
       expect(that % 0 == serial.m_out.size());
-      expect(that % expected == actual) << expected << " != " << actual;
+      expect(that % expected == actual);
     };
 
     "[failure read] read"_test = []() {
@@ -241,7 +241,7 @@ void serial_util_test()
       expect(that % serial.m_read_was_called);
       expect(that % nullptr == serial.m_out.data());
       expect(that % 0 == serial.m_out.size());
-      expect(that % expected == actual) << expected << " != " << actual;
+      expect(that % expected == actual);
     };
 
     "[failure read] read<Length>"_test = []() {
@@ -277,8 +277,7 @@ void serial_util_test()
       expect(!serial.m_flush_called);
       expect(that % write_buffer.data() == serial.m_out.data());
       expect(that % write_buffer.size() == serial.m_out.size());
-      expect(that % expected_read == actual)
-        << expected_read << " != " << actual;
+      expect(that % expected_read == actual);
     };
 
     "[failure read] write_then_read"_test = []() {
@@ -337,8 +336,7 @@ void serial_util_test()
       expect(that % expected_write.data() == serial.m_out.data());
       expect(that % expected_write.size() == serial.m_out.size());
       expect(serial.m_read_was_called);
-      expect(that % expected_read == actual)
-        << expected_read << " != " << actual;
+      expect(that % expected_read == actual);
     };
 
     "[failure on write] write_then_read<Length>"_test = []() {

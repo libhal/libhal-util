@@ -19,7 +19,7 @@
 #include <libhal/lock.hpp>
 #include <libhal/steady_clock.hpp>
 
-namespace hal::soft {
+namespace hal {
 /**
  * @brief Atomic spin lock that implements hal::pollable_lock
  *
@@ -86,4 +86,4 @@ private:
   hal::steady_clock* m_steady_clock;
   atomic_spin_lock m_atomic_spin_lock;
 };
-}  // namespace hal::soft
+}  // namespace hal

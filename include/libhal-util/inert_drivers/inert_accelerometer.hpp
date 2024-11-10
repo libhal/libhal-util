@@ -14,12 +14,32 @@
 
 #pragma once
 
-#include <libhal/interrupt_pin.hpp>
+#include <libhal/accelerometer.hpp>
 
+namespace hal {
 /**
- * @defgroup InterruptPin Interrupt Pin
+ * @brief Inert implementation of acceleration sensing hardware
  *
  */
-namespace hal {
-// Nothing yet
+class inert_accelerometer : public hal::accelerometer
+{
+public:
+  /**
+   * @brief Create inert_accelerometer object
+   *
+   * @param p_values - what will be returned from the read function.
+   */
+  constexpr inert_accelerometer(read_t p_values)
+    : m_values(p_values)
+  {
+  }
+
+private:
+  read_t driver_read()
+  {
+    return m_values;
+  }
+
+  read_t m_values;
+};
 }  // namespace hal

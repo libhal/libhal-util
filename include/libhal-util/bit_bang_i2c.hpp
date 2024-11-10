@@ -192,10 +192,3 @@ private:
   float m_duty_cycle;
 };
 }  // namespace hal
-
-namespace hal {
-// This is here for backwards compatibility.
-// We made a mistake on the first review and accidentally put bit_bang_i2c in
-// the hal namespace.
-using hal::soft::bit_bang_i2c;
-}  // namespace hal

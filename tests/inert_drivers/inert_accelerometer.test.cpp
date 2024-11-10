@@ -12,14 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include <libhal-util/inert_drivers/inert_accelerometer.hpp>
 
-#include <libhal/interrupt_pin.hpp>
+#include <boost/ut.hpp>
 
-/**
- * @defgroup InterruptPin Interrupt Pin
- *
- */
 namespace hal {
-// Nothing yet
+boost::ut::suite inert_accelerometer_test = []() {
+  using namespace boost::ut;
+  "inert_accelerometer"_test = []() {
+    // Setup
+    constexpr auto expected = accelerometer::read_t{ 0.1f, 0.2f, 0.3f };
+    inert_accelerometer test(expected);
+
+    // Exercise
+    auto result = test.read();
+
+    // Verify
+    expect(that % expected.x == result.x);
+    expect(that % expected.y == result.y);
+    expect(that % expected.z == result.z);
+  };
+};
 }  // namespace hal

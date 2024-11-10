@@ -14,13 +14,40 @@
 
 #pragma once
 
-#include <libhal/output_pin.hpp>
-
-/**
- * @defgroup OutputPin Output Pin
- *
- */
+#include <libhal/timer.hpp>
 
 namespace hal {
-// Nothing yet
+/**
+ * @brief Inert implementation of timer hardware
+ *
+ */
+class inert_timer : public hal::timer
+{
+public:
+  /**
+   * @brief Create inert_timer object
+   *
+   * @param p_is_running - what will be returned from the is_running function.
+   */
+  constexpr inert_timer(bool p_is_running)
+    : m_is_running(p_is_running)
+  {
+  }
+
+private:
+  bool driver_is_running()
+  {
+    return m_is_running;
+  }
+
+  void driver_cancel()
+  {
+  }
+  void driver_schedule([[maybe_unused]] hal::callback<void(void)> p_callback,
+                       [[maybe_unused]] hal::time_duration p_delay)
+  {
+  }
+
+  bool m_is_running;
+};
 }  // namespace hal

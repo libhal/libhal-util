@@ -14,12 +14,27 @@
 
 #pragma once
 
-#include <libhal/interrupt_pin.hpp>
+#include <libhal/motor.hpp>
 
+namespace hal {
 /**
- * @defgroup InterruptPin Interrupt Pin
+ * @brief Inert implementation of open loop motorized actuator hardware
  *
  */
-namespace hal {
-// Nothing yet
+class inert_motor : public hal::motor
+{
+public:
+  /**
+   * @brief Create inert_motor object
+   *
+   */
+  constexpr inert_motor()
+  {
+  }
+
+private:
+  void driver_power([[maybe_unused]] float p_power)
+  {
+  }
+};
 }  // namespace hal

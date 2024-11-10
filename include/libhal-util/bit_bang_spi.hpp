@@ -19,7 +19,7 @@
 #include <libhal/spi.hpp>
 #include <libhal/steady_clock.hpp>
 
-namespace hal::soft {
+namespace hal {
 /**
  * @brief A bit bang implementation for spi.
  *
@@ -124,4 +124,4 @@ private:
   delay_mode m_delay_mode;
 };
 
-}  // namespace hal::soft
+}  // namespace hal

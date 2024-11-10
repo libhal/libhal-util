@@ -14,12 +14,32 @@
 
 #pragma once
 
-#include <libhal/interrupt_pin.hpp>
+#include <libhal/temperature_sensor.hpp>
 
+namespace hal {
 /**
- * @defgroup InterruptPin Interrupt Pin
+ * @brief Inert implementation of temperature sensing hardware
  *
  */
-namespace hal {
-// Nothing yet
+class inert_temperature_sensor : public hal::temperature_sensor
+{
+public:
+  /**
+   * @brief Create inert_temperature_sensor object
+   *
+   * @param p_temperature - hal::celsius object to return when read() is called
+   */
+  constexpr inert_temperature_sensor(hal::celsius p_temperature)
+    : m_temperature(p_temperature)
+  {
+  }
+
+private:
+  hal::celsius driver_read()
+  {
+    return m_temperature;
+  }
+
+  hal::celsius m_temperature;
+};
 }  // namespace hal

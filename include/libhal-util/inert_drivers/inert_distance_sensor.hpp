@@ -14,12 +14,32 @@
 
 #pragma once
 
-#include <libhal/interrupt_pin.hpp>
+#include <libhal/distance_sensor.hpp>
 
+namespace hal {
 /**
- * @defgroup InterruptPin Interrupt Pin
+ * @brief Inert implementation of linear distance hardware
  *
  */
-namespace hal {
-// Nothing yet
+class inert_distance_sensor : public hal::distance_sensor
+{
+public:
+  /**
+   * @brief Create inert_distance_sensor object
+   *
+   * @param p_result - what will be returned from the read function.
+   */
+  constexpr inert_distance_sensor(hal::meters p_result)
+    : m_result(p_result)
+  {
+  }
+
+private:
+  hal::meters driver_read()
+  {
+    return m_result;
+  }
+
+  hal::meters m_result;
+};
 }  // namespace hal
