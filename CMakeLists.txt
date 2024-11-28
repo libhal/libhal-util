@@ -32,6 +32,7 @@ set(TEST_SOURCES_LIST
   tests/inert_drivers/inert_temperature_sensor.test.cpp
   tests/inert_drivers/inert_timer.test.cpp
   tests/as_bytes.test.cpp
+  tests/atomic_spin_lock.test.cpp
   tests/can.test.cpp
   tests/bit.test.cpp
   tests/enum.test.cpp
@@ -58,6 +59,7 @@ set(TEST_SOURCES_LIST
 set(SOURCES_LIST
   src/steady_clock.cpp
   src/streams.cpp
+  src/atomic_spin_lock.cpp
 )
 
 if(NOT ${CMAKE_CROSSCOMPILING})
