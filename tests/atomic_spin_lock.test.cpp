@@ -17,60 +17,9 @@
 #include <stdexcept>
 #include <thread>
 
-// #include <libhal-mock/steady_clock.hpp>
+#include <libhal-util/mock/steady_clock.hpp>
 
 #include <boost/ut.hpp>
-
-namespace {
-/**
- * @brief mock steady_clock implementation for use in unit tests and
- * simulations.
- *
- */
-struct mock_steady_clock : public hal::steady_clock
-{
-  /**
-   * @brief Set the frequency to be returned from frequency()
-   *
-   * @param p_frequency - Frequency to return
-   */
-  void set_frequency(hal::hertz p_frequency)
-  {
-    m_frequency = p_frequency;
-  }
-
-  /**
-   * @brief Queues the uptimes to be returned from uptimes()
-   *
-   * @param p_uptime_values - Queue of uptimes
-   */
-  void set_uptimes(std::queue<std::uint64_t>& p_uptime_values)
-  {
-    m_uptime_values = p_uptime_values;
-  }
-
-private:
-  hal::hertz driver_frequency()
-  {
-    return m_frequency;
-  }
-
-  std::uint64_t driver_uptime()
-  {
-    if (m_uptime_values.size() == 0) {
-      return m_last_uptime;
-    }
-
-    m_last_uptime = m_uptime_values.front();
-    m_uptime_values.pop();
-    return m_last_uptime;
-  }
-
-  hal::hertz m_frequency = 1.0;
-  std::queue<std::uint64_t> m_uptime_values{};
-  std::uint64_t m_last_uptime{};
-};
-}  // namespace
 
 namespace hal {
 boost::ut::suite atomic_spin_lock_test = []() {
