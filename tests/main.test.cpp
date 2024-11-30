@@ -13,6 +13,7 @@
 // limitations under the License.
 
 namespace hal {
+// TODO(#45): Replace these with boost.ut named global test suites
 extern void as_bytes_test();
 extern void bit_test();
 extern void can_test();

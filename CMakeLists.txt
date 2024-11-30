@@ -52,6 +52,8 @@ set(TEST_SOURCES_LIST
   tests/steady_clock.test.cpp
   tests/streams.test.cpp
   tests/timeout.test.cpp
+  tests/bit_bang_i2c.test.cpp
+  tests/bit_bang_spi.test.cpp
   tests/units.test.cpp
   tests/main.test.cpp
 )
@@ -60,6 +62,11 @@ set(SOURCES_LIST
   src/steady_clock.cpp
   src/streams.cpp
   src/atomic_spin_lock.cpp
+  src/bit_bang_i2c.cpp
+  src/bit_bang_spi.cpp
+
+  # TODO(#43): Add this back
+  # src/inverter.cpp
 )
 
 if(NOT ${CMAKE_CROSSCOMPILING})
