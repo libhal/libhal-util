@@ -156,5 +156,5 @@ boost::ut::suite<"can"> can_test = [] {
       expect(that % not fail2.has_value());
       expect(that % not fail4.has_value());
     };
-}
+};
 }  // namespace hal
