@@ -19,7 +19,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-boost::ut::suite<"timeout"> timeout_test = [] {
+boost::ut::suite<"timeout_test"> timeout_test = [] {
   using namespace boost::ut;
   "hal::try_until(callback, timeout)"_test = []() {
     // Setup

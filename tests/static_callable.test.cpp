@@ -17,7 +17,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-boost::ut::suite<"static_callable"> static_callable_test = [] {
+boost::ut::suite<"static_callable_test"> static_callable_test = [] {
   using namespace boost::ut;
 
   // Setup

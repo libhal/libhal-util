@@ -19,7 +19,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-boost::ut::suite<"spi"> spi_test = [] {
+boost::ut::suite<"spi_test"> spi_test = [] {
   using namespace boost::ut;
 
   static constexpr hal::byte success_filler{ 0xF5 };

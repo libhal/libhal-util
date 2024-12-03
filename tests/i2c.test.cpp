@@ -22,7 +22,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-boost::ut::suite<"i2c"> i2c_test = [] {
+boost::ut::suite<"i2c_test"> i2c_test = [] {
   using namespace boost::ut;
 
   static constexpr hal::byte successful_address{ 0x15 };

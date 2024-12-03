@@ -17,7 +17,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-boost::ut::suite<"output_pin"> output_pin_test = [] {
+boost::ut::suite<"output_pin_test"> output_pin_test = [] {
   using namespace boost::ut;
   "operator==(output_pin::settings)"_test = []() {
     output_pin::settings a{};

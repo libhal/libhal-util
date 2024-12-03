@@ -17,7 +17,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-boost::ut::suite<"static_list"> static_list_test = [] {
+boost::ut::suite<"static_list_test"> static_list_test = [] {
   using namespace boost::ut;
 
   "static_list::ctor()"_test = []() {

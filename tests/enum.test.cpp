@@ -17,7 +17,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-boost::ut::suite<"enum"> enum_test = [] {
+boost::ut::suite<"enum_test"> enum_test = [] {
   using namespace boost::ut;
 
   "hal::value(enum)"_test = []() {
