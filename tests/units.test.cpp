@@ -29,8 +29,7 @@ std::ostream& operator<<(std::ostream& p_os,
 
 namespace hal {
 
-void units_test()
-{
+boost::ut::suite<"units"> units_test = [] {
   using namespace boost::ut;
   using namespace std::literals;
 

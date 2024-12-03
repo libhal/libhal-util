@@ -21,8 +21,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void map_test()
-{
+boost::ut::suite<"map"> map_test = [] {
   using namespace boost::ut;
 
   "hal::map<std::floating_point>()"_test = []() {

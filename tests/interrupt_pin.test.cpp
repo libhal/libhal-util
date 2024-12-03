@@ -17,8 +17,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void interrupt_pin_util_test()
-{
+boost::ut::suite<"interrupt_pin"> interrupt_pin_test = [] {
   using namespace boost::ut;
   "operator==(interrupt_pin::settings)"_test = []() {
     interrupt_pin::settings a{};
