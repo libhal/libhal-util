@@ -20,8 +20,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void as_bytes_test()
-{
+boost::ut::suite<"as_bytes_test"> as_bytes_test = [] {
   using namespace boost::ut;
 
   "hal::as_bytes()"_test = []() {

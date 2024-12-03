@@ -18,8 +18,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void bit_test()
-{
+boost::ut::suite<"bit_test"> bit_test = [] {
   using namespace boost::ut;
 
   "hal::bit_modify<template> compile time masks APIs"_test = []() {

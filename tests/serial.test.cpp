@@ -24,8 +24,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void serial_util_test()
-{
+boost::ut::suite<"serial_test"> serial_test = [] {
   using namespace boost::ut;
 
   static constexpr hal::byte write_failure_byte{ 'C' };

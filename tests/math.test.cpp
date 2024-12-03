@@ -17,8 +17,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void math_test()
-{
+boost::ut::suite<"math_test"> math_test = [] {
   using namespace boost::ut;
 
   "hal::multiply()"_test = []() {

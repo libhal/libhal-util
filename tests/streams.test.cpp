@@ -39,8 +39,7 @@ std::span<hal::byte const> operator|(
 }
 }  // namespace
 
-void stream_terminated_test()
-{
+boost::ut::suite<"stream_terminated_test"> stream_terminated_test = [] {
   using namespace boost::ut;
   using namespace std::literals;
 
@@ -97,8 +96,7 @@ void stream_terminated_test()
 //                              |  parse<T> Stream  |
 //
 // =============================================================================
-void parse_stream_test()
-{
+boost::ut::suite<"parse_stream_test"> parse_stream_test = [] {
   using namespace boost::ut;
   using namespace std::literals;
 
@@ -264,8 +262,7 @@ void parse_stream_test()
 //                               |  Find Stream  |
 //
 // =============================================================================
-void find_stream_test()
-{
+boost::ut::suite<"find_stream_test"> find_stream_test = [] {
   // Setup
   using namespace boost::ut;
   using namespace std::literals;
@@ -375,8 +372,7 @@ void find_stream_test()
 //                             |  fill_upto Stream  |
 //
 // =============================================================================
-void fill_upto_stream_test()
-{
+boost::ut::suite<"fill_upto_stream_test"> fill_upto_stream_test = [] {
   // Setup
   using namespace boost::ut;
   using namespace std::literals;
@@ -448,8 +444,7 @@ void fill_upto_stream_test()
 //                               |  Multi Stream Test  |
 //
 // =============================================================================
-void multi_stream_test()
-{
+boost::ut::suite<"multi_stream_test"> multi_stream_test = [] {
   using namespace boost::ut;
   using namespace std::literals;
 

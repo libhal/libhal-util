@@ -17,8 +17,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void input_pin_util_test()
-{
+boost::ut::suite<"input_pin_test"> input_pin_test = [] {
   using namespace boost::ut;
   "operator==(input_pin::settings)"_test = []() {
     input_pin::settings a{};

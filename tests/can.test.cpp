@@ -71,8 +71,7 @@ void check_validity(hal::hertz p_operating_frequency,
 }  // namespace
 
 namespace hal {
-void can_test()
-{
+boost::ut::suite<"can_test"> can_test = [] {
   using namespace boost::ut;
 
   "operator==(can::message, can::message) "_test = []() {
@@ -157,5 +156,5 @@ void can_test()
       expect(that % not fail2.has_value());
       expect(that % not fail4.has_value());
     };
-}
+};
 }  // namespace hal

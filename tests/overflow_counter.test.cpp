@@ -17,8 +17,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void overflow_counter_test()
-{
+boost::ut::suite<"overflow_counter_test"> overflow_counter_test = [] {
   using namespace boost::ut;
 
   "overflow_counter::update() increment by 1"_test = []() {
