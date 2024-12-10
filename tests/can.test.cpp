@@ -48,15 +48,18 @@ void check_validity(hal::hertz p_operating_frequency,
     << "Frequency '" << p_operating_frequency << "' and baud rate '"
     << p_target_baud_rate << "'\n";
 
-  auto test_subject = call_result.value();
+  // clang-tidy for some reason doesn't accept that `.value()` as "checked"
+  // usage of an optional.
+  auto test_subject = call_result.value();  // NOLINT
 
   auto const bit_width = hal::bit_width(test_subject);
 
-  auto calculated_baud_rate =
-    p_operating_frequency /
-    (test_subject.clock_divider *
-     (test_subject.sync_segment + test_subject.propagation_delay +
-      test_subject.phase_segment1 + test_subject.phase_segment2));
+  auto const calculated_bit_width =
+    (test_subject.sync_segment + test_subject.propagation_delay +
+     test_subject.phase_segment1 + test_subject.phase_segment2);
+  auto const denominator =
+    static_cast<float>(test_subject.clock_divider * calculated_bit_width);
+  auto const calculated_baud_rate = p_operating_frequency / denominator;
 
   expect(that % 8 <= bit_width && bit_width <= 25)
     << "Bit width is beyond the bounds of 8 and 25";
