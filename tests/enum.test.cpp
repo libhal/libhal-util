@@ -24,7 +24,7 @@ boost::ut::suite<"enum_test"> enum_test = [] {
     constexpr int expected1 = 1;
     constexpr int expected2 = 20;
 
-    enum class test_enum
+    enum class test_enum : std::uint8_t
     {
       enum_value1 = expected1,
       enum_value2 = expected2,
