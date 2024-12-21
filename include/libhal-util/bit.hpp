@@ -22,6 +22,9 @@
 #include <concepts>
 #include <limits>
 
+// NOTE: DO not include libhal/units.hpp here. We want this file to stay as a
+// dropp in header only library that just uses C++'s stdlib.
+
 /**
  * @defgroup Bit Bit Operations
  *
@@ -173,13 +176,52 @@ struct bit_mask
    * @ingroup Bit
    * @brief Comparison operator between this mask and another
    *
-   * @param other - the other mask to compare against
+   * @param p_other - the other mask to compare against
    * @return true - the masks are the same
    * @return false - the masks are not the same
    */
-  constexpr bool operator==(bit_mask const& other)
+  constexpr bool operator==(bit_mask const& p_other)
   {
-    return other.position == position && other.width == width;
+    return p_other.position == position && p_other.width == width;
+  }
+
+  /**
+   * @ingroup Bit
+   * @brief Shift the position of the bit mask to the right
+   *
+   * NOTE: the position will overflow if the position
+   *
+   * @param p_shift_amount - the number of bits to shift the position by
+   * @return constexpr auto - a copy of this bit_mask but with the position
+   * shifted.
+   */
+  constexpr auto operator>>(std::uint32_t p_shift_amount) const
+  {
+    hal::bit_mask result = *this;
+    if (result.position > p_shift_amount) {
+      result.position -= p_shift_amount;
+    } else {
+      result.position = 0;
+    }
+    return result;
+  }
+
+  /**
+   * @ingroup Bit
+   * @brief Shift the position of the bit mask to the left
+   *
+   * NOTE: the position will not underflow if the shift amount is greater than
+   * the position. The position value will saturate at the value of 0.
+   *
+   * @param p_shift_amount - the number of bits to shift the position by
+   * @return constexpr auto - a copy of this bit_mask but with the position
+   * shifted.
+   */
+  constexpr auto operator<<(std::uint32_t p_shift_amount) const
+  {
+    hal::bit_mask result = *this;
+    result.position += p_shift_amount;
+    return result;
   }
 };
 
@@ -388,6 +430,15 @@ public:
   constexpr bit_value(T p_initial_value = 0)
     : m_value(p_initial_value)
   {
+  }
+  /**
+   * @brief Constructs a new bit_value instance with an initial value.
+   *
+   * @param p_initial_value The initial value to use. Defaults to 0.
+   */
+  constexpr bit_value& operator=(T p_initial_value)
+  {
+    m_value = p_initial_value;
   }
 
   /**
