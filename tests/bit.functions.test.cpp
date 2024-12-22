@@ -451,22 +451,41 @@ boost::ut::suite<"bit_mask_shift_test"> bit_mask_shift_test = [] {
   };
 
   "hal::bit_mask left right"_test = []() {
+    // Setup
     constexpr auto mask1 = hal::bit_mask::from(23, 26);
+
+    // Exercise
     constexpr auto mask2 = mask1 >> 5U;
     constexpr auto mask3 = mask2 >> 5U;
     constexpr auto mask4 = mask3 >> 5U;
 
+    constexpr auto mask5 = mask4 >> 7U;
+    // Exercise: shifting position 8 back 8 bits should result in position 0
+    constexpr auto mask6 = mask4 >> 8U;
+    // Exercise: saturating subtraction due to underflow should have position 0
+    constexpr auto mask7 = mask4 >> 12U;
+
+    // Verify
     expect(that % 23 == mask1.position);
     expect(that % 4 == mask1.width);
 
-    expect(that % (23 - 5) == mask2.position);
+    expect(that % 18 == mask2.position);
     expect(that % 4 == mask2.width);
 
-    expect(that % (23 - (5 * 2)) == mask3.position);
+    expect(that % 13 == mask3.position);
     expect(that % 4 == mask3.width);
 
-    expect(that % (23 - (5 * 3)) == mask4.position);
+    expect(that % 8 == mask4.position);
     expect(that % 4 == mask4.width);
+
+    expect(that % 1 == mask5.position);
+    expect(that % 4 == mask5.width);
+
+    expect(that % 0 == mask6.position);
+    expect(that % 4 == mask6.width);
+
+    expect(that % 0 == mask7.position);
+    expect(that % 4 == mask7.width);
   };
 };
 }  // namespace hal
