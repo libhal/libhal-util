@@ -285,22 +285,19 @@ boost::ut::suite<"can_test"> can_test = [] {
 
     "hal::can_message_finder::find() overflow cursor"_test = []() {
       // Setup
-      constexpr hal::u32 expected_id0 = 0x115;
-      constexpr hal::u32 expected_id1 = 0x115;
+      constexpr hal::u32 expected_id = 0x115;
       test_can_transceiver test_transceiver;
-      hal::can_message_finder reader(test_transceiver, 0);
-      hal::can_message message0;
-      message0.length = 3;
-      message0.payload = { 0xAB, 0xCD, 0xEF };
-      message0.id = expected_id0;
-      message0.remote_request = false;
-      message0.extended = false;
-      hal::can_message message1 = message0;
-      message1.id = 0x220;
-      hal::can_message message2 = message0;
-      message2.id = expected_id1;
-      hal::can_message message3 = message0;
-      message3.id = 0x111;
+      hal::can_message_finder reader(test_transceiver, expected_id);
+      hal::can_message desired_message{
+        .id = expected_id,
+        .extended = false,
+        .remote_request = false,
+        .length = 3,
+        .payload = { 0xAB, 0xCD, 0xEF },
+      };
+
+      hal::can_message undesired_message = desired_message;
+      undesired_message.id = expected_id + 1;
       // Setup: With 8 messages to fill the buffer, the cursor will land back at
       // 0. Meaning that a find will come up with nothing. This is to be
       // expected with a circular buffer if the receive cursor gets lapped.
@@ -312,20 +309,15 @@ boost::ut::suite<"can_test"> can_test = [] {
       expect(not ensure_message1.has_value());
 
       // Exercise
-      test_transceiver.add_to_received_messages(message0);
-      test_transceiver.add_to_received_messages(message1);
-      test_transceiver.add_to_received_messages(message2);
-      test_transceiver.add_to_received_messages(message3);
-      test_transceiver.add_to_received_messages(message0);
-      test_transceiver.add_to_received_messages(message1);
-      test_transceiver.add_to_received_messages(message2);
-      test_transceiver.add_to_received_messages(message3);
+      test_transceiver.add_to_received_messages(desired_message);
+      for (auto _ : test_transceiver.m_buffer) {
+        test_transceiver.add_to_received_messages(undesired_message);
+      }
+
       auto const found_message0 = reader.find();
-      auto const found_message1 = reader.find();
 
       // Verify
       expect(not found_message0.has_value());
-      expect(not found_message1.has_value());
     };
 
     "hal::can_message_finder::find() std::nullopt from stability failure"_test =

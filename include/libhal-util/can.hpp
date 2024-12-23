@@ -229,7 +229,7 @@ public:
    * the buffer. The return is set to std::nullopt if the message could not be
    * found OR was modified during the copy.
    */
-  std::optional<hal::can_message> find()
+  [[nodiscard]] std::optional<hal::can_message> find()
   {
     auto const buffer = m_transceiver->receive_buffer();
     auto cursor = m_transceiver->receive_cursor();
@@ -272,7 +272,7 @@ public:
    *
    * @return hal::can_transceiver& - the underlying hal::can_transceiver
    */
-  inline hal::can_transceiver& transceiver() const
+  [[nodiscard]] inline hal::can_transceiver& transceiver() const
   {
     return *m_transceiver;
   }
