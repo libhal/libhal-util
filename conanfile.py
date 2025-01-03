@@ -62,7 +62,7 @@ class libhal_util_conan(ConanFile):
         self.test_requires("boost-ext-ut/2.1.0")
 
     def requirements(self):
-        self.requires("libhal/[^4.7.0]", transitive_headers=True)
+        self.requires("libhal/[^4.9.0]", transitive_headers=True)
 
     def layout(self):
         cmake_layout(self)

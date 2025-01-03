@@ -190,4 +190,106 @@ struct can_bus_divider_t
 
   return timing;
 }
+
+/**
+ * @brief A hal::can_transceiver wrapper class that makes finding message via ID
+ * easier with a find API
+ *
+ * If your driver plans to use this wrapper, rather than storing both the
+ * pointer to the hal::can_transceiver and this object, simply construct this
+ * object with the hal::can_transceiver object's address and use this object's
+ * transceiver() API to get access to the underlying transceiver implementation.
+ * This will ensure that the driver doesn't store the implementation's address
+ * twice.
+ *
+ */
+class can_message_finder
+{
+public:
+  /**
+   * @brief Construct a new can reader object
+   *
+   * @param p_transceiver - the transceiver to read messages from
+   * @param p_id - the message ID to search for
+   */
+  can_message_finder(hal::can_transceiver& p_transceiver, hal::u32 p_id)
+    : m_transceiver(&p_transceiver)
+    , m_id(p_id)
+  {
+  }
+
+  /**
+   * @brief Find a message within the receive buffer matching the input message
+   * ID.
+   *
+   * This API performs a double copy of the can message in order to confirm that
+   * the message did not get modified by the driver during the copy.
+   *
+   * @return std::optional<hal::can_message> - a copy of the can message within
+   * the buffer. The return is set to std::nullopt if the message could not be
+   * found OR was modified during the copy.
+   */
+  [[nodiscard]] std::optional<hal::can_message> find()
+  {
+    auto const buffer = m_transceiver->receive_buffer();
+    auto cursor = m_transceiver->receive_cursor();
+    hal::can_message message = {};
+
+    // Run through the circular buffer until the cursor is reached or until an
+    // ID match is found.
+    while (m_receive_cursor != cursor) {
+      if (m_id == buffer[m_receive_cursor].id) {
+        message = buffer[m_receive_cursor];
+        // Can message buffers are typically updated via interrupt which can
+        // happen at any time. If the cursor has moved past the received message
+        // and changed its bits mid way To ensure that an interrupt has not
+        // occurred and modified the bits of the buffer message, a second copy
+        // is created in order to perform a stability check.
+        hal::can_message const copy = buffer[m_receive_cursor];
+        bool const message_is_stable = copy == message;
+        bool const copy_id_matches = copy.id == m_id;
+        if (message_is_stable and copy_id_matches) {
+          // Perform circular increment of the m_receive_cursor
+          m_receive_cursor = (m_receive_cursor + 1) % buffer.size();
+          return message;
+        }
+      }
+      // Acquire latest cursor
+      cursor = m_transceiver->receive_cursor();
+      // Perform circular increment of the m_receive_cursor
+      m_receive_cursor = (m_receive_cursor + 1) % buffer.size();
+    }
+
+    return std::nullopt;
+  }
+
+  /**
+   * @brief Returns the underlying can hal::can_transceiver allowing
+   *
+   * This API makes it possible for drivers and applications using this wrapper
+   * to fully access the hal::can_transceiver without needing to store the
+   * pointer twice.
+   *
+   * @return hal::can_transceiver& - the underlying hal::can_transceiver
+   */
+  [[nodiscard]] inline hal::can_transceiver& transceiver() const
+  {
+    return *m_transceiver;
+  }
+
+  /**
+   * @brief Returns the ID to being searched for
+   *
+   * @return auto - the ID being searched for
+   */
+  [[nodiscard]] inline auto id() const
+  {
+    return m_id;
+  }
+
+private:
+  hal::can_transceiver* m_transceiver;
+  hal::u32 m_id;
+  std::size_t m_receive_cursor = 0;
+};
 }  // namespace hal
