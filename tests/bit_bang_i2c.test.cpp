@@ -14,6 +14,8 @@
 
 #include <libhal-util/bit_bang_i2c.hpp>
 
+#include <numeric>
+
 #include <libhal-util/mock/input_pin.hpp>
 #include <libhal-util/mock/output_pin.hpp>
 #include <libhal-util/mock/steady_clock.hpp>
@@ -35,7 +37,8 @@ boost::ut::suite<"bit_bang_i2c"> bit_bang_i2c_test = [] {
     hal::mock_steady_clock steady_clock;
 
     steady_clock.set_frequency(1.0_MHz);
-    auto const uptime_set = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    std::vector<hal::u64> uptime_set(4098);
+    std::iota(uptime_set.begin(), uptime_set.end(), 0);
     std::queue<hal::u64> uptimes(uptime_set.begin(), uptime_set.end());
     steady_clock.set_uptimes(uptimes);
 
