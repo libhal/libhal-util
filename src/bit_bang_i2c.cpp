@@ -51,6 +51,11 @@ bit_bang_i2c::bit_bang_i2c(pins const& p_pins,
     { .resistor = hal::pin_resistor::pull_up, .open_drain = true });
 
   bit_bang_i2c::driver_configure(p_settings);
+
+  // NOTE: We probe address the general call to get the I2C bus initialized to
+  // the correct address.
+  static_cast<void>(hal::probe(*this, 0x00));
+  static_cast<void>(hal::probe(*this, 0x00));
 }
 
 // Private
@@ -64,7 +69,7 @@ bit_bang_i2c::bit_bang_i2c(pins const& p_pins,
   that the end user would have to deal with. Additionally, it would only improve
   the accuracy by about 0.1 to 0.01 Hz per clock cycle. This marginal
   improvement in accuracy didn't outweigh the potential drawbacks it would
-  introduce to the system. See libhal-soft/demos/seleae_captures for the
+  introduce to the system. See libhal-soft/demos/saleae_captures for the
   comparisons.
 */
 
@@ -98,11 +103,10 @@ void bit_bang_i2c::driver_transaction(
   std::span<hal::byte> p_data_in,
   function_ref<hal::timeout_function> p_timeout)
 {
-
   hal::byte address_to_write;
 
   // Checks if driver should begin a write operation
-  if (!p_data_out.empty()) {
+  if (not p_data_out.empty()) {
     send_start_condition();
     address_to_write =
       hal::to_8_bit_address(p_address, hal::i2c_operation::write);
@@ -113,7 +117,7 @@ void bit_bang_i2c::driver_transaction(
   }
 
   // Checks if driver should begin a read operation
-  if (!p_data_in.empty()) {
+  if (not p_data_in.empty()) {
     send_start_condition();
 
     address_to_write =
@@ -142,8 +146,8 @@ void bit_bang_i2c::send_start_condition()
 
 void bit_bang_i2c::send_stop_condition()
 {
+  high_speed_delay(m_clock, m_scl_high_ticks);
   m_sda->level(false);
-
   m_scl->level(true);
   high_speed_delay(m_clock, m_scl_high_ticks);
   m_sda->level(true);
@@ -157,6 +161,7 @@ void bit_bang_i2c::write_address(hal::byte p_address,
   auto acknowledged = write_byte(p_address, p_timeout);
 
   if (!acknowledged) {
+    send_stop_condition();
     hal::safe_throw(hal::no_such_device((p_address >> 1), this));
   }
 }
@@ -166,11 +171,10 @@ void bit_bang_i2c::write(std::span<hal::byte const> p_data_out,
 {
   bool acknowledged;
   for (hal::byte const& data : p_data_out) {
-
     acknowledged = write_byte(data, p_timeout);
 
     if (!acknowledged) {
-      hal::safe_throw(hal::io_error(this));
+      send_stop_condition();
     }
   }
 }
@@ -180,9 +184,7 @@ bool bit_bang_i2c::write_byte(hal::byte p_byte_to_write,
 {
   hal::byte bit_to_write = 0;
   for (int32_t i = 7; i >= 0; i--) {
-
     bit_to_write = static_cast<hal::byte>((p_byte_to_write >> i) & 0x1);
-
     write_bit(bit_to_write, p_timeout);
   }
 
@@ -202,17 +204,15 @@ void bit_bang_i2c::write_bit(hal::byte p_bit_to_write,
                              function_ref<hal::timeout_function> p_timeout)
 {
   m_sda->level(static_cast<bool>(p_bit_to_write));
-  m_scl->level(true);
   high_speed_delay(m_clock, m_scl_high_ticks);
-
+  m_scl->level(true);
+  high_speed_delay(m_clock, m_scl_low_ticks);
   // If scl is still low after we set it high, then the peripheral is clock
   // stretching
   while (m_scl->level() == 0) {
     p_timeout();
   }
-
   m_scl->level(false);
-  high_speed_delay(m_clock, m_scl_low_ticks);
 }
 
 void bit_bang_i2c::read(std::span<hal::byte> p_data_in,
@@ -248,13 +248,16 @@ hal::byte bit_bang_i2c::read_byte()
 hal::byte bit_bang_i2c::read_bit()
 {
   m_sda->level(true);
-  m_scl->level(true);
+
   high_speed_delay(m_clock, m_scl_high_ticks);
+  m_scl->level(true);
 
-  auto bit_read = static_cast<hal::byte>(m_sda->level());
+  // Wait for the scl line to settle
+  high_speed_delay(m_clock, m_scl_high_ticks);
+  auto const bit_read = static_cast<hal::byte>(m_sda->level());
 
+  // Pull clock line low to be ready for the next bit
   m_scl->level(false);
-  high_speed_delay(m_clock, m_scl_low_ticks);
 
   return bit_read;
 }
