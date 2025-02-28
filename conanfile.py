@@ -67,6 +67,11 @@ class libhal_util_conan(ConanFile):
     def layout(self):
         cmake_layout(self)
 
+    def generate(self):
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build(target="copy_compile_commands")
+
     def build(self):
         cmake = CMake(self)
         cmake.configure()
