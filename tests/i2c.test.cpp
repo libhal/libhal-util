@@ -55,7 +55,7 @@ boost::ut::suite<"i2c_test"> i2c_test = [] {
       m_out = p_out;
       m_in = p_in;
 
-      std::fill(m_in.begin(), m_in.end(), filler_byte);
+      std::ranges::fill(m_in, filler_byte);
 
       if (m_address == failure_address) {
         safe_throw(hal::no_such_device(m_address, this));

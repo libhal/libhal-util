@@ -38,6 +38,9 @@ boost::ut::suite<"bit_bang_i2c"> bit_bang_i2c_test = [] {
 
     steady_clock.set_frequency(1.0_MHz);
     std::vector<hal::u64> uptime_set(4098);
+    // NOTE: We disabled clang-tidy linting for this line because
+    // std::ranges::iota doesn't appear to work in clang-17.
+    // NOLINTNEXTLINE(modernize-use-ranges)
     std::iota(uptime_set.begin(), uptime_set.end(), 0);
     std::queue<hal::u64> uptimes(uptime_set.begin(), uptime_set.end());
     steady_clock.set_uptimes(uptimes);
