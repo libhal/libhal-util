@@ -121,7 +121,7 @@ major number.
 ### 🚀 Minor changes
 
 The minor number will increment if a new interface, API, or type is introduced
-into the public interface of libhal.
+into the public interface of `libhal-util`.
 
 ### 🐞 Patch Changes
 
@@ -129,10 +129,10 @@ The patch number will increment if:
 
 1. Bug fixes that align code to the behavior of an API, improves performance
    or improves code size efficiency.
-2. Any changes occur within the `/include/libhal/experimental` directory.
+2. Any changes occur within the `/include/libhal-util/experimental` directory.
 
 For now, you cannot expect ABI or API stability with anything in the
-`/include/libhal/experimental` directory.
+`/include/libhal-util/experimental` directory.
 
 ## :busts_in_silhouette: Contributing
 
