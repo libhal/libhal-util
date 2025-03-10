@@ -42,7 +42,7 @@ boost::ut::suite<"spi_test"> spi_test = [] {
 
       if (!p_in.empty()) {
         m_in = p_in;
-        std::fill(m_in.begin(), m_in.end(), filler_byte);
+        std::ranges::fill(m_in, filler_byte);
       }
 
       m_filler = p_filler;

@@ -21,7 +21,8 @@ boost::ut::suite inert_magnetometer_test = []() {
   using namespace boost::ut;
   "inert_magnetometer"_test = []() {
     // Setup
-    constexpr auto expected_read = magnetometer::read_t{ 0.1f, 0.2f, 0.3f };
+    constexpr auto expected_read =
+      magnetometer::read_t{ .x = 0.1f, .y = 0.2f, .z = 0.3f };
     inert_magnetometer test(expected_read);
 
     // Exercise
