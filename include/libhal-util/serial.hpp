@@ -22,6 +22,7 @@
 #include <libhal/serial.hpp>
 #include <libhal/timeout.hpp>
 #include <libhal/units.hpp>
+#include <libhal/zero_copy_serial.hpp>
 
 #include "as_bytes.hpp"
 
@@ -31,22 +32,6 @@
  */
 
 namespace hal {
-// TODO(#38): Remove on release of libhal 5.0.0
-/**
- * @ingroup Serial
- * @brief Write bytes to a serial port
- *
- * @param p_serial - the serial port that will be written to
- * @param p_data_out - the data to be written out the port
- * @return serial::write_t - information about the write_t operation.
- */
-[[nodiscard]] inline serial::write_t write_partial(
-  serial& p_serial,
-  std::span<hal::byte const> p_data_out)
-{
-  return p_serial.write(p_data_out);
-}
-
 /**
  * @ingroup Serial
  * @brief Write bytes to a serial port
@@ -225,6 +210,89 @@ void print(serial& p_serial, byte_array_t&& p_data)
  */
 template<size_t buffer_size, typename... Parameters>
 void print(serial& p_serial, char const* p_format, Parameters... p_parameters)
+{
+  static_assert(buffer_size > 2);
+  constexpr int unterminated_max_string_size =
+    static_cast<int>(buffer_size) - 1;
+
+  std::array<char, buffer_size> buffer{};
+  int length =
+    std::snprintf(buffer.data(), buffer.size(), p_format, p_parameters...);
+
+  if (length > unterminated_max_string_size) {
+    // Print out what was able to be written to the buffer
+    length = unterminated_max_string_size;
+  }
+
+  hal::write(
+    p_serial, std::string_view(buffer.data(), length), hal::never_timeout());
+}
+
+// zero copy functions
+/**
+ * @ingroup Serial
+ * @brief Write bytes to a serial port
+ *
+ * @param p_serial - the serial port that will be written to
+ * @param p_data_out - the data to be written out the port
+ */
+inline void write(zero_copy_serial& p_serial,
+                  std::span<hal::byte const> p_data_out)
+{
+  p_serial.write(p_data_out);
+}
+
+/**
+ * @ingroup Serial
+ * @brief Write std::span of const char to a serial port
+ *
+ * @param p_serial - the serial port that will be written to
+ * @param p_data_out - chars to be written out the port
+ */
+inline void write(zero_copy_serial& p_serial, std::string_view p_data_out)
+{
+  write(p_serial, as_bytes(p_data_out));
+}
+
+/**
+ * @ingroup Serial
+ * @brief Write data to serial buffer and drop return value
+ *
+ * Only use this with serial ports with infallible write operations, meaning
+ * they will never return an error result.
+ *
+ * @tparam byte_array_t - data array type
+ * @param p_serial - serial port to write data to
+ * @param p_data - data to be sent over the serial port
+ */
+template<typename byte_array_t>
+void print(zero_copy_serial& p_serial, byte_array_t&& p_data)
+{
+  hal::write(p_serial, p_data);
+}
+
+/**
+ * @ingroup Serial
+ * @brief Write formatted string data to serial buffer and drop return value
+ *
+ * Uses snprintf internally and writes to a local statically allocated an array.
+ * This function will never dynamically allocate like how standard std::printf
+ * does.
+ *
+ * This function does NOT include the NULL character when transmitting the data
+ * over the serial port.
+ *
+ * @tparam buffer_size - Size of the buffer to allocate on the stack to store
+ * the formatted message.
+ * @tparam Parameters - printf arguments
+ * @param p_serial - serial port to write data to
+ * @param p_format - printf style null terminated format string
+ * @param p_parameters - printf arguments
+ */
+template<size_t buffer_size, typename... Parameters>
+void print(zero_copy_serial& p_serial,
+           char const* p_format,
+           Parameters... p_parameters)
 {
   static_assert(buffer_size > 2);
   constexpr int unterminated_max_string_size =
