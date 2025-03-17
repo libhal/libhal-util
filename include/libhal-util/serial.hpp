@@ -32,6 +32,22 @@
  */
 
 namespace hal {
+// TODO(#38): Remove on release of libhal 5.0.0
+/**
+ * @ingroup Serial
+ * @brief Write bytes to a serial port
+ *
+ * @param p_serial - the serial port that will be written to
+ * @param p_data_out - the data to be written out the port
+ * @return serial::write_t - information about the write_t operation.
+ */
+[[nodiscard]] inline serial::write_t write_partial(
+  serial& p_serial,
+  std::span<hal::byte const> p_data_out)
+{
+  return p_serial.write(p_data_out);
+}
+
 /**
  * @ingroup Serial
  * @brief Write bytes to a serial port
