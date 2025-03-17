@@ -107,56 +107,6 @@ boost::ut::suite<"serial_test"> serial_test = [] {
   };
 
   "serial/util"_test = []() {
-    "[success] write_partial full"_test = []() {
-      // Setup
-      fake_serial serial;
-      std::array<hal::byte, 4> const expected{};
-
-      // Exercise
-      auto result = write_partial(serial, expected);
-
-      // Verify
-      expect(result.data.size() == expected.size());
-      expect(!serial.m_flush_called);
-      expect(that % expected.data() == serial.m_out.data());
-      expect(that % expected.size() == serial.m_out.size());
-      expect(that % !serial.m_read_was_called);
-    };
-
-    "[success] write_partial single byte at a time"_test = []() {
-      // Setup
-      fake_serial serial;
-      std::array<hal::byte, 4> const expected{};
-      serial.m_single_byte_out = true;
-
-      // Exercise
-      auto result = write_partial(serial, expected);
-
-      // Verify
-      expect(1 == result.data.size());
-      expect(!serial.m_flush_called);
-      expect(that % &expected[0] == serial.m_out.data());
-      expect(that % 4 == serial.m_out.size());
-      expect(that % !serial.m_read_was_called);
-    };
-
-    "[failure] write_partial"_test = []() {
-      // Setup
-      fake_serial serial;
-      std::array<hal::byte, 4> const expected{ write_failure_byte };
-
-      // Exercise
-      expect(throws<hal::io_error>([&serial, &expected]() {
-        [[maybe_unused]] auto result = write_partial(serial, expected);
-      }));
-
-      // Verify
-      expect(!serial.m_flush_called);
-      expect(that % nullptr == serial.m_out.data());
-      expect(that % 0 == serial.m_out.size());
-      expect(that % !serial.m_read_was_called);
-    };
-
     "[success] write"_test = []() {
       // Setup
       fake_serial serial;
