@@ -307,7 +307,6 @@ void print(zero_copy_serial& p_serial,
     length = unterminated_max_string_size;
   }
 
-  hal::write(
-    p_serial, std::string_view(buffer.data(), length), hal::never_timeout());
+  hal::write(p_serial, std::string_view(buffer.data(), length));
 }
 }  // namespace hal
