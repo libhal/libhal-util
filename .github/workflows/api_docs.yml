@@ -26,5 +26,8 @@ permissions:
 
 jobs:
   deploy_apis:
+    permissions:
+      id-token: write
+      pages: write
     uses: libhal/ci/.github/workflows/api_docs.yml@5.x.y
     secrets: inherit
