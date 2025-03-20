@@ -20,6 +20,8 @@ on:
     types: [published]
 
 permissions:
+  pages: write
+  id-token: write
   contents: write
 
 jobs:
