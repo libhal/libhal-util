@@ -21,3 +21,4 @@ libhal Utilities API Documentation
     static_list
     streams
     to_array
+    Inert Drivers <inert/index>

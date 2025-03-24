@@ -43,7 +43,6 @@ struct bit_mask
   std::uint32_t width;
 
   /**
-   * @ingroup Bit
    * @brief Generate, at compile time, a bit_mask that spans the from position1
    * to position2.
    *
@@ -74,7 +73,6 @@ struct bit_mask
   }
 
   /**
-   * @ingroup Bit
    * @brief Generate, at compile time, a bit_mask that spans the from position1
    * to position2.
    *
@@ -102,7 +100,6 @@ struct bit_mask
   }
 
   /**
-   * @ingroup Bit
    * @brief Generate, at runtime, a single bit width bit_mask at position
    *
    * @param position - the bit to make the bit_mask for
@@ -115,7 +112,6 @@ struct bit_mask
   }
 
   /**
-   * @ingroup Bit
    * @brief Convert bit_mask to a integral representation but with bit position
    * at 0
    *
@@ -150,7 +146,6 @@ struct bit_mask
   }
 
   /**
-   * @ingroup Bit
    * @brief Convert mask to a integral representation
    *
    * The integral presentation will have 1 bits starting from the position bit
@@ -173,7 +168,6 @@ struct bit_mask
   }
 
   /**
-   * @ingroup Bit
    * @brief Comparison operator between this mask and another
    *
    * @param p_other - the other mask to compare against
@@ -186,7 +180,7 @@ struct bit_mask
   }
 
   /**
-   * @ingroup Bit
+   *
    * @brief Shift the position of the bit mask to the right
    *
    * NOTE: the position will overflow if the position
@@ -207,7 +201,7 @@ struct bit_mask
   }
 
   /**
-   * @ingroup Bit
+   *
    * @brief Shift the position of the bit mask to the left
    *
    * NOTE: the position will not underflow if the shift amount is greater than
@@ -254,11 +248,11 @@ struct byte_mask
   static constexpr auto start_byte = std::min(ByteIndex1, ByteIndex2);
   static constexpr auto end_byte = std::max(ByteIndex1, ByteIndex2);
   /**
-   * @ingroup Bit
+   *
    * @brief Mask value defined at compile time
    *
    */
-  static constexpr hal::bit_mask value{
+  inline static constexpr auto value = hal::bit_mask{
     .position = bits_per_byte * start_byte,
     .width = bits_per_byte * (1 + (end_byte - start_byte)),
   };
@@ -302,7 +296,7 @@ struct nibble_mask
   static constexpr auto bits_per_nibble = 4;
   static constexpr auto start_nibble = std::min(NibbleIndex1, NibbleIndex2);
   static constexpr auto end_nibble = std::max(NibbleIndex1, NibbleIndex2);
-  static constexpr hal::bit_mask value{
+  static constexpr auto value = hal::bit_mask{
     .position = bits_per_nibble * start_nibble,
     .width = bits_per_nibble * (1 + (end_nibble - start_nibble)),
   };
