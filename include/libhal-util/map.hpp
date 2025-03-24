@@ -31,9 +31,11 @@ namespace hal {
  * Another term for this is an affine transformation which follows this
  * equation:
  *
- *                       / d - c \
- *        y = (x - a) * | --------| + c
- *                       \ b - a /
+ * ```text
+ *                / d - c \
+ * y = (x - a) * | --------| + c
+ *                \ b - a /
+ * ```
  *
  * For example:
  *
