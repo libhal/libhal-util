@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,8 +29,7 @@ std::ostream& operator<<(std::ostream& p_os,
 
 namespace hal {
 
-void units_test()
-{
+boost::ut::suite<"units_test"> units_test = [] {
   using namespace boost::ut;
   using namespace std::literals;
 

@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright 2024 Khalil Estell
+# Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,10 +59,10 @@ class libhal_util_conan(ConanFile):
     def build_requirements(self):
         self.tool_requires("cmake/3.27.1")
         self.tool_requires("libhal-cmake-util/[^4.1.0]")
-        self.test_requires("boost-ext-ut/1.1.9")
+        self.test_requires("boost-ext-ut/2.1.0")
 
     def requirements(self):
-        self.requires("libhal/[^4.0.0]", transitive_headers=True)
+        self.requires("libhal/[^4.9.0]", transitive_headers=True)
 
     def layout(self):
         cmake_layout(self)

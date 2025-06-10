@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
 #include <iterator>
 #include <utility>
 
@@ -41,7 +40,6 @@ public:
   class item_iterator;
 
   /**
-   * @ingroup StaticList
    * @brief Item/node within the static linked list
    *
    * This object does not allow copies.
@@ -84,7 +82,7 @@ public:
     constexpr item& operator=(item& p_other) = delete;
     constexpr item(item& p_other) = delete;
 
-    constexpr item& operator=(item&& p_other)
+    constexpr item& operator=(item&& p_other) noexcept
     {
       m_object = std::move(p_other.m_object);
       m_list = p_other.m_list;
@@ -118,7 +116,7 @@ public:
       return *this;
     }
 
-    constexpr item(item&& p_other)
+    constexpr item(item&& p_other) noexcept
     {
       *this = std::move(p_other);
     }
@@ -202,7 +200,6 @@ public:
   };
 
   /**
-   * @ingroup StaticList
    * @brief Iterator for the static list
    *
    * Implements the C++ named requirement of "LegacyBidirectionalIterator".
@@ -302,13 +299,11 @@ public:
   using pointer = value_type*;
   using const_pointer = value_type const*;
 
-  constexpr static_list()
-  {
-  }
+  constexpr static_list() = default;
 
   constexpr static_list& operator=(static_list& p_other) = delete;
   constexpr static_list(static_list& p_other) = delete;
-  constexpr static_list& operator=(static_list&& p_other)
+  constexpr static_list& operator=(static_list&& p_other) noexcept
   {
     m_head = p_other.m_head;
     m_tail = p_other.m_tail;
@@ -327,13 +322,12 @@ public:
     return *this;
   }
 
-  constexpr static_list(static_list&& p_other)
+  constexpr static_list(static_list&& p_other) noexcept
   {
     *this = std::move(p_other);
   }
 
   /**
-   * @ingroup StaticList
    * @brief Add default constructed item to the end of the list
    *
    * Only works for Object's that support default construction.
@@ -348,7 +342,6 @@ public:
   }
 
   /**
-   * @ingroup StaticList
    * @brief Append item to the end of the static list.
    *
    * @param p_value - value of node
@@ -362,7 +355,6 @@ public:
   }
 
   /**
-   * @ingroup StaticList
    * @brief Append item to the end of the static list.
    *
    * @param p_value - value of node
@@ -410,7 +402,7 @@ public:
     return item_iterator(nullptr, this);
   }
 
-  constexpr std::size_t size() const
+  [[nodiscard]] constexpr std::size_t size() const
   {
     return m_size;
   }

@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,8 +24,6 @@
 #include <libhal/units.hpp>
 
 #include "as_bytes.hpp"
-#include "comparison.hpp"
-#include "math.hpp"
 
 /**
  * @defgroup Serial Serial
@@ -33,20 +31,7 @@
  */
 
 namespace hal {
-/**
- * @ingroup Serial
- * @brief Compares two serial objects via their settings.
- *
- * @param p_lhs A serial object
- * @param p_rhs A serial object
- * @return A boolean if they are the same or not.
- */
-[[nodiscard]] constexpr auto operator==(serial::settings const& p_lhs,
-                                        serial::settings const& p_rhs)
-{
-  return equals(p_lhs.baud_rate, p_rhs.baud_rate) &&
-         p_lhs.parity == p_rhs.parity && p_lhs.stop == p_rhs.stop;
-}
+// TODO(#38): Remove on release of libhal 5.0.0
 /**
  * @ingroup Serial
  * @brief Write bytes to a serial port

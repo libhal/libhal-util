@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,37 +20,54 @@
 
 /**
  * @defgroup AsBytes As Bytes
- @verbatim embed:rst
- ```{warning}
-  Documentation is needed for this file, please add each public facing API to
- this group!
- ```
- @endverbatim
- *
- *
  */
 
 namespace hal {
+/**
+ * @ingroup AsBytes
+ * @brief Converts a pointer and length to a writeable (mutable) span of T
+ * elements
+ *
+ * @tparam T - element type
+ * @param p_address - address of the first element
+ * @param p_number_of_elements - the number of valid elements after the first
+ * @return constexpr std::span<hal::byte> - span of elements
+ */
 template<typename T>
 constexpr std::span<hal::byte> as_writable_bytes(T* p_address,
                                                  size_t p_number_of_elements)
 {
   auto* start = reinterpret_cast<hal::byte*>(p_address);
   size_t number_of_bytes = sizeof(T) * p_number_of_elements;
-  return std::span<hal::byte>(start, number_of_bytes);
+  return { start, number_of_bytes };
 }
 
+/**
+ * @ingroup AsBytes
+ * @brief Converts a pointer and length to a constant span of T elements
+ *
+ * @tparam T - element type
+ * @param p_address - address of the first element
+ * @param p_number_of_elements - the number of valid elements after the first
+ * @return constexpr std::span<hal::byte const> - span of elements
+ */
 template<typename T>
 constexpr std::span<hal::byte const> as_bytes(T const* p_address,
                                               size_t p_number_of_elements)
 {
   auto* start = reinterpret_cast<hal::byte const*>(p_address);
   size_t number_of_bytes = sizeof(T) * p_number_of_elements;
-  return std::span<hal::byte const>(start, number_of_bytes);
+  return { start, number_of_bytes };
 }
 
 // Turning off clang-format because concepts because give it an aneurysm.
 // clang-format off
+/**
+ * @brief A concept for determining if something can be used by
+ * `as_writable_bytes()` and `as_bytes()`
+ *
+ * @tparam T - type of the container
+ */
 template<typename T>
 concept convertible_to_bytes = requires(T a) {
                                  *a.data();
@@ -58,12 +75,28 @@ concept convertible_to_bytes = requires(T a) {
                                };
 // clang-format on
 
+/**
+ * @ingroup AsBytes
+ * @brief Converts a container to a writable (mutable) span of T elements
+ *
+ * @tparam T - element type
+ * @param p_container - Container containing the contiguous array of elements.
+ * @return constexpr std::span<hal::byte const> - span of elements
+ */
 constexpr std::span<hal::byte> as_writable_bytes(
   convertible_to_bytes auto& p_container)
 {
   return as_writable_bytes(p_container.data(), p_container.size());
 }
 
+/**
+ * @ingroup AsBytes
+ * @brief Converts a container to a constant span of T elements
+ *
+ * @tparam T - element type
+ * @param p_container - Container containing the contiguous array of elements.
+ * @return constexpr std::span<hal::byte const> - span of elements
+ */
 constexpr std::span<hal::byte const> as_bytes(
   convertible_to_bytes auto const& p_container)
 {

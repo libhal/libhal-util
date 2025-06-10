@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void timeout_test()
-{
+boost::ut::suite<"timeout_test"> timeout_test = [] {
   using namespace boost::ut;
   "hal::try_until(callback, timeout)"_test = []() {
     // Setup

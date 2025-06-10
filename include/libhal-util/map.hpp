@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,9 +31,11 @@ namespace hal {
  * Another term for this is an affine transformation which follows this
  * equation:
  *
- *                       / d - c \
- *        y = (x - a) * | --------| + c
- *                       \ b - a /
+ * ```text
+ *                / d - c \
+ * y = (x - a) * | --------| + c
+ *                \ b - a /
+ * ```
  *
  * For example:
  *

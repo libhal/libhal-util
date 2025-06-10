@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,16 +20,19 @@
 
 /**
  * @defgroup Comparison Comparisons
- @verbatim embed:rst
- ```{warning}
-  Documentation is needed for this file, please add each public facing API to
- this group!
- ```
- @endverbatim
- *
- *
+ * @{
  */
 
+/**
+ * @brief Provides `operator==` between arrays and spans
+ *
+ * @tparam T - element type of array & span
+ * @tparam size - compile time size of the array
+ * @param p_array - array object
+ * @param p_span - span object
+ * @return true - if the two are equal in length and contents
+ * @return false - if the two are not equal to length or by contents
+ */
 template<typename T, size_t size>
 constexpr bool operator==(std::array<T, size> const& p_array,
                           std::span<T> const& p_span)
@@ -41,6 +44,16 @@ constexpr bool operator==(std::array<T, size> const& p_array,
   return std::equal(p_array.begin(), p_array.end(), p_span.begin());
 }
 
+/**
+ * @brief Provides `operator==` between spans and arrays
+ *
+ * @tparam T - element type of array & span
+ * @tparam size - compile time size of the array
+ * @param p_span - span object
+ * @param p_array - array object
+ * @return true - if the two are equal in length and contents
+ * @return false - if the two are not equal to length or by contents
+ */
 template<typename T, size_t size>
 constexpr bool operator==(std::span<T> const& p_span,
                           std::array<T, size> const& p_array)
@@ -48,6 +61,16 @@ constexpr bool operator==(std::span<T> const& p_span,
   return p_array == p_span;
 }
 
+/**
+ * @brief Provides `operator!=` between arrays and spans
+ *
+ * @tparam T - element type of array & span
+ * @tparam size - compile time size of the array
+ * @param p_array - array object
+ * @param p_span - span object
+ * @return true - if the two are equal in length and contents
+ * @return false - if the two are not equal to length or by contents
+ */
 template<typename T, size_t size>
 constexpr bool operator!=(std::array<T, size> const& p_array,
                           std::span<T> const& p_span)
@@ -55,9 +78,21 @@ constexpr bool operator!=(std::array<T, size> const& p_array,
   return !(p_array == p_span);
 }
 
+/**
+ * @brief Provides `operator!=` between spans and arrays
+ *
+ * @tparam T - element type of array & span
+ * @tparam size - compile time size of the array
+ * @param p_array - array object
+ * @param p_span - span object
+ * @return true - if the two are equal in length and contents
+ * @return false - if the two are not equal to length or by contents
+ */
 template<typename T, size_t size>
 constexpr bool operator!=(std::span<T> const& p_span,
                           std::array<T, size> const& p_array)
 {
   return !(p_array == p_span);
 }
+
+/** @} */  // End of group

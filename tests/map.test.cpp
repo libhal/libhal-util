@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,8 +21,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void map_test()
-{
+boost::ut::suite<"map_test"> map_test = [] {
   using namespace boost::ut;
 
   "hal::map<std::floating_point>()"_test = []() {

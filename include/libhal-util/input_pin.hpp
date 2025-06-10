@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,17 +21,5 @@
  *
  */
 namespace hal {
-/**
- * @ingroup InputPin
- * @brief Compares two input pin states
- *
- * @param p_lhs An input pin
- * @param p_rhs An input pin
- * @return A boolean if they are the same or not.
- */
-[[nodiscard]] constexpr auto operator==(input_pin::settings const& p_lhs,
-                                        input_pin::settings const& p_rhs)
-{
-  return p_lhs.resistor == p_rhs.resistor;
-}
+// Nothing yet
 }  // namespace hal

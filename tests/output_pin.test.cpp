@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void output_pin_util_test()
-{
+boost::ut::suite<"output_pin_test"> output_pin_test = [] {
   using namespace boost::ut;
   "operator==(output_pin::settings)"_test = []() {
     output_pin::settings a{};

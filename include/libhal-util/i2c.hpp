@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,14 +14,11 @@
 
 #pragma once
 
-#include <functional>
-
 #include <libhal/error.hpp>
 #include <libhal/i2c.hpp>
 #include <libhal/units.hpp>
 
 #include "enum.hpp"
-#include "math.hpp"
 
 /**
  * @defgroup I2CUtils I2C Utils
@@ -29,35 +26,23 @@
 namespace hal {
 /**
  * @ingroup I2CUtils
- * @brief Compares two I2C bus states.
- *
- * @param p_lhs A I2C bus.
- * @param p_rhs A I2C bus.
- * @return A boolean if they are the same or not.
- */
-[[nodiscard]] constexpr auto operator==(i2c::settings const& p_lhs,
-                                        i2c::settings const& p_rhs)
-{
-  return equals(p_lhs.clock_rate, p_rhs.clock_rate);
-}
-
-/**
- * @ingroup I2CUtils
- * @brief write data to a target device on the i2c bus
+ * @deprecated use APIs that do not use timeouts
+ * @brief write data to a target device on the i2c bus with a timeout
+ * @deprecated Prefer to use the write API that does not require a timeout.
  *
  * Shorthand for writing i2c.transfer(...) for write only operations
  *
  * @param p_i2c - i2c driver
  * @param p_address - target address
  * @param p_data_out - buffer of bytes to write to the target device
- * @param p_timeout - amount of time to execute the transaction
+ * @param auto - [deprecated don't use]
  */
 inline void write(i2c& p_i2c,
                   hal::byte p_address,
                   std::span<hal::byte const> p_data_out,
-                  timeout auto p_timeout)
+                  timeout auto)
 {
-  p_i2c.transaction(p_address, p_data_out, std::span<hal::byte>{}, p_timeout);
+  p_i2c.transaction(p_address, p_data_out, std::span<hal::byte>{});
 }
 
 /**
@@ -80,6 +65,7 @@ inline void write(i2c& p_i2c,
 
 /**
  * @ingroup I2CUtils
+ * @deprecated use APIs that do not use timeouts
  * @brief read bytes from target device on i2c bus
  *
  * Shorthand for writing i2c.transfer(...) for read only operations
@@ -87,18 +73,19 @@ inline void write(i2c& p_i2c,
  * @param p_i2c - i2c driver
  * @param p_address - target address
  * @param p_data_in - buffer to read bytes into from target device
- * @param p_timeout - amount of time to execute the transaction
+ * @param auto - [deprecated don't use]
  */
 inline void read(i2c& p_i2c,
                  hal::byte p_address,
                  std::span<hal::byte> p_data_in,
-                 timeout auto p_timeout)
+                 timeout auto)
 {
-  p_i2c.transaction(p_address, std::span<hal::byte>{}, p_data_in, p_timeout);
+  p_i2c.transaction(p_address, std::span<hal::byte>{}, p_data_in);
 }
 
 /**
  * @ingroup I2CUtils
+ * @deprecated use APIs that do not use timeouts
  * @brief read bytes from target device on i2c bus
  *
  * Shorthand for writing i2c.transfer(...) for read only operations, but never
@@ -117,6 +104,7 @@ inline void read(i2c& p_i2c,
 
 /**
  * @ingroup I2CUtils
+ * @deprecated use APIs that do not use timeouts
  * @brief return array of read bytes from target device on i2c bus
  *
  * Eliminates the need to create a buffer and pass it into the read function.
@@ -124,17 +112,17 @@ inline void read(i2c& p_i2c,
  * @tparam bytes_to_read - number of bytes to read
  * @param p_i2c - i2c driver
  * @param p_address - target address
- * @param p_timeout - amount of time to execute the transaction
+ * @param auto - [deprecated don't use]
  * @return std::array<hal::byte, bytes_to_read> - array of bytes from target
  * device
  */
 template<size_t bytes_to_read>
 [[nodiscard]] std::array<hal::byte, bytes_to_read> read(i2c& p_i2c,
                                                         hal::byte p_address,
-                                                        timeout auto p_timeout)
+                                                        timeout auto)
 {
   std::array<hal::byte, bytes_to_read> buffer;
-  read(p_i2c, p_address, buffer, p_timeout);
+  read(p_i2c, p_address, buffer);
   return buffer;
 }
 
@@ -143,24 +131,25 @@ template<size_t bytes_to_read>
  * @brief return array of read bytes from target device on i2c bus
  *
  * Eliminates the need to create a buffer and pass it into the read function.
- * This operation will never time out and should only be used with devices that
- * never perform clock stretching.
  *
  * @tparam bytes_to_read - number of bytes to read
  * @param p_i2c - i2c driver
  * @param p_address - target address
  * @return std::array<hal::byte, bytes_to_read> - array of bytes from target
- * device.
+ * device
  */
 template<size_t bytes_to_read>
 [[nodiscard]] std::array<hal::byte, bytes_to_read> read(i2c& p_i2c,
                                                         hal::byte p_address)
 {
-  return read<bytes_to_read>(p_i2c, p_address, hal::never_timeout());
+  std::array<hal::byte, bytes_to_read> buffer;
+  read(p_i2c, p_address, buffer);
+  return buffer;
 }
 
 /**
  * @ingroup I2CUtils
+ * @deprecated use APIs that do not use timeouts
  * @brief write and then read bytes from target device on i2c bus
  *
  * This API simply calls transaction. This API is here for consistency across
@@ -170,15 +159,15 @@ template<size_t bytes_to_read>
  * @param p_address - target address
  * @param p_data_out - buffer of bytes to write to the target device
  * @param p_data_in - buffer to read bytes into from target device
- * @param p_timeout - amount of time to execute the transaction
+ * @param auto - amount of time to execute the transaction
  */
 inline void write_then_read(i2c& p_i2c,
                             hal::byte p_address,
                             std::span<hal::byte const> p_data_out,
                             std::span<hal::byte> p_data_in,
-                            timeout auto p_timeout = hal::never_timeout())
+                            timeout auto)
 {
-  p_i2c.transaction(p_address, p_data_out, p_data_in, p_timeout);
+  p_i2c.transaction(p_address, p_data_out, p_data_in);
 }
 
 /**
@@ -206,6 +195,7 @@ inline void write_then_read(i2c& p_i2c,
 
 /**
  * @ingroup I2CUtils
+ * @deprecated use APIs that do not use timeouts
  * @brief write and then return an array of read bytes from target device on i2c
  * bus
  *
@@ -215,7 +205,7 @@ inline void write_then_read(i2c& p_i2c,
  * @param p_i2c - i2c driver
  * @param p_address - target address
  * @param p_data_out - buffer of bytes to write to the target device
- * @param p_timeout - amount of time to execute the transaction
+ * @param auto - [deprecated use the APIs without timeout parameters]
  * @return std::array<hal::byte, bytes_to_read> - array of bytes from target
  * device.
  */
@@ -224,10 +214,10 @@ template<size_t bytes_to_read>
   i2c& p_i2c,
   hal::byte p_address,
   std::span<hal::byte const> p_data_out,
-  timeout auto p_timeout)
+  timeout auto)
 {
   std::array<hal::byte, bytes_to_read> buffer;
-  write_then_read(p_i2c, p_address, p_data_out, buffer, p_timeout);
+  write_then_read(p_i2c, p_address, p_data_out, buffer);
   return buffer;
 }
 
@@ -250,8 +240,9 @@ template<size_t bytes_to_read>
   hal::byte p_address,
   std::span<hal::byte const> p_data_out)
 {
-  return write_then_read<bytes_to_read>(
-    p_i2c, p_address, p_data_out, hal::never_timeout());
+  std::array<hal::byte, bytes_to_read> buffer;
+  write_then_read(p_i2c, p_address, p_data_out, buffer);
+  return buffer;
 }
 
 /**
@@ -310,6 +301,7 @@ enum class i2c_operation
   hal::byte p_address,
   i2c_operation p_operation) noexcept
 {
+  // TODO(#36): remove noexcept from this function on libhal's 5.0.0 API break
   hal::byte v8bit_address = static_cast<hal::byte>(p_address << 1);
   v8bit_address |= hal::value(p_operation);
   return v8bit_address;

@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,8 +22,7 @@
 #include <boost/ut.hpp>
 
 namespace hal {
-void i2c_util_test()
-{
+boost::ut::suite<"i2c_test"> i2c_test = [] {
   using namespace boost::ut;
 
   static constexpr hal::byte successful_address{ 0x15 };
@@ -56,7 +55,7 @@ void i2c_util_test()
       m_out = p_out;
       m_in = p_in;
 
-      std::fill(m_in.begin(), m_in.end(), filler_byte);
+      std::ranges::fill(m_in, filler_byte);
 
       if (m_address == failure_address) {
         safe_throw(hal::no_such_device(m_address, this));
@@ -101,7 +100,8 @@ void i2c_util_test()
     expect(that % expected_payload.size() == i2c.m_out.size());
     expect(that % nullptr == i2c.m_in.data());
     expect(that % 0 == i2c.m_in.size());
-    expect(that % true == test_timeout.was_called);
+    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
+    expect(that % false == test_timeout.was_called);
   };
 
   "[failure] write"_test = []() {
@@ -140,7 +140,8 @@ void i2c_util_test()
     expect(that % expected_buffer.size() == i2c.m_in.size());
     expect(that % nullptr == i2c.m_out.data());
     expect(that % 0 == i2c.m_out.size());
-    expect(that % true == test_timeout.was_called);
+    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
+    expect(that % false == test_timeout.was_called);
   };
 
   "[failure] read"_test = []() {
@@ -180,7 +181,8 @@ void i2c_util_test()
     expect(std::equal(expected.begin(), expected.end(), actual.begin()));
     expect(that % nullptr == i2c.m_out.data());
     expect(that % 0 == i2c.m_out.size());
-    expect(that % true == test_timeout.was_called);
+    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
+    expect(that % false == test_timeout.was_called);
   };
 
   "[failure] read<Length>"_test = []() {
@@ -221,7 +223,8 @@ void i2c_util_test()
     expect(that % expected_payload.size() == i2c.m_out.size());
     expect(that % expected_buffer.data() == i2c.m_in.data());
     expect(that % expected_buffer.size() == i2c.m_in.size());
-    expect(that % true == test_timeout.was_called);
+    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
+    expect(that % false == test_timeout.was_called);
   };
 
   "[failure] write_then_read"_test = []() {
@@ -268,7 +271,8 @@ void i2c_util_test()
     expect(that % expected_payload.data() == i2c.m_out.data());
     expect(that % expected_payload.size() == i2c.m_out.size());
     expect(std::equal(expected.begin(), expected.end(), actual.begin()));
-    expect(that % true == test_timeout.was_called);
+    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
+    expect(that % false == test_timeout.was_called);
   };
 
   "[failure] write_then_read<Length>"_test = []() {

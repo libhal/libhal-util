@@ -1,4 +1,4 @@
-// Copyright 2024 Khalil Estell
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,18 +21,5 @@
  *
  */
 namespace hal {
-/**
- * @ingroup InterruptPin
- * @brief Compares two interrupt pin states, compares both their trigger and
- * resistor.
- *
- * @param p_lhs An interrupt pin
- * @param p_rhs An interrupt pin
- * @return A boolean if they are the same or not.
- */
-[[nodiscard]] constexpr auto operator==(interrupt_pin::settings const& p_lhs,
-                                        interrupt_pin::settings const& p_rhs)
-{
-  return p_lhs.resistor == p_rhs.resistor && p_lhs.trigger == p_rhs.trigger;
-}
+// Nothing yet
 }  // namespace hal
