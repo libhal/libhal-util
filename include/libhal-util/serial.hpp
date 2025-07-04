@@ -396,7 +396,7 @@ private:
  * @param p_v5_serial strong_ptr to v5 serial implementation
  * @return strong_ptr to converter instance
  */
-[[nodiscard]] hal::v5::strong_ptr<serial_v5_to_legacy_converter>
+[[nodiscard]] inline hal::v5::strong_ptr<serial_v5_to_legacy_converter>
 make_serial_converter(std::pmr::polymorphic_allocator<hal::byte> p_allocator,
                       hal::v5::strong_ptr<hal::v5::serial> const& p_v5_serial)
 {
