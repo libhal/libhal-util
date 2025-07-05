@@ -15,9 +15,11 @@
 #pragma once
 
 #include <cstdlib>
+#include <memory_resource>
 #include <optional>
 
 #include <libhal/can.hpp>
+#include <libhal/pointers.hpp>
 
 /**
  * @defgroup CAN_Utilities CAN Utilities
@@ -159,14 +161,14 @@ struct can_bus_divider_t
     return std::nullopt;
   }
 
-  std::int32_t operating_frequency = p_operating_frequency;
-  std::int32_t desired_baud_rate = p_target_baud_rate;
+  auto const operating_frequency = static_cast<i32>(p_operating_frequency);
+  auto const desired_baud_rate = static_cast<i32>(p_target_baud_rate);
 
   using inner_div_t =
     decltype(std::div(operating_frequency, desired_baud_rate));
   inner_div_t division{};
 
-  for (std::uint32_t total_tq = 25; total_tq >= 8; total_tq--) {
+  for (i32 total_tq = 25; total_tq >= 8; total_tq--) {
     division = std::div(operating_frequency, (desired_baud_rate * total_tq));
 
     if (division.rem == 0) {
@@ -291,5 +293,115 @@ private:
   hal::can_transceiver* m_transceiver;
   hal::u32 m_id;
   std::size_t m_receive_cursor = 0;
+};
+
+/**
+ * @brief Adapter to convert hal::v5::can_bus_manager to hal::can_bus_manager
+ *
+ * This adapter allows using the new v5 interface with code expecting the
+ * legacy interface. The main difference is the on_bus_off parameter passing
+ * (by reference vs by value).
+ */
+class can_bus_manager_adapter
+  : public hal::can_bus_manager
+  , public hal::v5::enable_strong_from_this<can_bus_manager_adapter>
+{
+public:
+  /**
+   * @brief Construct adapter wrapping a v5 can bus manager
+   *
+   * @param p_allocator - reference to the v5 can bus manager to wrap
+   * @param p_v5_manager - reference to the v5 can bus manager to wrap
+   */
+  static hal::v5::strong_ptr<can_bus_manager_adapter> create(
+    std::pmr::polymorphic_allocator<> p_allocator,
+    hal::v5::strong_ptr<hal::v5::can_bus_manager> const& p_v5_manager)
+  {
+    return hal::v5::make_strong_ptr<can_bus_manager_adapter>(p_allocator,
+                                                             p_v5_manager);
+  }
+
+  /**
+   * @brief Constructor for can_bus_manager_adapter driver
+   *
+   * @warning This constructor should not be called directly. Use the static
+   *          create() method instead to ensure proper initialization.
+   *
+   * @param p_v5_manager - reference to the v5 can bus manager to wrap
+   */
+  explicit can_bus_manager_adapter(
+    hal::v5::strong_ptr_only_token,
+    hal::v5::strong_ptr<hal::v5::can_bus_manager> const& p_v5_manager)
+    : m_v5_manager(p_v5_manager)
+  {
+  }
+
+  ~can_bus_manager_adapter() override
+  {
+    hal::v5::can_bus_manager::optional_bus_off_handler v5_callback =
+      std::nullopt;
+    m_v5_manager->on_bus_off(v5_callback);
+  }
+
+private:
+  void driver_baud_rate(hal::u32 p_hertz) override
+  {
+    m_v5_manager->baud_rate(p_hertz);
+  }
+
+  void driver_filter_mode(accept p_accept) override
+  {
+    // Convert from legacy enum to v5 enum
+    hal::v5::can_bus_manager::accept v5_accept;
+    switch (p_accept) {
+      case accept::none:
+        v5_accept = hal::v5::can_bus_manager::accept::none;
+        break;
+      case accept::all:
+        v5_accept = hal::v5::can_bus_manager::accept::all;
+        break;
+      case accept::filtered:
+        v5_accept = hal::v5::can_bus_manager::accept::filtered;
+        break;
+    }
+    m_v5_manager->filter_mode(v5_accept);
+  }
+
+  void driver_on_bus_off(optional_bus_off_handler p_callback) override
+  {
+    // Convert from legacy callback to v5 callback
+    // The key difference: legacy passes by value, v5 expects by reference
+    if (p_callback.has_value()) {
+      // Store the callback and create a v5-compatible version
+      m_stored_callback = p_callback;
+      auto self = weak_from_this();
+      hal::v5::can_bus_manager::optional_bus_off_handler v5_callback =
+        [self](hal::v5::can_bus_manager::bus_off_tag) {
+          auto adaptor = self.lock();
+          if (not adaptor) {
+            return;
+          }
+          if (adaptor->m_stored_callback.has_value()) {
+            adaptor->m_stored_callback.value()(
+              hal::can_bus_manager::bus_off_tag{});
+          }
+        };
+      m_v5_manager->on_bus_off(v5_callback);
+    } else {
+      // Clear the callback
+      m_stored_callback = std::nullopt;
+      hal::v5::can_bus_manager::optional_bus_off_handler v5_callback =
+        std::nullopt;
+      m_v5_manager->on_bus_off(v5_callback);
+    }
+  }
+
+  void driver_bus_on() override
+  {
+    m_v5_manager->bus_on();
+  }
+
+  hal::v5::strong_ptr<hal::v5::can_bus_manager> m_v5_manager;
+  optional_bus_off_handler m_stored_callback;
 };
 }  // namespace hal
