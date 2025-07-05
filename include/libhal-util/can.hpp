@@ -374,11 +374,15 @@ private:
     if (p_callback.has_value()) {
       // Store the callback and create a v5-compatible version
       m_stored_callback = p_callback;
-      auto self = strong_from_this();
+      auto self = weak_from_this();
       hal::v5::can_bus_manager::optional_bus_off_handler v5_callback =
         [self](hal::v5::can_bus_manager::bus_off_tag) {
-          if (self->m_stored_callback.has_value()) {
-            self->m_stored_callback.value()(
+          auto adaptor = self.lock();
+          if (not adaptor) {
+            return;
+          }
+          if (adaptor->m_stored_callback.has_value()) {
+            adaptor->m_stored_callback.value()(
               hal::can_bus_manager::bus_off_tag{});
           }
         };

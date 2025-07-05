@@ -564,14 +564,23 @@ boost::ut::suite<"can_bus_manager_adapter"> can_bus_manager_adapter = [] {
             });
 
         adapter->on_bus_off(legacy_callback);
-      }  // adapter goes out of scope, but should stay alive due to callback
-         // capture
+
+        // Trigger callback after adapter went out of scope
+        mock_v5->trigger_bus_off();
+        // Verify callback still works (adapter kept alive by strong_from_this)
+        expect(that % callback_invoked == true);
+      }
+      // adapter goes out of scope, but should stay alive due to callback
+      // capture.
+
+      // Reset for second trigger
+      callback_invoked = false;
 
       // Trigger callback after adapter went out of scope
       mock_v5->trigger_bus_off();
 
       // Verify callback still works (adapter kept alive by strong_from_this)
-      expect(that % callback_invoked == true);
+      expect(that % callback_invoked != true);
     };
   };
 };
