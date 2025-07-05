@@ -1,12 +1,13 @@
 #include <libhal-util/can.hpp>
 
-#include <iostream>
+#include <libhal/can.hpp>
+#include <libhal/pointers.hpp>
 
 #include <boost/ut.hpp>
-#include <libhal/can.hpp>
-#include <ratio>
 
 namespace hal {
+
+auto* resource = std::pmr::new_delete_resource();
 
 template<class CharT, class Traits>
 std::basic_ostream<CharT, Traits>& operator<<(
@@ -359,6 +360,218 @@ boost::ut::suite<"can_test"> can_test = [] {
 
       // Verify
       expect(desired_id == actual_id);
+    };
+  };
+};
+
+boost::ut::suite<"can_bus_manager_adapter"> can_bus_manager_adapter = [] {
+  using namespace boost::ut;
+
+  "hal::can_bus_manager_adapter"_test = []() {
+    struct mock_v5_can_bus_manager : hal::v5::can_bus_manager
+    {
+      struct call_history
+      {
+        bool baud_rate_called = false;
+        hal::u32 baud_rate_param = 0;
+
+        bool filter_mode_called = false;
+        hal::v5::can_bus_manager::accept filter_mode_param;
+
+        bool on_bus_off_called = false;
+        bool on_bus_off_param_has_value = false;
+
+        bool bus_on_called = false;
+      } calls;
+
+      hal::v5::can_bus_manager::optional_bus_off_handler stored_callback;
+
+      void trigger_bus_off()
+      {
+        if (stored_callback.has_value()) {
+          stored_callback.value()(hal::v5::can_bus_manager::bus_off_tag{});
+        }
+      }
+
+    private:
+      void driver_baud_rate(hal::u32 p_hertz) override
+      {
+        calls.baud_rate_called = true;
+        calls.baud_rate_param = p_hertz;
+      }
+
+      void driver_filter_mode(accept p_accept) override
+      {
+        calls.filter_mode_called = true;
+        calls.filter_mode_param = p_accept;
+      }
+
+      void driver_on_bus_off(optional_bus_off_handler& p_callback) override
+      {
+        calls.on_bus_off_called = true;
+        calls.on_bus_off_param_has_value = p_callback.has_value();
+        stored_callback = p_callback;
+      }
+
+      void driver_bus_on() override
+      {
+        calls.bus_on_called = true;
+      }
+    };
+
+    "baud_rate forwarding"_test = []() {
+      // Setup
+      auto mock_v5 =
+        hal::v5::make_strong_ptr<mock_v5_can_bus_manager>(resource);
+      auto adapter = hal::can_bus_manager_adapter::create(resource, mock_v5);
+
+      // Execute
+      adapter->baud_rate(100000);
+
+      // Verify
+      expect(that % mock_v5->calls.baud_rate_called == true);
+      expect(that % mock_v5->calls.baud_rate_param == 100000);
+    };
+
+    "filter_mode enum conversion"_test = []() {
+      // Setup
+      auto mock_v5 =
+        hal::v5::make_strong_ptr<mock_v5_can_bus_manager>(resource);
+      auto adapter = hal::can_bus_manager_adapter::create(resource, mock_v5);
+
+      struct test_case
+      {
+        hal::can_bus_manager::accept legacy_value;
+        hal::v5::can_bus_manager::accept expected_v5_value;
+      };
+
+      std::array cases{
+        test_case{ .legacy_value = hal::can_bus_manager::accept::none,
+                   .expected_v5_value =
+                     hal::v5::can_bus_manager::accept::none },
+        test_case{ .legacy_value = hal::can_bus_manager::accept::all,
+                   .expected_v5_value = hal::v5::can_bus_manager::accept::all },
+        test_case{ .legacy_value = hal::can_bus_manager::accept::filtered,
+                   .expected_v5_value =
+                     hal::v5::can_bus_manager::accept::filtered }
+      };
+
+      for (auto& test : cases) {
+        // Reset state
+        mock_v5->calls = {};
+
+        // Execute
+        adapter->filter_mode(test.legacy_value);
+
+        // Verify
+        expect(mock_v5->calls.filter_mode_called == true);
+        expect(mock_v5->calls.filter_mode_param == test.expected_v5_value);
+      }
+    };
+
+    "on_bus_off callback setting and forwarding"_test = []() {
+      // Setup
+      auto mock_v5 =
+        hal::v5::make_strong_ptr<mock_v5_can_bus_manager>(resource);
+      auto adapter = hal::can_bus_manager_adapter::create(resource, mock_v5);
+
+      bool callback_invoked = false;
+
+      // Create legacy callback
+      hal::can_bus_manager::optional_bus_off_handler legacy_callback =
+        hal::callback<hal::can_bus_manager::bus_off_handler>(
+          [&](hal::can_bus_manager::bus_off_tag) { callback_invoked = true; });
+
+      // Execute
+      adapter->on_bus_off(legacy_callback);
+
+      // Verify callback was set
+      expect(that % mock_v5->calls.on_bus_off_called == true);
+      expect(that % mock_v5->calls.on_bus_off_param_has_value == true);
+      expect(that % mock_v5->stored_callback.has_value() == true);
+
+      // Verify callback forwarding works
+      mock_v5->trigger_bus_off();
+      expect(that % callback_invoked == true);
+    };
+
+    "on_bus_off callback clearing"_test = []() {
+      // Setup
+      auto mock_v5 =
+        hal::v5::make_strong_ptr<mock_v5_can_bus_manager>(resource);
+      auto adapter = hal::can_bus_manager_adapter::create(resource, mock_v5);
+
+      // Execute - clear callback
+      adapter->on_bus_off(std::nullopt);
+
+      // Verify
+      expect(that % mock_v5->calls.on_bus_off_called == true);
+      expect(that % mock_v5->calls.on_bus_off_param_has_value == false);
+      expect(that % mock_v5->stored_callback.has_value() == false);
+    };
+
+    "bus_on forwarding"_test = []() {
+      // Setup
+      auto mock_v5 =
+        hal::v5::make_strong_ptr<mock_v5_can_bus_manager>(resource);
+      auto adapter = hal::can_bus_manager_adapter::create(resource, mock_v5);
+
+      // Execute
+      adapter->bus_on();
+
+      // Verify
+      expect(that % mock_v5->calls.bus_on_called == true);
+    };
+
+    "inheritance and polymorphic usage"_test = []() {
+      // Setup
+      auto mock_v5 =
+        hal::v5::make_strong_ptr<mock_v5_can_bus_manager>(resource);
+      auto adapter = hal::can_bus_manager_adapter::create(resource, mock_v5);
+
+      // Verify adapter can be used as legacy interface
+      hal::can_bus_manager* legacy_interface = &(*adapter);
+
+      // Execute through interface
+      legacy_interface->baud_rate(250000);
+      legacy_interface->filter_mode(hal::can_bus_manager::accept::all);
+      legacy_interface->bus_on();
+
+      // Verify forwarding works through interface
+      expect(that % mock_v5->calls.baud_rate_called == true);
+      expect(that % mock_v5->calls.baud_rate_param == 250000);
+      expect(that % mock_v5->calls.filter_mode_called == true);
+      expect(mock_v5->calls.filter_mode_param ==
+             hal::v5::can_bus_manager::accept::all);
+      expect(that % mock_v5->calls.bus_on_called == true);
+    };
+
+    "adapter lifetime management with callbacks"_test = []() {
+      // Setup
+      auto mock_v5 =
+        hal::v5::make_strong_ptr<mock_v5_can_bus_manager>(resource);
+
+      bool callback_invoked = false;
+
+      // Create adapter in scope and set callback
+      {
+        auto adapter = hal::can_bus_manager_adapter::create(resource, mock_v5);
+
+        hal::can_bus_manager::optional_bus_off_handler legacy_callback =
+          hal::callback<hal::can_bus_manager::bus_off_handler>(
+            [&](hal::can_bus_manager::bus_off_tag) {
+              callback_invoked = true;
+            });
+
+        adapter->on_bus_off(legacy_callback);
+      }  // adapter goes out of scope, but should stay alive due to callback
+         // capture
+
+      // Trigger callback after adapter went out of scope
+      mock_v5->trigger_bus_off();
+
+      // Verify callback still works (adapter kept alive by strong_from_this)
+      expect(that % callback_invoked == true);
     };
   };
 };
