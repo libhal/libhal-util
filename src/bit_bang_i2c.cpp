@@ -1,3 +1,17 @@
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <chrono>
 
 #include <libhal-util/bit.hpp>
@@ -52,13 +66,9 @@ bit_bang_i2c::bit_bang_i2c(pins const& p_pins,
 
   bit_bang_i2c::driver_configure(p_settings);
 
-  // NOTE: We probe address the general call to get the I2C bus initialized to
-  // the correct address.
-  static_cast<void>(hal::probe(*this, 0x00));
-  static_cast<void>(hal::probe(*this, 0x00));
+  std::ignore = hal::probe(*this, 0x00);
+  std::ignore = hal::probe(*this, 0x00);
 }
-
-// Private
 
 /*
   It was decided that no calibration should be done to the calculation for ticks
@@ -261,5 +271,4 @@ hal::byte bit_bang_i2c::read_bit()
 
   return bit_read;
 }
-
 }  // namespace hal
