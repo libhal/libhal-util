@@ -52,6 +52,7 @@ set(TEST_SOURCES_LIST
   tests/static_list.test.cpp
   tests/steady_clock.test.cpp
   tests/streams.test.cpp
+  tests/usb.test.cpp
   tests/timeout.test.cpp
   tests/bit_bang_i2c.test.cpp
   tests/bit_bang_spi.test.cpp
