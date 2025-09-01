@@ -21,11 +21,12 @@ class enumerator
 {
 
 public:
-  enumerator(strong_ptr<usb_control_endpoint> const& p_ctrl_ep,
+  enumerator(strong_ptr<control_endpoint> const& p_ctrl_ep,
              device&& p_device,
              std::array<configuration, num_configs>&& p_configs,
              std::string_view p_lang_str,
-             u8&& p_starting_str_idx)
+             u8&& p_starting_str_idx,
+             bool enumerate_immediately = true)
     : m_ctrl_ep(p_ctrl_ep)
     , m_device(p_device)
     , m_configs(p_configs)
@@ -39,7 +40,10 @@ public:
       safe_throw(hal::argument_out_of_domain(this));
     }
     m_starting_str_idx = p_starting_str_idx;
-    enumerate();
+
+    if (enumerate_immediately) {
+      enumerate();
+    }
   }
 
   void enumerate()
@@ -61,7 +65,7 @@ public:
     m_device.num_configurations() = num_configs;
 
     // Configurations
-    for (auto i = 0; i < num_configs; i++) {
+    for (size_t i = 0; i < num_configs; i++) {
       configuration& config = m_configs[i];
       config.configuration_index() = cur_str_idx++;
       config.configuration_value() = i;
@@ -70,15 +74,14 @@ public:
     for (configuration& config : m_configs) {
       auto total_length = static_cast<u16>(constants::config_desc_size);
       for (auto const& iface : config.interfaces) {
-        auto deltas = iface->write_descriptors(
+        interface::descriptor_count deltas = iface->write_descriptors(
+          { .interface = cur_iface_idx, .string = cur_str_idx },
           [&total_length](scatter_span<hal::byte const> p_data) {
             total_length += p_data.size();
-          },
-          cur_iface_idx,
-          cur_str_idx);
+          });
 
-        cur_iface_idx += deltas.iface_idxes;
-        cur_str_idx += deltas.str_idxes;
+        cur_iface_idx += deltas.interface;
+        cur_str_idx += deltas.string;
       }
       config.total_length() = total_length;
     }
@@ -89,8 +92,7 @@ public:
     bool finished_enumeration = false;
     bool waiting_for_data = true;
 
-    using on_receive_tag = usb_control_endpoint::on_receive_tag;
-    using standard_request_types = setup_request::standard_request_types;
+    using on_receive_tag = control_endpoint::on_receive_tag;
     m_ctrl_ep->on_receive(
       [&waiting_for_data](on_receive_tag) { waiting_for_data = false; });
     m_ctrl_ep->connect(true);
@@ -106,12 +108,11 @@ public:
       auto num_bytes_read = m_ctrl_ep->read(scatter_raw_req);
 
       if (num_bytes_read != constants::size_std_req) {
-        safe_throw(hal::message_size(this));
+        safe_throw(hal::message_size(num_bytes_read, this));
       }
-      setup_request req(raw_req);
+      auto req = from_span(raw_req);
 
-      if (req.request_type.get_recipient() !=
-          setup_request::bitmap::recipient::device) {
+      if (req.get_recipient() != setup_packet::recipient::device) {
         safe_throw(hal::not_connected(this));
       }
 
@@ -140,9 +141,6 @@ public:
 
   void resume_ctrl_transaction()
   {
-    using std_req_type = setup_request::standard_request_types;
-    using req_bitmap = setup_request::bitmap;
-
     while (!m_has_setup_packet) {
       continue;
     }
@@ -152,18 +150,18 @@ public:
     auto bytes_read = m_ctrl_ep->read(scatter_read_buf);
     std::span payload(read_buf.data(), bytes_read);
 
-    setup_request req(payload);
-    if (req.get_standard_request() == std_req_type::invalid) {
+    setup_packet req = from_span(payload);
+    if (determine_standard_request(req) == standard_request_types::invalid) {
       return;
     }
 
-    if (req.get_standard_request() == std_req_type::get_descriptor &&
+    if (determine_standard_request(req) ==
+          standard_request_types::get_descriptor &&
         static_cast<descriptor_type>(req.value & 0xFF << 8) ==
           descriptor_type::string) {
       handle_str_descriptors(req.value & 0xFF, req.length > 2);
 
-    } else if (req.request_type.get_recipient() ==
-               req_bitmap::recipient::device) {
+    } else if (req.get_recipient() == setup_packet::recipient::device) {
       handle_standard_device_request(req);
     } else {
       // Handle iface level requests
@@ -188,11 +186,10 @@ public:
   }
 
 private:
-  void handle_standard_device_request(setup_request& req)
+  void handle_standard_device_request(setup_packet& req)
   {
-    using standard_request_types = setup_request::standard_request_types;
 
-    switch (req.get_standard_request()) {
+    switch (determine_standard_request(req)) {
       case standard_request_types::set_address: {
         m_ctrl_ep->set_address(req.value);
         break;
@@ -224,7 +221,7 @@ private:
     }
   }
 
-  void process_get_descriptor(setup_request& req)
+  void process_get_descriptor(setup_packet& req)
   {
     hal::byte desc_type = req.value & 0xFF << 8;
     [[maybe_unused]] hal::byte desc_idx = req.value & 0xFF;
@@ -243,32 +240,34 @@ private:
         configuration& conf = m_configs[desc_idx];
         if (req.length <= 2) {  // requesting total length
           auto scatter_tot_len =
-            make_scatter_bytes(to_le_bytes(conf.total_length()));
+            make_scatter_bytes(setup_packet::to_le_bytes(conf.total_length()));
           m_ctrl_ep->write(scatter_tot_len);
           break;
         }
 
         // if its >2 then assumed to be requesting desc type
         u16 total_size = constants::config_desc_size;
-        scatter_span<byte const> scatter_conf_hdr = make_scatter_bytes(
-          { constants::config_desc_size, descriptor_type::configuration },
+        auto scatter_conf_hdr = make_scatter_bytes(
+          std::to_array({ constants::config_desc_size,
+                          static_cast<byte>(descriptor_type::configuration) }),
           m_configs[desc_idx]);
 
-        m_ctrl_ep->write(scatter_conf_hdr);
+        m_ctrl_ep->write(scatter_span<byte const>(scatter_conf_hdr));
 
         for (size_t i = 0; i < conf.interfaces.size(); i++) {
           auto iface = conf.interfaces[i];
-          iface->write_descriptors(
-            [this, &total_size, i](scatter_span<hal::byte const> byte_stream) {
+          byte i_byte = static_cast<byte>(i);
+          std::ignore = iface->write_descriptors(
+            { .interface = i_byte, .string = i_byte },
+            [this, &total_size](scatter_span<hal::byte const> byte_stream) {
               m_ctrl_ep->write(byte_stream);
               total_size += byte_stream.size();
-            },
-            i);
+            });
         }
 
         if (total_size != req.length) {
-          safe_throw(
-            hal::exception(this));  // TODO: Make specific exception for this
+          safe_throw(hal::operation_not_supported(
+            this));  // TODO: Make specific exception for this
         }
 
         break;
@@ -279,7 +278,9 @@ private:
           auto scatter_arr = make_scatter_bytes(
             std::to_array({ static_cast<byte const>(m_lang_str.length()),
                             static_cast<byte const>(descriptor_type::string) }),
-            std::span<byte const>(m_lang_str));
+            std::span<byte const>(
+              reinterpret_cast<byte const*>(m_lang_str.data()),
+              m_lang_str.size()));
           m_ctrl_ep->write(scatter_arr);
           break;
         }
@@ -310,10 +311,12 @@ private:
 
     if (m_iface_for_str_desc.has_value() &&
         m_iface_for_str_desc->first == target_idx && write_full_desc) {
-      m_iface_for_str_desc->second->write_descriptors(
-        [this](scatter_span<hal::byte const> desc) { m_ctrl_ep->write(desc); },
-        target_idx);
-      return;
+      bool success = m_iface_for_str_desc->second->write_string_descriptor(
+        target_idx,
+        [this](scatter_span<hal::byte const> desc) { m_ctrl_ep->write(desc); });
+      if (success) {
+        return;
+      }
     }
 
     // Iterate through every interface now to find a match
@@ -331,7 +334,7 @@ private:
 
     if (m_active_conf != nullptr) {
       for (auto const& iface : m_active_conf->interfaces) {
-        auto res = iface->write_string_descriptor(f, target_idx);
+        auto res = iface->write_string_descriptor(target_idx, f);
         if (res) {
           return;
         }
@@ -340,7 +343,7 @@ private:
 
     for (configuration& conf : m_configs) {
       for (auto const& iface : conf.interfaces) {
-        auto res = iface->write_string_descriptor(f, target_idx);
+        auto res = iface->write_string_descriptor(target_idx, f);
         if (res) {
           break;
         }
@@ -394,12 +397,12 @@ private:
     return true;
   }
 
-  strong_ptr<usb_control_endpoint> m_ctrl_ep;
+  strong_ptr<control_endpoint> m_ctrl_ep;
   device m_device;
   std::array<configuration, num_configs> m_configs;
   std::string_view m_lang_str;
   u8 m_starting_str_idx;
-  std::optional<std::pair<u8, strong_ptr<usb_interface>>> m_iface_for_str_desc;
+  std::optional<std::pair<u8, strong_ptr<interface>>> m_iface_for_str_desc;
   configuration* m_active_conf = nullptr;
   bool m_has_setup_packet = false;
 };

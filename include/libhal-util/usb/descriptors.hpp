@@ -1,12 +1,10 @@
 #pragma once
 
-// TODO: Move to util
 /* TODO:
   Class, subclass, proto validator
-  Device qualifer descriptor
-  Other speed descriptor
-  Interface Association Descriptor
- */
+  Device qualifer descriptor (happens between device and config)
+  Other speed descriptor (happens with configuration)
+*/
 
 #include <array>
 #include <libhal/error.hpp>
@@ -33,12 +31,12 @@ struct device
   {
     u16 p_bcd_usb;
     class_code p_device_class;
-    u8 p_device_subclass;  // NOLINT
+    u8 p_device_subclass;
     u8 p_device_protocol;
-    u16 p_id_vendor;  // NOLINT
+    u16 p_id_vendor;
     u16 p_id_product;
     u16 p_bcd_device;
-    std::string_view p_manufacturer;  // NOLINT
+    std::string_view p_manufacturer;
     std::string_view p_product;
     std::string_view p_serial_number_str;
   };
@@ -49,36 +47,37 @@ struct device
     , serial_number_str(args.p_serial_number_str)
   {
     u8 idx = 0;
-    auto bcd_usb_bytes = hal::as_bytes(&args.p_bcd_usb, 2);
+    auto bcd_usb_bytes = hal::as_bytes(&args.p_bcd_usb, 1);
     for (auto& bcd_usb_byte : bcd_usb_bytes) {
-      m_packed_arr[idx++] = bcd_usb_byte;
+      m_packed_arr[idx++] = bcd_usb_byte;  // 0, 1
     }
-    m_packed_arr[idx++] = args.p_bcd_usb;
-    m_packed_arr[idx++] = static_cast<u8>(args.p_device_class);
-    m_packed_arr[idx++] = args.p_device_subclass;
-    m_packed_arr[idx++] = args.p_device_protocol;
 
-    m_packed_arr[idx++] = 0;  // Max Packet length handled by the enumerator
-    auto id_vendor_bytes = hal::as_bytes(&args.p_id_vendor, 2);
+    m_packed_arr[idx++] = static_cast<u8>(args.p_device_class);  // 2
+    m_packed_arr[idx++] = args.p_device_subclass;                // 3
+    m_packed_arr[idx++] = args.p_device_protocol;                // 4
+
+    m_packed_arr[idx++] = 0;  // 5 Max Packet length handled by the enumerator
+
+    auto id_vendor_bytes = hal::as_bytes(&args.p_id_vendor, 1);
     for (auto& id_vendor_byte : id_vendor_bytes) {
-      m_packed_arr[idx++] = id_vendor_byte;
+      m_packed_arr[idx++] = id_vendor_byte;  // 6, 7
     }
 
-    auto id_product_bytes = hal::as_bytes(&args.p_id_product, 2);
+    auto id_product_bytes = hal::as_bytes(&args.p_id_product, 1);
     for (auto& id_product_byte : id_product_bytes) {
-      m_packed_arr[idx++] = id_product_byte;
+      m_packed_arr[idx++] = id_product_byte;  // 8, 9
     }
 
-    auto bcd_device_bytes = hal::as_bytes(&args.p_bcd_device, 2);
+    auto bcd_device_bytes = hal::as_bytes(&args.p_bcd_device, 1);
     for (auto& bcd_device_byte : bcd_device_bytes) {
-      m_packed_arr[idx++] = bcd_device_byte;
+      m_packed_arr[idx++] = bcd_device_byte;  // 10, 11
     }
 
     // Evaluated during enumeration
-    m_packed_arr[idx++] = 0;  // string idx of manufacturer
-    m_packed_arr[idx++] = 0;  // string idx of product
-    m_packed_arr[idx++] = 0;  // string idx of serial number
-    m_packed_arr[idx++] = 0;  // Number of possible configurations
+    m_packed_arr[idx++] = 0;  // 12 string idx of manufacturer
+    m_packed_arr[idx++] = 0;  // 13 string idx of product
+    m_packed_arr[idx++] = 0;  // 14 string idx of serial number
+    m_packed_arr[idx++] = 0;  // 15 Number of possible configurations
   };
 
   constexpr u16& bcd_usb()
@@ -116,7 +115,7 @@ struct device
     return *reinterpret_cast<u16*>(&m_packed_arr[9]);
   }
 
-  operator std::span<u8 const>() const
+  operator std::span<byte const>() const
   {
     return m_packed_arr;
   }
@@ -154,7 +153,7 @@ private:
 // https://www.beyondlogic.org/usbnutshell/usb5.shtml#ConfigurationDescriptors
 
 template<typename T>
-concept usb_interface_concept = std::derived_from<T, usb_interface>;
+concept usb_interface_concept = std::derived_from<T, interface>;
 
 // Calculate: total length, number of interfaces, configuration value
 struct configuration
@@ -209,7 +208,8 @@ struct configuration
     u8 idx = 0;
 
     // Anything marked with 0 is to be populated at enumeration time
-    m_packed_arr[idx++] = 0;                  // Total Length
+    m_packed_arr[idx] = 0;  // Total Length
+    idx += 2;
     m_packed_arr[idx++] = interfaces.size();  // number of interfaces
     m_packed_arr[idx++] = 0;                  // Config number
     m_packed_arr[idx++] = 0;                  // Configuration name string index
@@ -237,7 +237,7 @@ struct configuration
   }
 
   std::string_view name;
-  std::pmr::vector<strong_ptr<usb_interface>> interfaces;
+  std::pmr::vector<strong_ptr<interface>> interfaces;
 
 private:
   constexpr u16& total_length()

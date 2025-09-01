@@ -1,25 +1,23 @@
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 #include <span>
 
-// TODO: Move to util
 namespace hal::v5::usb {
 
-// TODO: Make generic
-u16 from_le_bytes(hal::byte& first, hal::byte& second)
-{
-  return static_cast<u16>(second) << 8 | first;
-}
+// TODO: Remove
+// u16 from_le_bytes(hal::byte& first, hal::byte& second)
+// {
+//   return static_cast<u16>(second) << 8 | first;
+// }
 
-std::array<hal::byte, 2> to_le_bytes(u16 n)
-{
-  return { static_cast<hal::byte>(n & 0xFF),
-           static_cast<hal::byte>((n & 0xFF << 8) >> 8) };
-}
+// std::array<hal::byte, 2> to_le_bytes(u16 n)
+// {
+//   return { static_cast<hal::byte>(n & 0xFF),
+//            static_cast<hal::byte>((n & 0xFF << 8) >> 8) };
+// }
 
 namespace constants {
 
@@ -87,62 +85,44 @@ enum class descriptor_type : hal::byte
   superspeed_endpoint_isochronous_companion = 0x31,
 };
 
-struct setup_request
+// TODO: Remove
+// enum class standard_request_types : hal::byte const
+// {
+//   get_status = 0x00,
+//   clear_feature = 0x01,
+//   set_feature = 0x03,
+//   set_address = 0x05,
+//   get_descriptor = 0x06,
+//   set_descriptor = 0x07,
+//   get_configuration = 0x08,
+//   set_configuration = 0x09,
+//   get_interface = 0x0A,
+//   set_interface = 0x11,
+//   synch_frame = 0x12,
+//   invalid
+// };
+
+// [[nodiscard]] constexpr standard_request_types determine_standard_request(
+//   setup_packet pkt)
+// {
+//   if (pkt.get_type() != setup_packet::type::standard || pkt.request == 0x04
+//   ||
+//       pkt.request > 0x12) {
+//     return standard_request_types::invalid;
+//   }
+
+//   return static_cast<standard_request_types>(pkt.request);
+// }
+
+constexpr setup_packet from_span(std::span<byte> raw_req)
 {
-  using bitmap = v5::usb_interface::req_bitmap;
-
-  enum class standard_request_types : hal::byte const
-  {
-    get_status = 0x00,
-    clear_feature = 0x01,
-    set_feature = 0x03,
-    set_address = 0x05,
-    get_descriptor = 0x06,
-    set_descriptor = 0x07,
-    get_configuration = 0x08,
-    set_configuration = 0x09,
-    get_interface = 0x0A,
-    set_interface = 0x11,
-    synch_frame = 0x12,
-    invalid
-  };
-
-  constexpr setup_request(bitmap p_request_type,
-                          hal::byte p_request,  // NOLINT
-                          u16 p_value,
-                          u16 p_index,
-                          u16 p_length)
-    : request_type(p_request_type)
-    , request(p_request)
-    , value(p_value)
-    , index(p_index)
-    , length(p_length) {};
-
-  constexpr setup_request(std::span<byte> raw_req)
-    : request_type(raw_req[0])
-    , request(raw_req[1])
-    , value(from_le_bytes(raw_req[2], raw_req[3]))
-    , index(from_le_bytes(raw_req[4], raw_req[5]))
-    , length(from_le_bytes(raw_req[6], raw_req[7]))
-
-  {};
-
-  // Probably better semantics for this function, this disjoints
-  [[nodiscard]] constexpr standard_request_types get_standard_request() const
-  {
-    if (request_type.get_type() != bitmap::type::standard || request == 0x04 ||
-        request > 0x12) {
-      return standard_request_types::invalid;
-    }
-
-    return static_cast<standard_request_types>(request);
-  }
-
-  bitmap const request_type;
-  hal::byte const request;
-  u16 const value;
-  u16 const index;
-  u16 const length;
-};
+  setup_packet pkt;
+  pkt.request_type = raw_req[0];
+  pkt.request = raw_req[1];
+  pkt.value = setup_packet::from_le_bytes(raw_req[2], raw_req[3]);
+  pkt.index = setup_packet::from_le_bytes(raw_req[4], raw_req[5]);
+  pkt.length = setup_packet::from_le_bytes(raw_req[6], raw_req[7]);
+  return pkt;
+}
 
 }  // namespace hal::v5::usb
