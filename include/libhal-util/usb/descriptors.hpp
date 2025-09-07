@@ -87,32 +87,32 @@ struct device
 
   constexpr u8& device_class()
   {
-    return m_packed_arr[1];
+    return m_packed_arr[2];
   }
 
   constexpr u8& device_sub_class()
   {
-    return m_packed_arr[2];
+    return m_packed_arr[3];
   }
 
   constexpr u8& device_protocol()
   {
-    return m_packed_arr[3];
+    return m_packed_arr[4];
   }
 
   constexpr u16& id_vendor()
   {
-    return *reinterpret_cast<u16*>(&m_packed_arr[5]);
+    return *reinterpret_cast<u16*>(&m_packed_arr[6]);
   }
 
   constexpr u16& id_product()
   {
-    return *reinterpret_cast<u16*>(&m_packed_arr[7]);
+    return *reinterpret_cast<u16*>(&m_packed_arr[8]);
   }
 
   constexpr u16& bcd_device()
   {
-    return *reinterpret_cast<u16*>(&m_packed_arr[9]);
+    return *reinterpret_cast<u16*>(&m_packed_arr[10]);
   }
 
   operator std::span<byte const>() const
@@ -127,7 +127,7 @@ struct device
 private:
   constexpr u8& max_packet_size()
   {
-    return m_packed_arr[4];
+    return m_packed_arr[5];
   }
 
   constexpr u8& manufacturer_index()
@@ -172,7 +172,7 @@ struct configuration
 
     constexpr bitmap(bool p_self_powered, bool p_remote_wakeup)
     {
-      m_bitmap = (1 << 7) & (p_self_powered << 6) & (p_remote_wakeup << 5);
+      m_bitmap = (1 << 7) | (p_self_powered << 6) | (p_remote_wakeup << 5);
     }
 
     constexpr u8 to_byte()
@@ -208,14 +208,14 @@ struct configuration
     u8 idx = 0;
 
     // Anything marked with 0 is to be populated at enumeration time
-    m_packed_arr[idx] = 0;  // Total Length
-    idx += 2;
-    m_packed_arr[idx++] = interfaces.size();  // number of interfaces
-    m_packed_arr[idx++] = 0;                  // Config number
-    m_packed_arr[idx++] = 0;                  // Configuration name string index
+    m_packed_arr[idx++] = 0;  // 0 Total Length
+    m_packed_arr[idx++] = 0;
+    m_packed_arr[idx++] = interfaces.size();  // 2 number of interfaces
+    m_packed_arr[idx++] = 0;                  // 3 Config number
+    m_packed_arr[idx++] = 0;  // 4 Configuration name string index
 
-    m_packed_arr[idx++] = p_attributes.to_byte();
-    m_packed_arr[idx++] = p_max_power;
+    m_packed_arr[idx++] = p_attributes.to_byte();  // 5
+    m_packed_arr[idx++] = p_max_power;             // 6
   }
 
   operator std::span<u8 const>() const
@@ -231,6 +231,7 @@ struct configuration
   {
     return m_packed_arr[5];
   }
+
   constexpr u8& max_power()
   {
     return m_packed_arr[6];
@@ -239,7 +240,7 @@ struct configuration
   std::string_view name;
   std::pmr::vector<strong_ptr<interface>> interfaces;
 
-private:
+  // private:
   constexpr u16& total_length()
   {
     return *reinterpret_cast<u16*>(&m_packed_arr[0]);

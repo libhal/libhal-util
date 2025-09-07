@@ -16,6 +16,17 @@
 // TODO: move to util
 namespace hal::v5::usb {
 
+template<typename T>
+size_t scatter_span_size(scatter_span<T> ss)
+{
+  size_t res = 0;
+  for (auto const& s : ss) {
+    res += s.size();
+  }
+
+  return res;
+}
+
 template<size_t num_configs>
 class enumerator
 {
@@ -60,7 +71,7 @@ public:
 
     // Device
     m_device.manufacturer_index() = cur_str_idx++;
-    m_device.id_product() = cur_str_idx++;
+    m_device.product_index() = cur_str_idx++;
     m_device.serial_number_index() = cur_str_idx++;
     m_device.num_configurations() = num_configs;
 
@@ -77,7 +88,7 @@ public:
         interface::descriptor_count deltas = iface->write_descriptors(
           { .interface = cur_iface_idx, .string = cur_str_idx },
           [&total_length](scatter_span<hal::byte const> p_data) {
-            total_length += p_data.size();
+            total_length += scatter_span_size(p_data);
           });
 
         cur_iface_idx += deltas.interface;
@@ -120,9 +131,7 @@ public:
       handle_standard_device_request(req);
       m_ctrl_ep->write({});  // Send ZLP to complete Data Transaction
       if (static_cast<standard_request_types>(req.request) ==
-            standard_request_types::get_descriptor &&
-          (static_cast<descriptor_type>((req.value & 0xFF << 8) >> 8) ==
-           descriptor_type::configuration)) {
+          standard_request_types::set_configuration) {
         finished_enumeration = true;
         m_ctrl_ep->on_receive(
           [this](on_receive_tag) { m_has_setup_packet = true; });
@@ -157,7 +166,7 @@ public:
 
     if (determine_standard_request(req) ==
           standard_request_types::get_descriptor &&
-        static_cast<descriptor_type>(req.value & 0xFF << 8) ==
+        static_cast<descriptor_type>((req.value & 0xFF << 8) >> 8) ==
           descriptor_type::string) {
       handle_str_descriptors(req.value & 0xFF, req.length > 2);
 
@@ -223,15 +232,17 @@ private:
 
   void process_get_descriptor(setup_packet& req)
   {
-    hal::byte desc_type = req.value & 0xFF << 8;
+    hal::byte desc_type = (req.value & 0xFF << 8) >> 8;
     [[maybe_unused]] hal::byte desc_idx = req.value & 0xFF;
 
     switch (static_cast<descriptor_type>(desc_type)) {
       case descriptor_type::device: {
-        auto scatter_arr = make_scatter_bytes(
+        auto header =
           std::to_array({ constants::device_desc_size,
-                          static_cast<byte const>(descriptor_type::device) }),
-          m_device);
+                          static_cast<byte const>(descriptor_type::device) });
+        m_device.max_packet_size() =
+          static_cast<byte const>(m_ctrl_ep->info().size);
+        auto scatter_arr = make_scatter_bytes(header, m_device);
         m_ctrl_ep->write(static_cast<scatter_span<byte const>>(scatter_arr));
         break;
       }
@@ -239,29 +250,28 @@ private:
       case descriptor_type::configuration: {
         configuration& conf = m_configs[desc_idx];
         if (req.length <= 2) {  // requesting total length
-          auto scatter_tot_len =
-            make_scatter_bytes(setup_packet::to_le_bytes(conf.total_length()));
+          auto tl = setup_packet::to_le_bytes(conf.total_length());
+          auto scatter_tot_len = make_scatter_bytes(tl);
           m_ctrl_ep->write(scatter_tot_len);
           break;
         }
 
         // if its >2 then assumed to be requesting desc type
         u16 total_size = constants::config_desc_size;
-        auto scatter_conf_hdr = make_scatter_bytes(
+        auto conf_hdr =
           std::to_array({ constants::config_desc_size,
-                          static_cast<byte>(descriptor_type::configuration) }),
-          m_configs[desc_idx]);
+                          static_cast<byte>(descriptor_type::configuration) });
+        auto scatter_conf_hdr =
+          make_scatter_bytes(conf_hdr, m_configs[desc_idx]);
 
         m_ctrl_ep->write(scatter_span<byte const>(scatter_conf_hdr));
 
-        for (size_t i = 0; i < conf.interfaces.size(); i++) {
-          auto iface = conf.interfaces[i];
-          byte i_byte = static_cast<byte>(i);
+        for (auto const& iface : conf.interfaces) {
           std::ignore = iface->write_descriptors(
-            { .interface = i_byte, .string = i_byte },
+            { .interface = std::nullopt, .string = std::nullopt },
             [this, &total_size](scatter_span<hal::byte const> byte_stream) {
               m_ctrl_ep->write(byte_stream);
-              total_size += byte_stream.size();
+              total_size += scatter_span_size(byte_stream);
             });
         }
 
@@ -275,9 +285,11 @@ private:
 
       case descriptor_type::string: {
         if (desc_idx == 0) {
-          auto scatter_arr = make_scatter_bytes(
+          auto s_hdr =
             std::to_array({ static_cast<byte const>(m_lang_str.length()),
-                            static_cast<byte const>(descriptor_type::string) }),
+                            static_cast<byte const>(descriptor_type::string) });
+          auto scatter_arr = make_scatter_bytes(
+            s_hdr,
             std::span<byte const>(
               reinterpret_cast<byte const*>(m_lang_str.data()),
               m_lang_str.size()));
@@ -382,9 +394,10 @@ private:
     // Acceptable to access without checking because guaranteed to be Some,
     // there is no pattern matching in C++ yet so unable to do this cleanly
     // (would require a check on every single one)
-    auto scatter_arr_str_hdr = make_scatter_bytes(
+    auto hdr_arr =
       std::to_array({ static_cast<hal::byte const>(conf_sv->length()),
-                      static_cast<hal::byte const>(descriptor_type::string) }));
+                      static_cast<hal::byte const>(descriptor_type::string) });
+    auto scatter_arr_str_hdr = make_scatter_bytes(hdr_arr);
     m_ctrl_ep->write(scatter_arr_str_hdr);
 
     if (write_full_desc) {
