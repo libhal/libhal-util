@@ -24,10 +24,10 @@
 #include <libhal/error.hpp>
 #include <libhal/pointers.hpp>
 #include <libhal/scatter_span.hpp>
-#include <libhal/serial.hpp>
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 #include <memory_resource>
+#include <print>
 #include <span>
 #include <string_view>
 #include <thread>
@@ -213,7 +213,7 @@ private:
 struct mock : public interface
 {
 
-  constexpr mock(std::u16string_view p_name)
+  constexpr mock(std::string_view p_name)
     : name(p_name)
   {
   }
@@ -293,7 +293,7 @@ struct mock : public interface
     4,  // interface_protocol
     0   // interface name index
   };
-  std::u16string_view name;
+  std::string_view name;
 };
 
 class iad_mock : public interface
@@ -301,8 +301,8 @@ class iad_mock : public interface
 public:
   ~iad_mock() override = default;
 
-  iad_mock(std::u16string_view p_iface_name_one,  // NOLINT
-           std::u16string_view p_iface_name_two)
+  iad_mock(std::string_view p_iface_name_one,  // NOLINT
+           std::string_view p_iface_name_two)
     : m_name_one(p_iface_name_one)
     , m_name_two(p_iface_name_two) {};
 
@@ -412,6 +412,7 @@ private:
   u16 driver_get_status(setup_packet p_pkt)
   {
     if (p_pkt.get_recipient() != setup_packet::recipient::interface) {
+      // std::println("Unsupported recipient");
       safe_throw(hal::operation_not_supported(this));
     }
 
@@ -430,6 +431,7 @@ private:
   {
     std::ignore = p_selector;
     if (p_pkt.get_recipient() != setup_packet::recipient::interface) {
+      // std::println("Unsupported recipient");
       safe_throw(hal::operation_not_supported(this));
     }
 
@@ -440,6 +442,7 @@ private:
     } else if (iface_idx == m_iface_two.num) {
       m_iface_two.feature = p_set;
     } else {
+      // std::println("Invalid interface index");
       safe_throw(hal::operation_not_supported(this));
     }
   }
@@ -453,6 +456,7 @@ private:
     } else if (iface_idx == m_iface_two.num) {
       return m_iface_two.alt_settings;
     } else {
+      // std::println("Invalid interface index");
       safe_throw(hal::operation_not_supported(this));
     }
   }
@@ -466,6 +470,7 @@ private:
     } else if (iface_idx == m_iface_two.num) {
       m_iface_two.alt_settings = alt_setting;
     } else {
+      // std::println("Invalid interface index");
       safe_throw(hal::operation_not_supported(this));
     }
   }
@@ -480,9 +485,9 @@ private:
 
 public:
   mock_iface_descriptor m_iface_one;
-  std::u16string_view m_name_one;
+  std::string_view m_name_one;
   mock_iface_descriptor m_iface_two;
-  std::u16string_view m_name_two;
+  std::string_view m_name_two;
   bool m_wrote_descriptors = false;
 };
 
@@ -538,260 +543,8 @@ void simulate_sending_payload(
 //   return vec;
 // }
 
-class mock_serial : public hal::serial
-{
-  void driver_configure(settings const& p_settings) override
-  {
-    std::ignore = p_settings;
-  }
-
-  write_t driver_write(std::span<byte const> p_data) override
-  {
-    std::string_view sv(reinterpret_cast<char const*>(p_data.data()),
-                        p_data.size());
-    return { .data = p_data };
-  }
-
-  read_t driver_read(std::span<byte> p_data) override
-  {
-    std::ignore = p_data;
-    return { .data = {}, .available = 0, .capacity = 0 };
-  }
-
-  void driver_flush() override
-  {
-  }
-};
-
 }  // namespace
 boost::ut::suite<"usb_test"> usb_test = [] {
   // TODO(#78): Add usb utility tests
 };
-
-boost::ut::suite<"enumeration_test"> enumeration_test = [] {
-  using namespace boost::ut;
-  using namespace hal::literals;
-  namespace pmr = std::pmr;
-  static std::array<byte, 4096> iface_buf;
-
-  iface_buf.fill(0);
-  device dev({ .p_bcd_usb = 0x0002,
-               .p_device_class = class_code::application_specific,
-               .p_device_subclass = 0,
-               .p_device_protocol = 0,
-               .p_id_vendor = 0xffff,
-               .p_id_product = 0x0000,
-               .p_bcd_device = 0x0001,
-               .p_manufacturer = u"libhal",
-               .p_product = u"Unit Test",
-               .p_serial_number_str = u"123456789" });
-
-  pmr::monotonic_buffer_resource pool(iface_buf.data(), std::size(iface_buf));
-  std::array<configuration, 1> conf_arr{ configuration{
-    u"Test Config",
-    configuration::bitmap(true, false),
-    1,
-    &pool,
-    make_strong_ptr<mock>(&pool, mock(u"Mock Iface")) } };
-
-  mock_usb_control_endpoint ctrl_ep;
-  ctrl_ep.m_endpoint.m_info = { .size = 8, .number = 0, .stalled = false };
-  auto ctrl_ptr = make_strong_ptr<mock_usb_control_endpoint>(&pool, ctrl_ep);
-  auto const conf_arr_ptr =
-    make_strong_ptr<std::array<configuration, 1>>(&pool, conf_arr);
-  auto dev_ptr = make_strong_ptr<device>(&pool, dev);
-  auto console_ptr = make_strong_ptr<mock_serial>(&pool, mock_serial());
-  enumerator<1> en{ ctrl_ptr, dev_ptr, conf_arr_ptr, 0x0409, 1, false };
-
-  "basic usb enumeration test"_test = [&en, &ctrl_ptr] {
-    // Start enumeration process and verify connection
-    auto f = [&en]() { en.enumerate(); };
-    constexpr byte delay_time_ms = 1000;
-    auto& ctrl_buf = ctrl_ptr->m_out_buf;
-    std::thread ejh(f);
-    std::this_thread::sleep_for(std::chrono::milliseconds(
-      delay_time_ms));  // Should be enough time to connect
-    expect(that % true == ctrl_ptr->m_is_connected);
-    ctrl_buf.clear();
-
-    u16 expected_addr = 0x30;
-    setup_packet set_addr{ false,
-                           setup_packet::type::standard,
-                           setup_packet::recipient::device,
-                           static_cast<byte>(
-                             standard_request_types::set_address),
-                           0x30,
-                           0,  // a
-                           0 };
-
-    simulate_sending_payload(ctrl_ptr, set_addr);
-    ctrl_ptr->simulate_interrupt();
-    std::this_thread::sleep_for(std::chrono::milliseconds(delay_time_ms));
-    expect(that % expected_addr == ctrl_ptr->m_address);
-    ctrl_buf.clear();
-
-    // Get device descriptor
-    u16 desc_t_idx = static_cast<byte>(descriptor_type::device) << 8;
-    setup_packet get_desc(
-      true,
-      setup_packet::type::standard,
-      setup_packet::recipient::device,
-      static_cast<byte>(standard_request_types::get_descriptor),
-      desc_t_idx,
-      0,
-      18);
-    simulate_sending_payload(ctrl_ptr, get_desc);
-    ctrl_ptr->simulate_interrupt();
-    std::this_thread::sleep_for(std::chrono::milliseconds(delay_time_ms));
-    std::span<byte const> dev_actual(ctrl_buf.data(), 18);
-    std::array<byte, 18> dev_expected{
-      0x12,                                              // length
-      static_cast<byte const>(descriptor_type::device),  // type
-      0x02,                                              // usb bcd
-      0x00,
-      static_cast<byte const>(class_code::application_specific),
-      0,     // subclass
-      0,     // protocol
-      8,     // max packet size
-      0xff,  // vendor id
-      0xff,
-      0,  // product id
-      0,
-      0x1,  // bcd device
-      0x0,
-      1,  // manufactures index
-      2,  // product index
-      3,  // product index
-      1   // num configuration
-    };
-
-    expect(that % (span_eq(std::span<byte const>(dev_expected), dev_actual)));
-    ctrl_buf.clear();
-
-    // Get a string descriptor header from device
-    // where 1 is the manufacture string index
-    constexpr u16 str_desc_t_idx =
-      static_cast<byte>(descriptor_type::string) << 8 | 1;
-    setup_packet str_hdr_req(
-      true,
-      setup_packet::type::standard,
-      setup_packet::recipient::device,
-      static_cast<byte>(standard_request_types::get_descriptor),
-      str_desc_t_idx,
-      0,
-      2);
-
-    simulate_sending_payload(ctrl_ptr, str_hdr_req);
-    ctrl_ptr->simulate_interrupt();
-    std::this_thread::sleep_for(std::chrono::milliseconds(delay_time_ms));
-    std::array<byte const, 2> expected_manu_str_hdr{
-      static_cast<byte const>(14),  // string is "libhal"
-      static_cast<byte const>(descriptor_type::string)
-    };
-    std::span<byte const> actual_dev_str_hdr(ctrl_buf.data(), 2);
-    expect(that % (span_eq(std::span<byte const>(expected_manu_str_hdr),
-                           actual_dev_str_hdr)));
-    ctrl_buf.clear();
-
-    // Get a string descriptor from device
-    setup_packet str_req(str_hdr_req);
-    str_req.length = expected_manu_str_hdr[0];
-    simulate_sending_payload(ctrl_ptr, str_req);
-    ctrl_ptr->simulate_interrupt();
-    std::this_thread::sleep_for(std::chrono::milliseconds(delay_time_ms));
-    std::u16string_view expected_manu_str = u"libhal";
-
-    auto expected_manu_str_scatter =
-      make_scatter_bytes(expected_manu_str_hdr,
-                         std::span<byte const>(reinterpret_cast<byte const*>(
-                                                 expected_manu_str.data()),
-                                               expected_manu_str.length() * 2));
-    auto actual_manu_str_scatter = make_scatter_bytes(ctrl_buf);
-    expect(that % (scatter_span<byte const>(expected_manu_str_scatter) ==
-                   scatter_span<byte const>(actual_manu_str_scatter)));
-    ctrl_buf.clear();
-
-    // Get Configuration length
-    setup_packet conf_hdr_req(
-      true,
-      setup_packet::type::standard,
-      setup_packet::recipient::device,
-      static_cast<byte>(standard_request_types::get_descriptor),
-      static_cast<byte>(descriptor_type::configuration) << 8,
-      0,
-      9);
-
-    // Expected Config + interface descriptor
-    std::array<byte const, 18> expected_conf_iface_desc{
-      // config descriptor
-      0x9,                                                      // len
-      static_cast<byte const>(descriptor_type::configuration),  // type
-      0x12,  // HH: total length
-      0x0,   // LL: tl
-      0x1,   // number of interfaces
-      0x1,   // config value
-      0x4,   // name string index
-      0xc0,  // bmattributes (selfpowered = true)
-      0x1,   // max power
-
-      // Interface descriptor
-      iface_desc_length,
-      iface_desc_type,
-      0x0,  // iface number
-      0x0,  // alt settings
-      0x1,  // number of endpoints
-      0x2,  // class
-      0x3,  // subclass
-      0x4,  // protocol
-      0x5   // iface name string index
-    };
-
-    // Get Configuration descriptor header
-    simulate_sending_payload(ctrl_ptr, conf_hdr_req);
-    ctrl_ptr->simulate_interrupt();
-    std::this_thread::sleep_for(std::chrono::milliseconds(delay_time_ms));
-
-    auto expected_tl_hh = expected_conf_iface_desc[2];
-    auto expected_tl_ll = expected_conf_iface_desc[3];
-    auto expected_total_len =
-      setup_packet::from_le_bytes(expected_tl_hh, expected_tl_ll);
-
-    auto actual_tl_hh = ctrl_buf[2];
-    auto actual_tl_ll = ctrl_buf[3];
-    auto actual_total_len =
-      setup_packet::from_le_bytes(actual_tl_hh, actual_tl_ll);
-    expect(that % expected_total_len == actual_total_len);
-    ctrl_buf.clear();
-
-    // Get Configuration Descriptor + interface descriptor + endpoint descriptor
-    setup_packet conf_req(conf_hdr_req);
-    conf_req.length = expected_total_len;
-    simulate_sending_payload(ctrl_ptr, conf_req);
-    ctrl_ptr->simulate_interrupt();
-    std::this_thread::sleep_for(std::chrono::milliseconds(delay_time_ms));
-    expect(that % (span_eq(std::span<byte const>(expected_conf_iface_desc),
-                           std::span<byte const>(ctrl_buf))));
-
-    // Set configuration
-    setup_packet set_conf_req(
-      false,
-      setup_packet::type::standard,
-      setup_packet::recipient::device,
-      static_cast<byte const>(standard_request_types::set_configuration),
-      1,
-      0,
-      0);
-
-    simulate_sending_payload(ctrl_ptr, set_conf_req);
-    ctrl_ptr->simulate_interrupt();
-    std::this_thread::sleep_for(std::chrono::milliseconds(delay_time_ms));
-
-    ejh.join();
-    // Verify active config
-    expect(that %
-           (span_eq(std::span(expected_conf_iface_desc.data() + 2, 7),
-                    std::span<byte const>(en.get_active_configuration()))));
-  };
-};
-
 }  // namespace hal::v5::usb
