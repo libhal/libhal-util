@@ -27,7 +27,6 @@
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 #include <memory_resource>
-#include <print>
 #include <span>
 #include <string_view>
 #include <thread>
