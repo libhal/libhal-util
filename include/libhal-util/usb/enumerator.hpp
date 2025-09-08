@@ -101,7 +101,7 @@ public:
 
     // TODO: Make async
     bool finished_enumeration = false;
-    bool waiting_for_data = true;
+    bool volatile waiting_for_data = true;
 
     using on_receive_tag = control_endpoint::on_receive_tag;
     m_ctrl_ep->on_receive(
