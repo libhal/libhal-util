@@ -19,102 +19,105 @@
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 
-namespace hal::v5::usb {
+namespace hal::v5 {
 // TODO(#79): Add doxygen docs to USB APIs
-inline void write(control_endpoint& p_endpoint,
+inline void write(usb::control_endpoint& p_endpoint,
                   scatter_span<hal::byte const> p_data_out)
 {
   p_endpoint.write(p_data_out);
 }
 
-inline void write_and_flush(control_endpoint& p_endpoint,
+inline void write_and_flush(usb::control_endpoint& p_endpoint,
                             scatter_span<hal::byte const> p_data_out)
 {
   p_endpoint.write(p_data_out);
   p_endpoint.write({});
 }
 
-inline void write(control_endpoint& p_endpoint,
+inline void write(usb::control_endpoint& p_endpoint,
                   std::span<hal::byte const> p_data_out)
 {
   p_endpoint.write(make_scatter_bytes(p_data_out));
 }
 
-inline void write_and_flush(control_endpoint& p_endpoint,
+inline void write_and_flush(usb::control_endpoint& p_endpoint,
                             std::span<hal::byte const> p_data_out)
 {
   p_endpoint.write(make_scatter_bytes(p_data_out));
   p_endpoint.write({});
 }
 
-inline void write(in_endpoint& p_endpoint,
+inline void write(usb::in_endpoint& p_endpoint,
                   scatter_span<hal::byte const> p_data_out)
 {
   p_endpoint.write(p_data_out);
 }
 
-inline void write_and_flush(in_endpoint& p_endpoint,
+inline void write_and_flush(usb::in_endpoint& p_endpoint,
                             scatter_span<hal::byte const> p_data_out)
 {
   p_endpoint.write(p_data_out);
   p_endpoint.write({});
 }
 
-inline void write(in_endpoint& p_endpoint,
+inline void write(usb::in_endpoint& p_endpoint,
                   std::span<hal::byte const> p_data_out)
 {
   p_endpoint.write(make_scatter_bytes(p_data_out));
 }
 
-inline void write_and_flush(in_endpoint& p_endpoint,
+inline void write_and_flush(usb::in_endpoint& p_endpoint,
                             std::span<hal::byte const> p_data_out)
 {
   p_endpoint.write(make_scatter_bytes(p_data_out));
   p_endpoint.write({});
 }
 
-inline void write(in_endpoint& p_endpoint, spanable_bytes auto... p_data_out)
+inline void write(usb::in_endpoint& p_endpoint,
+                  spanable_bytes auto... p_data_out)
 {
   p_endpoint.write(make_scatter_bytes(p_data_out...));
 }
 
-inline void write_and_flush(in_endpoint& p_endpoint,
+inline void write_and_flush(usb::in_endpoint& p_endpoint,
                             spanable_bytes auto... p_data_out)
 {
   p_endpoint.write(make_scatter_bytes(p_data_out...));
   p_endpoint.write({});
 }
 
-inline auto read(out_endpoint& p_endpoint, scatter_span<hal::byte> p_data_out)
-{
-  return p_endpoint.read(p_data_out);
-}
-
-inline auto read(out_endpoint& p_endpoint, std::span<hal::byte> p_data_out)
-{
-  return p_endpoint.read(make_writable_scatter_bytes(p_data_out));
-}
-
-inline auto read(out_endpoint& p_endpoint,
-                 spanable_writable_bytes auto... p_data_out)
-{
-  return p_endpoint.read(make_writable_scatter_bytes(p_data_out...));
-}
-
-inline auto read(control_endpoint& p_endpoint,
+inline auto read(usb::out_endpoint& p_endpoint,
                  scatter_span<hal::byte> p_data_out)
 {
   return p_endpoint.read(p_data_out);
 }
 
-inline auto read(control_endpoint& p_endpoint, std::span<hal::byte> p_data_out)
+inline auto read(usb::out_endpoint& p_endpoint, std::span<hal::byte> p_data_out)
 {
   return p_endpoint.read(make_writable_scatter_bytes(p_data_out));
 }
 
-inline auto read(control_endpoint& p_endpoint,
+inline auto read(usb::out_endpoint& p_endpoint,
                  spanable_writable_bytes auto... p_data_out)
 {
   return p_endpoint.read(make_writable_scatter_bytes(p_data_out...));
 }
-}  // namespace hal::v5::usb
+
+inline auto read(usb::control_endpoint& p_endpoint,
+                 scatter_span<hal::byte> p_data_out)
+{
+  return p_endpoint.read(p_data_out);
+}
+
+inline auto read(usb::control_endpoint& p_endpoint,
+                 std::span<hal::byte> p_data_out)
+{
+  return p_endpoint.read(make_writable_scatter_bytes(p_data_out));
+}
+
+inline auto read(usb::control_endpoint& p_endpoint,
+                 spanable_writable_bytes auto... p_data_out)
+{
+  return p_endpoint.read(make_writable_scatter_bytes(p_data_out...));
+}
+}  // namespace hal::v5
