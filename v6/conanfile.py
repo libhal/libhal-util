@@ -35,6 +35,7 @@ class libhal_util_conan(ConanFile):
     topics = ("peripherals", "hardware", "abstraction", "devices", "hal")
     settings = "compiler", "build_type", "os", "arch"
     exports_sources = "modules/*", "tests/*", "CMakeLists.txt", "LICENSE"
+    python_requires = "conan-module-support/1.0.0"
     package_type = "static-library"
     shared = False
 
@@ -56,7 +57,7 @@ class libhal_util_conan(ConanFile):
             check_min_cppstd(self, self._min_cppstd)
 
     def build_requirements(self):
-        self.tool_requires("cmake/4.1.1")  # Updated version
+        self.tool_requires("cmake/4.1.1")
         self.tool_requires("ninja/1.13.1")
         self.tool_requires("libhal-cmake-util/[^4.0.5]")
         self.test_requires("boost-ext-ut/2.3.1")
@@ -81,55 +82,21 @@ class libhal_util_conan(ConanFile):
         cmake.configure()
         cmake.build()
 
-    @property
-    def cmake_files(self):
-        return Path("CMakeFiles") / "libhal-util.dir"
-
     def package(self):
         copy(self, "LICENSE",
              dst=os.path.join(self.package_folder, "licenses"),
              src=self.source_folder)
 
-        # Copy modmap file to package directory
-        copy(self, "hal.util.cppm.o.modmap",
-             dst=Path(self.package_folder),
-             src=Path(self.build_folder) / self.cmake_files / "modules")
-
-        # Package any compiled libraries
-        copy(self, "*.a",
-             dst=os.path.join(self.package_folder, "lib"),
-             src=self.build_folder)
-
-        copy(self, "*.pcm",
-             dst=Path(self.package_folder) / "modules",
-             src=Path(self.build_folder) / self.cmake_files)
-
-        copy(self, "*.cppm",
-             dst=Path(self.package_folder) / "modules",
-             src=Path(self.source_folder) / "modules")
-
-    def correct_mod_map_file(self, mod_map_file: Path):
-        PACKAGE_CMAKE_DIR = Path(self.package_folder) / "modules"
-        content = mod_map_file.read_text()
-        updated_content = content.replace(
-            "CMakeFiles/libhal-util.dir", str(PACKAGE_CMAKE_DIR))
-        updated_content = updated_content.replace(
-            "-fmodule-output", "-fmodule-file=hal.util")
-        updated_content = updated_content.replace(
-            "-x c++-module\n", "")
-
-        if content != updated_content:
-            mod_map_file.write_text(updated_content)
+        cmake = CMake(self)
+        cmake.install()
 
     def package_info(self):
-        self.cpp_info.libs = ["libhal-util"]
+        self.cpp_info.libs = ["hal-util"]
         self.cpp_info.set_property("cmake_target_name", "libhal::util")
         self.cpp_info.bindirs = []
         self.cpp_info.frameworkdirs = []
         self.cpp_info.resdirs = []
         self.cpp_info.includedirs = []
 
-        mod_map_file = Path(self.package_folder) / "hal.util.cppm.o.modmap"
-
-        self.correct_mod_map_file(mod_map_file)
-        self.cpp_info.cxxflags.append(f"@{mod_map_file}")
+        MOD_SUPPORT = self.python_requires["conan-module-support"]
+        MOD_SUPPORT.module.generate_mod_map_file(self, "hal-util")
