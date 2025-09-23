@@ -14,11 +14,7 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-project(libhal-util LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+project(hal-util LANGUAGES CXX)
 
 # Require Ninja or Visual Studio for modules
 if(NOT CMAKE_GENERATOR MATCHES "Ninja|Visual Studio")
@@ -26,22 +22,36 @@ if(NOT CMAKE_GENERATOR MATCHES "Ninja|Visual Studio")
 endif()
 
 # Create the library target
-add_library(libhal-util)
+add_library(hal-util)
 
 find_package(libhal REQUIRED)
 
 # Add module files
-target_sources(libhal-util PUBLIC
-    FILE_SET "cxx_modules"
-    TYPE "CXX_MODULES"
+target_sources(hal-util PUBLIC
+    FILE_SET CXX_MODULES
+    TYPE CXX_MODULES
     FILES
     modules/hal.util.cppm
     modules/math.cppm
     modules/to_array.cppm
 )
 
-target_compile_features(libhal-util PUBLIC cxx_std_23)
-target_link_libraries(libhal-util PUBLIC libhal::libhal)
+target_compile_features(hal-util PUBLIC cxx_std_23)
+target_link_libraries(hal-util PUBLIC libhal::libhal)
+
+install(
+    TARGETS hal-util
+    EXPORT hal-util_targets
+    FILE_SET CXX_MODULES DESTINATION .
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+)
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/hal-util.dir/
+    DESTINATION modules
+    FILES_MATCHING PATTERN "*.pcm"
+)
 
 # ==============================================================================
 # Unit testing
@@ -58,7 +68,7 @@ target_sources(unit_test
 )
 
 target_compile_features(unit_test PUBLIC cxx_std_23)
-target_link_libraries(unit_test PRIVATE libhal-util boost-ext-ut::ut)
+target_link_libraries(unit_test PRIVATE hal-util boost-ext-ut::ut)
 
 # Run unit tests
 add_custom_target(run_tests ALL DEPENDS unit_test COMMAND unit_test)
