@@ -35,7 +35,7 @@ class libhal_util_conan(ConanFile):
     topics = ("peripherals", "hardware", "abstraction", "devices", "hal")
     settings = "compiler", "build_type", "os", "arch"
     exports_sources = "modules/*", "tests/*", "CMakeLists.txt", "LICENSE"
-    python_requires = "conan-module-support/1.0.0"
+    python_requires = "conan_module_support/1.0.0"
     package_type = "static-library"
     shared = False
 
@@ -47,8 +47,8 @@ class libhal_util_conan(ConanFile):
     def _compilers_minimum_version(self):
         return {
             "gcc": "14",        # GCC 14+ for modules
-            "clang": "16",      # Clang 16+ for modules
-            "apple-clang": "16.0.0",
+            "clang": "19",      # Clang 19+ for modules
+            "apple-clang": "19.0.0",
             "msvc": "193.4"     # MSVC 14.34+ for modules
         }
 
@@ -98,5 +98,5 @@ class libhal_util_conan(ConanFile):
         self.cpp_info.resdirs = []
         self.cpp_info.includedirs = []
 
-        MOD_SUPPORT = self.python_requires["conan-module-support"]
+        MOD_SUPPORT = self.python_requires["conan_module_support"]
         MOD_SUPPORT.module.generate_mod_map_file(self, "hal-util")
