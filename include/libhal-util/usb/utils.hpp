@@ -25,6 +25,8 @@ constexpr byte device_desc_size = 18;
 constexpr byte config_desc_size = 9;
 constexpr byte inferface_desc_size = 9;
 constexpr byte endpoint_desc_size = 7;
+constexpr byte iad_desc_size = 0x08;
+
 constexpr byte size_std_req = 8;
 
 }  // namespace constants
@@ -84,35 +86,6 @@ enum class descriptor_type : hal::byte
   superspeed_endpoint_companion = 0x30,
   superspeed_endpoint_isochronous_companion = 0x31,
 };
-
-// TODO: Remove
-// enum class standard_request_types : hal::byte const
-// {
-//   get_status = 0x00,
-//   clear_feature = 0x01,
-//   set_feature = 0x03,
-//   set_address = 0x05,
-//   get_descriptor = 0x06,
-//   set_descriptor = 0x07,
-//   get_configuration = 0x08,
-//   set_configuration = 0x09,
-//   get_interface = 0x0A,
-//   set_interface = 0x11,
-//   synch_frame = 0x12,
-//   invalid
-// };
-
-// [[nodiscard]] constexpr standard_request_types determine_standard_request(
-//   setup_packet pkt)
-// {
-//   if (pkt.get_type() != setup_packet::type::standard || pkt.request == 0x04
-//   ||
-//       pkt.request > 0x12) {
-//     return standard_request_types::invalid;
-//   }
-
-//   return static_cast<standard_request_types>(pkt.request);
-// }
 
 constexpr setup_packet from_span(std::span<byte> raw_req)
 {
