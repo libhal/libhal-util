@@ -1,26 +1,39 @@
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
-// TODO: Move to util
-/* TODO:
-  Class, subclass, proto validator
-  Device qualifer descriptor
-  Other speed descriptor
-  Interface Association Descriptor
- */
-
 #include <array>
-#include <libhal/error.hpp>
-#include <libhal/pointers.hpp>
-#include <libhal/usb.hpp>
 #include <memory_resource>
 #include <span>
 #include <string_view>
+#include <vector>
 
-#include "../as_bytes.hpp"
+#include <libhal/error.hpp>
+#include <libhal/pointers.hpp>
+#include <libhal/serial.hpp>
+#include <libhal/usb.hpp>
+
 #include "libhal-util/as_bytes.hpp"
 #include "libhal/units.hpp"
 #include "utils.hpp"
-#include <vector>
+
+/* TODO (PhazonicRidley):
+  Class, subclass, proto validator
+  Device qualifer descriptor (happens between device and config)
+  Other speed descriptor (happens with configuration)
+*/
 
 namespace hal::v5::usb {
 
@@ -38,9 +51,9 @@ struct device
     u16 p_id_vendor;  // NOLINT
     u16 p_id_product;
     u16 p_bcd_device;
-    std::string_view p_manufacturer;  // NOLINT
-    std::string_view p_product;
-    std::string_view p_serial_number_str;
+    std::u16string_view p_manufacturer;
+    std::u16string_view p_product;
+    std::u16string_view p_serial_number_str;
   };
 
   constexpr device(device_arguments&& args)
@@ -81,7 +94,7 @@ struct device
     m_packed_arr[idx++] = 0;  // Number of possible configurations
   };
 
-  constexpr u16& bcd_usb()
+  u16& bcd_usb()
   {
     return *reinterpret_cast<u16*>(&m_packed_arr[0]);
   }
@@ -101,17 +114,17 @@ struct device
     return m_packed_arr[4];
   }
 
-  constexpr u16& id_vendor()
+  u16& id_vendor()
   {
     return *reinterpret_cast<u16*>(&m_packed_arr[6]);
   }
 
-  constexpr u16& id_product()
+  u16& id_product()
   {
     return *reinterpret_cast<u16*>(&m_packed_arr[8]);
   }
 
-  constexpr u16& bcd_device()
+  u16& bcd_device()
   {
     return *reinterpret_cast<u16*>(&m_packed_arr[10]);
   }
@@ -121,9 +134,9 @@ struct device
     return m_packed_arr;
   }
 
-  std::string_view manufacturer_str;
-  std::string_view product_str;
-  std::string_view serial_number_str;
+  std::u16string_view manufacturer_str;
+  std::u16string_view product_str;
+  std::u16string_view serial_number_str;
 
 private:
   constexpr u8& max_packet_size()
@@ -196,7 +209,7 @@ struct configuration
   };
 
   template<usb_interface_concept... Interfaces>
-  constexpr configuration(std::string_view p_name,
+  constexpr configuration(std::u16string_view p_name,
                           bitmap&& p_attributes,
                           u8&& p_max_power,
                           std::pmr::polymorphic_allocator<> p_allocator,
@@ -238,11 +251,11 @@ struct configuration
     return m_packed_arr[6];
   }
 
-  std::string_view name;
-  std::pmr::vector<strong_ptr<usb_interface>> interfaces;
+  std::u16string_view name;
+  std::pmr::vector<strong_ptr<interface>> interfaces;
 
   // private:
-  constexpr u16& total_length()
+  u16& total_length()
   {
     return *reinterpret_cast<u16*>(&m_packed_arr[0]);
   }
