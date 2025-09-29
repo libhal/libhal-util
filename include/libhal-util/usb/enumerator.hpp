@@ -38,9 +38,16 @@
 #include "libhal-util/usb/endpoints.hpp"
 #include "utils.hpp"
 
-// TODO: move to util
 namespace hal::v5::usb {
 
+/**
+  TODO: (PhazonicRidley) Make class method for scatterspan class
+  @brief Get the size of a scatter span, meaning how many elements is this
+  scatterspan viewing.
+
+  @param ss The scatter span to get the size of
+  @return The number of elements ss is viewing
+ */
 template<typename T>
 constexpr size_t scatter_span_size(scatter_span<T> ss)
 {
@@ -51,6 +58,28 @@ constexpr size_t scatter_span_size(scatter_span<T> ss)
 
   return res;
 }
+
+/**
+  TODO: (PhazonicRidley) Make class method for scatterspan class
+  @brief Creates a scatter_span with p_spans and calculates how many internal
+  spans are used for a given sub scatter_span starting at index zero and going
+  to the p_count element.
+
+  ```C++
+  auto pair = make_scatter_span(n, ...);
+  auto my_scatter_span = scatter_span(pair.first).first(pair.second)
+  ```
+
+  @tparam T The type all collections are to have of.
+  @tparam Args... A packed set of collections of type T
+
+  @param p_count How many elements (from the start) to take into the subspan
+  @param p_spans The spans the scatter span is to view into
+
+  @return A pair where the first element contains an array of spans used within
+  the subscatter span, and the second element is the number of spans within
+  the sub scatterspan
+*/
 template<typename T, typename... Args>
 constexpr std::pair<std::array<std::span<T>, sizeof...(Args)>, size_t>
 make_sub_scatter_array(size_t p_count, Args&&... p_spans)
@@ -89,6 +118,19 @@ make_sub_scatter_array(size_t p_count, Args&&... p_spans)
   return std::make_pair(res, i + 1);
 }
 
+/**
+  TODO: (PhazonicRidley) Make class method for scatterspan class
+  @brief Create a sub scatter span array from spans of bytes
+
+  @tparam Args... A packed set of collections of bytes
+
+  @param p_count How many elements (from the start) to take into the subspan
+  @param p_spans The spans the scatter span is to view into
+
+  @return A pair where the first element contains an array of spans used within
+  the subscatter span, and the second element is the number of bytes within
+  the sub scatterspan
+*/
 template<typename... Args>
 constexpr std::pair<std::array<std::span<byte const>, sizeof...(Args)>, size_t>
 make_sub_scatter_bytes(size_t p_count, Args&&... p_spans)
@@ -183,7 +225,7 @@ public:
 
     std::array<hal::byte, constants::size_std_req> raw_req;
     do {
-      // Seriously, make this async
+      // TODO: Seriously, make this async
       while (waiting_for_data) {
         continue;
       }
@@ -200,21 +242,15 @@ public:
 
         safe_throw(hal::message_size(num_bytes_read, this));
       }
-      //
-      // for (auto const& el : raw_req) {
-      //
-      // }
-      //
-      auto req = from_span(raw_req);
+
+      auto req = setup_packet(raw_req);
 
       if (req.get_recipient() != setup_packet::recipient::device) {
         safe_throw(hal::not_connected(this));
       }
 
-      // TODO: Handle exception
+      // ZLP is handled at write site
       handle_standard_device_request(req);
-      // m_ctrl_ep->write({});  // Send ZLP to complete Data
-      // Transaction
       if (static_cast<standard_request_types>(req.request) ==
           standard_request_types::set_configuration) {
         finished_enumeration = true;
@@ -246,7 +282,7 @@ public:
     auto bytes_read = m_ctrl_ep->read(scatter_read_buf);
     std::span payload(read_buf.data(), bytes_read);
 
-    setup_packet req = from_span(payload);
+    setup_packet req(payload);
     if (determine_standard_request(req) == standard_request_types::invalid) {
       return;
     }
@@ -268,9 +304,7 @@ public:
         };
       } else {
         f = [this](scatter_span<hal::byte> resp) {
-          std::ignore = m_ctrl_ep->read(
-            resp);  // Can't use this... TODO: Maybe add a return for callbacks
-                    // for "bytes processed"
+          std::ignore = m_ctrl_ep->read(resp);
         };
       }
       bool req_handled = false;
@@ -377,11 +411,6 @@ private:
         }
 
         m_ctrl_ep->write({});
-        // if (total_size != req.length) {
-        //   safe_throw(hal::operation_not_supported(
-        //     this));  // TODO: Make specific exception for this
-        // }
-
         break;
       }
 
@@ -402,9 +431,6 @@ private:
         handle_str_descriptors(desc_idx, req.length);  // Can throw
         break;
       }
-
-        // TODO: Interface, endpoint, device_qualifier, interface_power,
-        // OTHER_SPEED_CONFIGURATION
 
       default:
         safe_throw(hal::operation_not_supported(this));
