@@ -16,8 +16,6 @@
 
 #include <algorithm>
 
-#include "math.hpp"
-
 /**
  * @defgroup Map Map
  *
