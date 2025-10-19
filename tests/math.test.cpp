@@ -29,8 +29,8 @@ boost::ut::suite<"math_test"> math_test = [] {
       expect(that % 2147483648L == multiply(-1LL, -2147483648LL).value());
     };
     "Exceptions"_test = []() {
-      expect(!multiply(std::uint32_t{ 5U }, std::uint32_t{ 4294967295U }));
-      expect(!multiply(std::uint32_t{ 4L }, std::uint32_t{ 1073741824L }));
+      expect(!multiply(u32{ 5U }, u32{ 4294967295U }));
+      expect(!multiply(u32{ 4L }, u32{ 1073741824L }));
     };
     "Standard Usage"_test = []() {
       expect(that % 75 == multiply(15, 5).value());
@@ -44,10 +44,9 @@ boost::ut::suite<"math_test"> math_test = [] {
     "Zero"_test = []() { expect(that % 0 == distance(0, 0)); };
     "One"_test = []() { expect(that % 1 == distance(0, 1)); };
     "Boundaries"_test = []() {
-      expect(that % std::uint32_t{ 4294967294UL } ==
-             distance(std::uint32_t{ 1UL },
-                      std::numeric_limits<std::uint32_t>::max()));
-      expect(that % std::uint32_t{ 4294967295UL } ==
+      expect(that % u32{ 4294967294UL } ==
+             distance(u32{ 1UL }, std::numeric_limits<u32>::max()));
+      expect(that % u32{ 4294967295UL } ==
              distance(std::numeric_limits<std::int32_t>::min(),
                       std::numeric_limits<std::int32_t>::max()));
     };
@@ -84,6 +83,103 @@ boost::ut::suite<"math_test"> math_test = [] {
     };
     "standard not equal"_test = []() {
       expect(false == equals(0.3001f, 0.3002f, 0.000001f));
+    };
+  };
+
+  "hal::upscale()"_test = []() {
+    "1-bit to 8-bit"_test = []() {
+      expect(that % 0x00 == upscale<u8, 1>(0b0));
+      expect(that % 0xFF == upscale<u8, 1>(0b1));
+    };
+    "2-bit to 8-bit"_test = []() {
+      expect(that % 0b00000000 == upscale<u8, 2>(0b00));
+      expect(that % 0b01010101 == upscale<u8, 2>(0b01));
+      expect(that % 0b10101010 == upscale<u8, 2>(0b10));
+      expect(that % 0b11111111 == upscale<u8, 2>(0b11));
+    };
+    "3-bit to 8-bit"_test = []() {
+      expect(that % 0b00000000 == upscale<u8, 3>(0b000));
+      expect(that % 0b00100100 == upscale<u8, 3>(0b001));
+      expect(that % 0b11011011 == upscale<u8, 3>(0b110));
+      expect(that % 0b11111111 == upscale<u8, 3>(0b111));
+    };
+    "4-bit to 8-bit"_test = []() {
+      expect(that % 0x00 == upscale<u8, 4>(0x0));
+      expect(that % 0x11 == upscale<u8, 4>(0x1));
+      expect(that % 0x77 == upscale<u8, 4>(0x7));
+      expect(that % 0xAA == upscale<u8, 4>(0xA));
+      expect(that % 0xFF == upscale<u8, 4>(0xF));
+    };
+    "8-bit to 8-bit (identity)"_test = []() {
+      expect(that % 0x00 == upscale<u8, 8>(0x00));
+      expect(that % 0x42 == upscale<u8, 8>(0x42));
+      expect(that % 0xFF == upscale<u8, 8>(0xFF));
+    };
+    "1-bit to 16-bit"_test = []() {
+      expect(that % 0x0000 == upscale<u16, 1>(0b0));
+      expect(that % 0xFFFF == upscale<u16, 1>(0b1));
+    };
+    "4-bit to 16-bit"_test = []() {
+      expect(that % 0x0000 == upscale<u16, 4>(0x0));
+      expect(that % 0x1111 == upscale<u16, 4>(0x1));
+      expect(that % 0x8888 == upscale<u16, 4>(0x8));
+      expect(that % 0xFFFF == upscale<u16, 4>(0xF));
+    };
+    "8-bit to 16-bit"_test = []() {
+      expect(that % 0x0000 == upscale<u16, 8>(0x00));
+      expect(that % 0x4242 == upscale<u16, 8>(0x42));
+      expect(that % 0xFFFF == upscale<u16, 8>(0xFF));
+    };
+    "12-bit to 16-bit"_test = []() {
+      expect(that % 0x0000 == upscale<u16, 12>(0x000));
+      expect(that % 0x8008 == upscale<u16, 12>(0x800));
+      expect(that % 0xABCA == upscale<u16, 12>(0xABC));
+      expect(that % 0xFFFF == upscale<u16, 12>(0xFFF));
+    };
+    "16-bit to 16-bit (identity)"_test = []() {
+      expect(that % 0x0000 == upscale<u16, 16>(0x0000));
+      expect(that % 0x1234 == upscale<u16, 16>(0x1234));
+      expect(that % 0xFFFF == upscale<u16, 16>(0xFFFF));
+    };
+    "1-bit to 32-bit"_test = []() {
+      expect(that % 0x00000000U == upscale<u32, 1>(0b0));
+      expect(that % 0xFFFFFFFFU == upscale<u32, 1>(0b1));
+    };
+    "8-bit to 32-bit"_test = []() {
+      expect(that % 0x00000000U == upscale<u32, 8>(0x00));
+      expect(that % 0x42424242U == upscale<u32, 8>(0x42));
+      expect(that % 0xFFFFFFFFU == upscale<u32, 8>(0xFF));
+    };
+    "10-bit to 32-bit"_test = []() {
+      expect(that % 0x00000000U == upscale<u32, 10>(0x000));
+      expect(that % 0x55555555U == upscale<u32, 10>(0x555));
+      expect(that % 0xFFFFFFFFU == upscale<u32, 10>(0x3FF));
+    };
+    "12-bit to 32-bit"_test = []() {
+      expect(that % 0x00000000U == upscale<u32, 12>(0x000));
+      expect(that % 0xABCABCABU == upscale<u32, 12>(0xABC));
+      expect(that % 0xFFFFFFFFU == upscale<u32, 12>(0xFFF));
+    };
+    "16-bit to 32-bit"_test = []() {
+      expect(that % 0x00000000U == upscale<u32, 16>(0x0000));
+      expect(that % 0x12341234U == upscale<u32, 16>(0x1234));
+      expect(that % 0xFFFFFFFFU == upscale<u32, 16>(0xFFFF));
+    };
+    "24-bit to 32-bit"_test = []() {
+      expect(that % 0x00000000U == upscale<u32, 24>(0x000000));
+      expect(that % 0xABCDEFABU == upscale<u32, 24>(0xABCDEF));
+      expect(that % 0xFFFFFFFFU == upscale<u32, 24>(0xFFFFFF));
+    };
+    "32-bit to 32-bit (identity)"_test = []() {
+      expect(that % 0x00000000U == upscale<u32, 32>(0x00000000U));
+      expect(that % 0x12345678U == upscale<u32, 32>(0x12345678U));
+      expect(that % 0xFFFFFFFFU == upscale<u32, 32>(0xFFFFFFFFU));
+    };
+    "masking with extra bits"_test = []() {
+      // Test that input values with bits beyond bit_width are masked correctly
+      expect(that % 0xFF == upscale<u8, 4>(0xFF));  // 0xFF masked to 0xF
+      expect(that % 0xFFFF ==
+             upscale<u16, 8>(0xFFFF));  // 0xFFFF masked to 0xFF
     };
   };
 };

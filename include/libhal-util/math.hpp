@@ -19,6 +19,8 @@
  */
 #pragma once
 
+#include <climits>
+
 #include <concepts>
 #include <limits>
 #include <optional>
@@ -39,6 +41,7 @@ namespace hal {
  * overflows.
  */
 template<typename T>
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 [[nodiscard]] std::optional<T> multiply(T p_lhs, T p_rhs)
 {
   if (p_lhs == 0 || p_rhs == 0) {
@@ -100,6 +103,7 @@ template<typename T>
  * Returns 0 if the denominator is greater than the numerator.
  */
 template<typename T>
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 [[nodiscard]] constexpr T rounding_division(T p_numerator, T p_denominator)
 {
   bool num_sign = p_numerator >= 0;
@@ -162,6 +166,7 @@ template<typename T>
  * points.
  */
 template<std::integral T>
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 [[nodiscard]] constexpr std::make_unsigned_t<T> distance(T p_left, T p_right)
 {
   static_assert(sizeof(T) <= sizeof(int32_t));
@@ -219,5 +224,47 @@ template<std::integral T>
       diff / std::min(absolute_values_sum, std::numeric_limits<float_t>::max());
     return relative_error < p_epsilon;
   }
+}
+
+/**
+ * @ingroup Math
+ * @brief Proportionally scale input value up to fill the desired output integer
+ * container.
+ *
+ * @tparam int_t - output integer storage to be filled with the proportional
+ * contents of p_value
+ * @tparam bit_width - width of the input value
+ * @param p_value - the number to scale to the size of the int_t container
+ * @return constexpr int_t -
+ */
+template<std::unsigned_integral int_t, usize bit_width>
+[[nodiscard]]
+constexpr int_t upscale(int_t p_value)
+{
+  constexpr usize resultant_bit_width = sizeof(int_t) * CHAR_BIT;
+  static_assert(bit_width > 0 && bit_width <= resultant_bit_width,
+                "Bit width must be between 1 and 32");
+  // If already 32 bits, return as-is
+  if constexpr (bit_width == resultant_bit_width) {
+    return p_value;
+  }
+
+  // Create mask for the input bits
+  constexpr auto over_sized_mask = (1LL << bit_width) - 1LL;
+  constexpr auto mask = static_cast<int_t>(over_sized_mask);
+
+  // Calculate number of iterations needed (ceiling(32/bit_width) - 1)
+  constexpr auto iterations =
+    (resultant_bit_width + bit_width - 1) / bit_width - 1;
+
+  // Place cleaned input value in MSB position
+  constexpr auto shift_distance = resultant_bit_width - bit_width;
+  int_t result = (p_value & mask) << shift_distance;
+
+  // Replicate the pattern for the calculated number of iterations
+  for (auto i = 0U; i < iterations; ++i) {
+    result |= (result >> bit_width);
+  }
+  return result;
 }
 }  // namespace hal
