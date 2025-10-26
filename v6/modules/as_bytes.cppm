@@ -12,17 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+module;
 
 #include <span>
 
-#include <libhal/units.hpp>
+module hal.util:as_bytes;
+
+import hal;
 
 /**
  * @defgroup AsBytes As Bytes
  */
 
-namespace hal {
+namespace hal::inline v6 {
 /**
  * @ingroup AsBytes
  * @brief Converts a pointer and length to a writeable (mutable) span of T
@@ -102,4 +104,4 @@ constexpr std::span<hal::byte const> as_bytes(
 {
   return as_bytes(p_container.data(), p_container.size());
 }
-}  // namespace hal
+}  // namespace hal::inline v6

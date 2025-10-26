@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+module;
 
 #include <atomic>
 
-#include <libhal/lock.hpp>
-#include <libhal/steady_clock.hpp>
+module hal.util:atomic_spin_lock;
 
-namespace hal {
+import hal;
+
+namespace hal::inline v6 {
 /**
  * @brief Atomic spin lock that implements hal::pollable_lock
  *
@@ -86,4 +87,4 @@ private:
   hal::steady_clock* m_steady_clock;
   atomic_spin_lock m_atomic_spin_lock;
 };
-}  // namespace hal
+}  // namespace hal::inline v6
