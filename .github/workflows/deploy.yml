@@ -6,9 +6,10 @@ on:
     types: [published]
 
 jobs:
-  deploy:
+  deploy_v5:
     if: startsWith(github.ref, 'refs/tags/')
     uses: libhal/ci/.github/workflows/deploy_all.yml@5.x.y
     with:
+      dir: v5
       version: ${{ github.ref_name }}
     secrets: inherit

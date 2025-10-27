@@ -10,10 +10,14 @@ on:
     - cron: "0 12 * * 0"
 
 jobs:
-  library_check:
+  library_check_v5:
     uses: libhal/ci/.github/workflows/library_check.yml@5.x.y
+    with:
+      dir: v5
     secrets: inherit
 
-  deployment_check:
+  deployment_check_v5:
     uses: libhal/ci/.github/workflows/deploy_all.yml@5.x.y
+    with:
+      dir: v5
     secrets: inherit
