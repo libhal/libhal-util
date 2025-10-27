@@ -17,7 +17,7 @@ jobs:
     secrets: inherit
 
   deployment_check_v5:
-    uses: libhal/ci/.github/workflows/package_and_upload_all.yml@5.x.y
+    uses: libhal/ci/.github/workflows/deploy_all.yml@5.x.y
     with:
       dir: v5
     secrets: inherit
