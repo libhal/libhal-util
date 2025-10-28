@@ -406,7 +406,7 @@ boost::ut::suite<"can_bus_manager_adapter"> can_bus_manager_adapter = [] {
         calls.filter_mode_param = p_accept;
       }
 
-      void driver_on_bus_off(optional_bus_off_handler& p_callback) override
+      void driver_on_bus_off(optional_bus_off_handler p_callback) override
       {
         calls.on_bus_off_called = true;
         calls.on_bus_off_param_has_value = p_callback.has_value();
