@@ -12,4 +12,5 @@ jobs:
     with:
       dir: v5
       version: ${{ github.ref_name }}
+      remote_url: https://libhal.jfrog.io/artifactory/api/conan/trunk-conan
     secrets: inherit
