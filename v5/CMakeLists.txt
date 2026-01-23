@@ -71,7 +71,7 @@ set(SOURCES_LIST
   # src/inverter.cpp
 )
 
-if(NOT ${CMAKE_CROSSCOMPILING})
+if(NOT CMAKE_CROSSCOMPILING)
   libhal_unit_test(
     SOURCES
     ${SOURCES_LIST}

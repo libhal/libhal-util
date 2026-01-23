@@ -15,7 +15,7 @@
 # limitations under the License.
 
 from conan import ConanFile
-from conan.tools.cmake import CMake, cmake_layout
+from conan.tools.cmake import CMake, cmake_layout, CMakeToolchain, CMakeDeps
 from conan.tools.files import copy
 from conan.tools.build import check_min_cppstd
 import os
@@ -34,7 +34,6 @@ class libhal_util_conan(ConanFile):
     settings = "compiler", "build_type", "os", "arch"
     exports_sources = ("include/*", "tests/*", "LICENSE",
                        "CMakeLists.txt", "src/*")
-    generators = "CMakeToolchain", "CMakeDeps"
 
     @property
     def _min_cppstd(self):
@@ -57,7 +56,8 @@ class libhal_util_conan(ConanFile):
             check_min_cppstd(self, self._min_cppstd)
 
     def build_requirements(self):
-        self.tool_requires("cmake/3.27.1")
+        self.tool_requires("cmake/[^4.0.0]")
+        self.tool_requires("ninja/[^1.3.0]")
         self.tool_requires("libhal-cmake-util/[^4.1.0]")
         self.test_requires("boost-ext-ut/2.1.0")
 
@@ -68,9 +68,12 @@ class libhal_util_conan(ConanFile):
         cmake_layout(self)
 
     def generate(self):
-        cmake = CMake(self)
-        cmake.configure()
-        cmake.build(target="copy_compile_commands")
+        tc = CMakeToolchain(self)
+        tc.generator = "Ninja"
+        tc.generate()
+
+        deps = CMakeDeps(self)
+        deps.generate()
 
     def build(self):
         cmake = CMake(self)
