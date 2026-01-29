@@ -35,7 +35,7 @@
 #include <utility>
 #include <vector>
 
-namespace hal::v5::usb {
+namespace hal::usb {
 namespace {
 
 // constexpr setup_packet set_addr_master{ false,
@@ -794,4 +794,4 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
   };
 };
 
-}  // namespace hal::v5::usb
+}  // namespace hal::usb
