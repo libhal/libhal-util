@@ -23,10 +23,10 @@
 #include <libhal/error.hpp>
 #include <libhal/pointers.hpp>
 #include <libhal/serial.hpp>
+#include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 
 #include "libhal-util/as_bytes.hpp"
-#include "libhal/units.hpp"
 #include "utils.hpp"
 
 /* TODO (PhazonicRidley):

@@ -21,84 +21,52 @@
 
 namespace hal::v5 {
 // TODO(#79): Add doxygen docs to USB APIs
-<<<<<<< HEAD
-inline void write(usb_control_endpoint& p_endpoint,
-=======
 inline void write(usb::control_endpoint& p_endpoint,
->>>>>>> 4f3234c (:recycle: Moved endpoint utils to their own file)
                   scatter_span<hal::byte const> p_data_out)
 {
   p_endpoint.write(p_data_out);
 }
 
-<<<<<<< HEAD
-inline void write_and_flush(usb_control_endpoint& p_endpoint,
-=======
 inline void write_and_flush(usb::control_endpoint& p_endpoint,
->>>>>>> 4f3234c (:recycle: Moved endpoint utils to their own file)
                             scatter_span<hal::byte const> p_data_out)
 {
   p_endpoint.write(p_data_out);
   p_endpoint.write({});
 }
 
-<<<<<<< HEAD
-inline void write(usb_control_endpoint& p_endpoint,
-=======
 inline void write(usb::control_endpoint& p_endpoint,
->>>>>>> 4f3234c (:recycle: Moved endpoint utils to their own file)
                   std::span<hal::byte const> p_data_out)
 {
   p_endpoint.write(make_scatter_bytes(p_data_out));
 }
 
-<<<<<<< HEAD
-inline void write_and_flush(usb_control_endpoint& p_endpoint,
-=======
 inline void write_and_flush(usb::control_endpoint& p_endpoint,
->>>>>>> 4f3234c (:recycle: Moved endpoint utils to their own file)
                             std::span<hal::byte const> p_data_out)
 {
   p_endpoint.write(make_scatter_bytes(p_data_out));
   p_endpoint.write({});
 }
 
-<<<<<<< HEAD
-inline void write(usb_in_endpoint& p_endpoint,
-=======
 inline void write(usb::in_endpoint& p_endpoint,
->>>>>>> 4f3234c (:recycle: Moved endpoint utils to their own file)
                   scatter_span<hal::byte const> p_data_out)
 {
   p_endpoint.write(p_data_out);
 }
 
-<<<<<<< HEAD
-inline void write_and_flush(usb_in_endpoint& p_endpoint,
-=======
 inline void write_and_flush(usb::in_endpoint& p_endpoint,
->>>>>>> 4f3234c (:recycle: Moved endpoint utils to their own file)
                             scatter_span<hal::byte const> p_data_out)
 {
   p_endpoint.write(p_data_out);
   p_endpoint.write({});
 }
 
-<<<<<<< HEAD
-inline void write(usb_in_endpoint& p_endpoint,
-=======
 inline void write(usb::in_endpoint& p_endpoint,
->>>>>>> 4f3234c (:recycle: Moved endpoint utils to their own file)
                   std::span<hal::byte const> p_data_out)
 {
   p_endpoint.write(make_scatter_bytes(p_data_out));
 }
 
-<<<<<<< HEAD
-inline void write_and_flush(usb_in_endpoint& p_endpoint,
-=======
 inline void write_and_flush(usb::in_endpoint& p_endpoint,
->>>>>>> 4f3234c (:recycle: Moved endpoint utils to their own file)
                             std::span<hal::byte const> p_data_out)
 {
   p_endpoint.write(make_scatter_bytes(p_data_out));
