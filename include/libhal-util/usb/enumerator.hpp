@@ -393,7 +393,7 @@ private:
           auto s_hdr =
             std::to_array({ static_cast<byte>(4),
                             static_cast<byte>(descriptor_type::string) });
-          auto lang = setup_packet::to_le_bytes(m_lang_str);
+          auto lang = setup_packet::to_le_u16(m_lang_str);
           auto scatter_arr_pair = make_scatter_bytes(s_hdr, lang);
           // auto p = scatter_span<byte const>(scatter_arr_pair.first)
           //            .first(scatter_arr_pair.second);

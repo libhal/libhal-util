@@ -38,15 +38,6 @@
 namespace hal::usb {
 namespace {
 
-// constexpr setup_packet set_addr_master{ false,
-//                                         setup_packet::type::standard,
-//                                         setup_packet::recipient::device,
-//                                         static_cast<byte>(
-//                                           standard_request_types::set_address),
-//                                         0x30,
-//                                         0,  // a
-//                                         0 };
-
 constexpr u8 iface_desc_length = 9;
 constexpr u8 iface_desc_type = 0x4;
 constexpr u8 str_desc_type = 0x3;
@@ -88,11 +79,11 @@ bool span_ne(std::span<T> const lhs, std::span<T> const rhs)
 constexpr std::vector<hal::byte> pkt_to_scatter(setup_packet const& req)
 {
   std::vector<byte> vec;
-  vec.push_back(req.request_type);
-  vec.push_back(req.request);
-  vec.append_range(setup_packet::to_le_bytes(req.value));
-  vec.append_range(setup_packet::to_le_bytes(req.index));
-  vec.append_range(setup_packet::to_le_bytes(req.length));
+  vec.push_back(req.request_type());
+  vec.push_back(req.request());
+  vec.append_range(setup_packet::to_le_u16(req.value()));
+  vec.append_range(setup_packet::to_le_u16(req.index()));
+  vec.append_range(setup_packet::to_le_u16(req.length()));
 
   return vec;
 }
@@ -411,11 +402,11 @@ private:
 
   u16 driver_get_status(setup_packet p_pkt)
   {
-    if (p_pkt.get_recipient() != setup_packet::recipient::interface) {
+    if (p_pkt.get_recipient() != setup_packet::request_recipient::interface) {
       safe_throw(hal::operation_not_supported(this));
     }
 
-    auto iface_idx = p_pkt.index & 0xFF;
+    auto iface_idx = p_pkt.index() & 0xFF;
 
     if (iface_idx == m_iface_one.num) {
       return m_iface_one.num;
@@ -429,11 +420,11 @@ private:
   void manage_features(setup_packet p_pkt, bool p_set, u16 p_selector)
   {
     std::ignore = p_selector;
-    if (p_pkt.get_recipient() != setup_packet::recipient::interface) {
+    if (p_pkt.get_recipient() != setup_packet::request_recipient::interface) {
       safe_throw(hal::operation_not_supported(this));
     }
 
-    auto iface_idx = p_pkt.index & 0xFF;
+    auto iface_idx = p_pkt.index() & 0xFF;
 
     if (iface_idx == m_iface_one.num) {
       m_iface_one.feature = p_set;
@@ -446,7 +437,7 @@ private:
 
   u8 driver_get_interface(setup_packet p_pkt)
   {
-    auto iface_idx = p_pkt.index & 0xFF;
+    auto iface_idx = p_pkt.index() & 0xFF;
 
     if (iface_idx == m_iface_one.num) {
       return m_iface_one.alt_settings;
@@ -459,8 +450,8 @@ private:
 
   void driver_set_interface(setup_packet p_pkt)
   {
-    auto iface_idx = p_pkt.index & 0xFF;
-    auto alt_setting = p_pkt.value;
+    auto iface_idx = p_pkt.index() & 0xFF;
+    auto alt_setting = p_pkt.value();
     if (iface_idx == m_iface_one.num) {
       m_iface_one.alt_settings = alt_setting;
     } else if (iface_idx == m_iface_two.num) {
@@ -615,14 +606,15 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
     ctrl_buf.clear();
 
     u16 expected_addr = 0x30;
-    setup_packet set_addr{ false,
-                           setup_packet::type::standard,
-                           setup_packet::recipient::device,
-                           static_cast<byte>(
-                             standard_request_types::set_address),
-                           0x30,
-                           0,  // a
-                           0 };
+    setup_packet set_addr{
+      { .device_to_host = false,
+        .type = setup_packet::request_type::standard,
+        .recipient = setup_packet::request_recipient::device,
+        .request = static_cast<byte>(standard_request_types::set_address),
+        .value = 0x30,
+        .index = 0,  // a
+        .length = 0 }
+    };
 
     simulate_sending_payload(ctrl_ptr, set_addr);
     ctrl_ptr->simulate_interrupt();
@@ -633,13 +625,13 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
     // Get device descriptor
     u16 desc_t_idx = static_cast<byte>(descriptor_type::device) << 8;
     setup_packet get_desc(
-      true,
-      setup_packet::type::standard,
-      setup_packet::recipient::device,
-      static_cast<byte>(standard_request_types::get_descriptor),
-      desc_t_idx,
-      0,
-      18);
+      { .device_to_host = true,
+        .type = setup_packet::request_type::standard,
+        .recipient = setup_packet::request_recipient::device,
+        .request = static_cast<byte>(standard_request_types::get_descriptor),
+        .value = desc_t_idx,
+        .index = 0,
+        .length = 18 });
     simulate_sending_payload(ctrl_ptr, get_desc);
     ctrl_ptr->simulate_interrupt();
     std::this_thread::sleep_for(std::chrono::milliseconds(delay_time_ms));
@@ -673,13 +665,13 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
     constexpr u16 str_desc_t_idx =
       static_cast<byte>(descriptor_type::string) << 8 | 1;
     setup_packet str_hdr_req(
-      true,
-      setup_packet::type::standard,
-      setup_packet::recipient::device,
-      static_cast<byte>(standard_request_types::get_descriptor),
-      str_desc_t_idx,
-      0,
-      2);
+      { .device_to_host = true,
+        .type = setup_packet::request_type::standard,
+        .recipient = setup_packet::request_recipient::device,
+        .request = static_cast<byte>(standard_request_types::get_descriptor),
+        .value = str_desc_t_idx,
+        .index = 0,
+        .length = 2 });
 
     simulate_sending_payload(ctrl_ptr, str_hdr_req);
     ctrl_ptr->simulate_interrupt();
@@ -695,7 +687,7 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
 
     // Get a string descriptor from device
     setup_packet str_req(str_hdr_req);
-    str_req.length = expected_manu_str_hdr[0];
+    str_req.length(expected_manu_str_hdr[0]);
     simulate_sending_payload(ctrl_ptr, str_req);
     ctrl_ptr->simulate_interrupt();
     std::this_thread::sleep_for(std::chrono::milliseconds(delay_time_ms));
@@ -713,13 +705,13 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
 
     // Get Configuration length
     setup_packet conf_hdr_req(
-      true,
-      setup_packet::type::standard,
-      setup_packet::recipient::device,
-      static_cast<byte>(standard_request_types::get_descriptor),
-      static_cast<byte>(descriptor_type::configuration) << 8,
-      0,
-      9);
+      { .device_to_host = true,
+        .type = setup_packet::request_type::standard,
+        .recipient = setup_packet::request_recipient::device,
+        .request = static_cast<byte>(standard_request_types::get_descriptor),
+        .value = static_cast<byte>(descriptor_type::configuration) << 8,
+        .index = 0,
+        .length = 9 });
 
     // Expected Config + interface descriptor
     std::array<byte const, 18> expected_conf_iface_desc{
@@ -765,7 +757,7 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
 
     // Get Configuration Descriptor + interface descriptor + endpoint descriptor
     setup_packet conf_req(conf_hdr_req);
-    conf_req.length = expected_total_len;
+    conf_req.length(expected_total_len);
     simulate_sending_payload(ctrl_ptr, conf_req);
     ctrl_ptr->simulate_interrupt();
     std::this_thread::sleep_for(std::chrono::milliseconds(delay_time_ms));
@@ -774,13 +766,14 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
 
     // Set configuration
     setup_packet set_conf_req(
-      false,
-      setup_packet::type::standard,
-      setup_packet::recipient::device,
-      static_cast<byte const>(standard_request_types::set_configuration),
-      1,
-      0,
-      0);
+      { .device_to_host = false,
+        .type = setup_packet::request_type::standard,
+        .recipient = setup_packet::request_recipient::device,
+        .request =
+          static_cast<byte const>(standard_request_types::set_configuration),
+        .value = 1,
+        .index = 0,
+        .length = 0 });
 
     simulate_sending_payload(ctrl_ptr, set_conf_req);
     ctrl_ptr->simulate_interrupt();

@@ -245,13 +245,13 @@ public:
 
       auto req = setup_packet(raw_req);
 
-      if (req.get_recipient() != setup_packet::recipient::device) {
+      if (req.get_recipient() != setup_packet::request_recipient::device) {
         safe_throw(hal::not_connected(this));
       }
 
       // ZLP is handled at write site
       handle_standard_device_request(req);
-      if (static_cast<standard_request_types>(req.request) ==
+      if (static_cast<standard_request_types>(req.request()) ==
           standard_request_types::set_configuration) {
         finished_enumeration = true;
         m_ctrl_ep->on_receive(
@@ -282,18 +282,18 @@ public:
     auto bytes_read = m_ctrl_ep->read(scatter_read_buf);
     std::span payload(read_buf.data(), bytes_read);
 
-    setup_packet req(payload);
+    setup_packet req(read_buf);
     if (determine_standard_request(req) == standard_request_types::invalid) {
       return;
     }
 
     if (determine_standard_request(req) ==
           standard_request_types::get_descriptor &&
-        static_cast<descriptor_type>((req.value & 0xFF << 8) >> 8) ==
+        static_cast<descriptor_type>((req.value() & 0xFF << 8) >> 8) ==
           descriptor_type::string) {
-      handle_str_descriptors(req.value & 0xFF, req.length > 2);
+      handle_str_descriptors(req.value() & 0xFF, req.length() > 2);
 
-    } else if (req.get_recipient() == setup_packet::recipient::device) {
+    } else if (req.get_recipient() == setup_packet::request_recipient::device) {
       handle_standard_device_request(req);
     } else {
       // Handle iface level requests
@@ -309,8 +309,12 @@ public:
       }
       bool req_handled = false;
       for (auto const& iface : get_active_configuration()) {
-        req_handled = iface->handle_request(
-          req.request_type, req.request, req.value, req.index, req.length, f);
+        req_handled = iface->handle_request(req.request_type(),
+                                            req.request(),
+                                            req.value(),
+                                            req.index(),
+                                            req.length(),
+                                            f);
         if (req_handled) {
           break;
         }
@@ -331,7 +335,7 @@ private:
     switch (determine_standard_request(req)) {
       case standard_request_types::set_address: {
         m_ctrl_ep->write({});
-        m_ctrl_ep->set_address(req.value);
+        m_ctrl_ep->set_address(req.value());
 
         break;
       }
@@ -352,7 +356,7 @@ private:
       }
 
       case standard_request_types::set_configuration: {
-        m_active_conf = &(m_configs->at(req.value - 1));
+        m_active_conf = &(m_configs->at(req.value() - 1));
         break;
       }
 
@@ -364,8 +368,8 @@ private:
 
   void process_get_descriptor(setup_packet& req)
   {
-    hal::byte desc_type = (req.value & 0xFF << 8) >> 8;
-    [[maybe_unused]] hal::byte desc_idx = req.value & 0xFF;
+    hal::byte desc_type = (req.value() & 0xFF << 8) >> 8;
+    [[maybe_unused]] hal::byte desc_idx = req.value() & 0xFF;
 
     switch (static_cast<descriptor_type>(desc_type)) {
       case descriptor_type::device: {
@@ -374,7 +378,7 @@ private:
                           static_cast<byte>(descriptor_type::device) });
         m_device->max_packet_size() = static_cast<byte>(m_ctrl_ep->info().size);
         auto scatter_arr_pair =
-          make_sub_scatter_bytes(req.length, header, *m_device);
+          make_sub_scatter_bytes(req.length(), header, *m_device);
         hal::v5::write_and_flush(
           *m_ctrl_ep,
           scatter_span<byte const>(scatter_arr_pair.first)
@@ -389,13 +393,13 @@ private:
           std::to_array({ constants::config_desc_size,
                           static_cast<byte>(descriptor_type::configuration) });
         auto scatter_conf_pair = make_sub_scatter_bytes(
-          req.length, conf_hdr, static_cast<std::span<u8 const>>(conf));
+          req.length(), conf_hdr, static_cast<std::span<u8 const>>(conf));
 
         m_ctrl_ep->write(scatter_span<byte const>(scatter_conf_pair.first)
                            .first(scatter_conf_pair.second));
 
         // Return early if the only thing requested was the config descriptor
-        if (req.length <= constants::config_desc_size) {
+        if (req.length() <= constants::config_desc_size) {
           m_ctrl_ep->write({});
           return;
         }
@@ -420,7 +424,7 @@ private:
           auto s_hdr =
             std::to_array({ static_cast<byte>(4),
                             static_cast<byte>(descriptor_type::string) });
-          auto lang = setup_packet::to_le_bytes(m_lang_str);
+          auto lang = setup_packet::to_le_u16(m_lang_str);
           auto scatter_arr_pair = make_scatter_bytes(s_hdr, lang);
           // auto p = scatter_span<byte const>(scatter_arr_pair.first)
           //            .first(scatter_arr_pair.second);
@@ -428,7 +432,7 @@ private:
           m_ctrl_ep->write({});
           break;
         }
-        handle_str_descriptors(desc_idx, req.length);  // Can throw
+        handle_str_descriptors(desc_idx, req.length());  // Can throw
         break;
       }
 
