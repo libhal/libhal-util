@@ -35,7 +35,7 @@
   Other speed descriptor (happens with configuration)
 */
 
-namespace hal::usb {
+namespace hal::v5::usb {
 
 struct device
 {
@@ -46,9 +46,9 @@ struct device
   {
     u16 p_bcd_usb;
     class_code p_device_class;
-    u8 p_device_subclass;
+    u8 p_device_subclass;  // NOLINT
     u8 p_device_protocol;
-    u16 p_id_vendor;
+    u16 p_id_vendor;  // NOLINT
     u16 p_id_product;
     u16 p_bcd_device;
     std::u16string_view p_manufacturer;
@@ -64,35 +64,33 @@ struct device
     u8 idx = 0;
     auto bcd_usb_bytes = hal::as_bytes(&args.p_bcd_usb, 1);
     for (auto& bcd_usb_byte : bcd_usb_bytes) {
-      m_packed_arr[idx++] = bcd_usb_byte;  // 0, 1
+      m_packed_arr[idx++] = bcd_usb_byte;
     }
+    m_packed_arr[idx++] = static_cast<u8>(args.p_device_class);
+    m_packed_arr[idx++] = args.p_device_subclass;
+    m_packed_arr[idx++] = args.p_device_protocol;
 
-    m_packed_arr[idx++] = static_cast<u8>(args.p_device_class);  // 2
-    m_packed_arr[idx++] = args.p_device_subclass;                // 3
-    m_packed_arr[idx++] = args.p_device_protocol;                // 4
-
-    m_packed_arr[idx++] = 0;  // 5 Max Packet length handled by the enumerator
-
+    m_packed_arr[idx++] = 0;  // Max Packet length handled by the enumerator
     auto id_vendor_bytes = hal::as_bytes(&args.p_id_vendor, 1);
     for (auto& id_vendor_byte : id_vendor_bytes) {
-      m_packed_arr[idx++] = id_vendor_byte;  // 6, 7
+      m_packed_arr[idx++] = id_vendor_byte;
     }
 
     auto id_product_bytes = hal::as_bytes(&args.p_id_product, 1);
     for (auto& id_product_byte : id_product_bytes) {
-      m_packed_arr[idx++] = id_product_byte;  // 8, 9
+      m_packed_arr[idx++] = id_product_byte;
     }
 
     auto bcd_device_bytes = hal::as_bytes(&args.p_bcd_device, 1);
     for (auto& bcd_device_byte : bcd_device_bytes) {
-      m_packed_arr[idx++] = bcd_device_byte;  // 10, 11
+      m_packed_arr[idx++] = bcd_device_byte;
     }
 
     // Evaluated during enumeration
-    m_packed_arr[idx++] = 0;  // 12 string idx of manufacturer
-    m_packed_arr[idx++] = 0;  // 13 string idx of product
-    m_packed_arr[idx++] = 0;  // 14 string idx of serial number
-    m_packed_arr[idx++] = 0;  // 15 Number of possible configurations
+    m_packed_arr[idx++] = 0;  // string idx of manufacturer
+    m_packed_arr[idx++] = 0;  // string idx of product
+    m_packed_arr[idx++] = 0;  // string idx of serial number
+    m_packed_arr[idx++] = 0;  // Number of possible configurations
   };
 
   u16& bcd_usb()
@@ -130,7 +128,7 @@ struct device
     return *reinterpret_cast<u16*>(&m_packed_arr[10]);
   }
 
-  operator std::span<byte const>() const
+  operator std::span<u8 const>() const
   {
     return m_packed_arr;
   }
@@ -275,4 +273,10 @@ struct configuration
 
   std::array<hal::byte, 7> m_packed_arr;
 };
+}  // namespace hal::v5::usb
+
+namespace hal::usb {
+using v5::usb::configuration;
+using v5::usb::device;
+using v5::usb::usb_interface_concept;
 }  // namespace hal::usb
