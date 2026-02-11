@@ -1,3 +1,17 @@
+// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
 #include <array>
@@ -15,35 +29,14 @@
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 
-#include "libhal-util/usb/utils.hpp"
+#include "../usb/utils.hpp"
 
 namespace hal::v5::usb {
-constexpr u8 iface_desc_length = 9;
-constexpr u8 iface_desc_type = 0x4;
-constexpr u8 str_desc_type = 0x3;
-constexpr u8 iad_length = 0x08;
-constexpr u8 iad_type = 0x0B;
-
-template<typename T>
-bool span_eq(std::span<T> const lhs, std::span<T> const rhs)
-{
-  if (lhs.size() != rhs.size()) {
-    return false;
-  }
-
-  for (size_t i = 0; i < lhs.size(); i++) {
-    if (lhs[i] != rhs[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-template<typename T>
-bool span_ne(std::span<T> const lhs, std::span<T> const rhs)
-{
-  return !(lhs == rhs);
-}
+constexpr u8 interface_description_length = 9;
+constexpr u8 interface_description_type = 0x4;
+constexpr u8 string_description_type = 0x3;
+constexpr u8 interface_association_descriptor_length = 0x08;
+constexpr u8 interface_association_descriptor_type = 0x0B;
 
 constexpr std::vector<hal::byte> pkt_to_scatter(setup_packet const& req)
 {
@@ -242,9 +235,9 @@ struct mock : public interface
     return m_packed_array[8];
   }
 
-  std::array<u8, 9> m_packed_array = {
-    iface_desc_length,
-    iface_desc_type,
+  std::array<u8, interface_description_length> m_packed_array = {
+    sizeof(m_packed_array),
+    interface_description_type,
     0,  // interface_number
     0,  // alternate_setting
     1,  //  num_endpoints
@@ -286,7 +279,8 @@ private:
     auto iface_idx = p_start.interface.value();
     auto str_idx = p_start.string.value();
     std::array<byte const, 8> iad_buf{
-      iad_length, iad_type,
+      interface_association_descriptor_length,
+      interface_association_descriptor_type,
       0,         // first interface
       2,         // iface count
       0,         // class
@@ -295,8 +289,8 @@ private:
       str_idx++  // string idx
     };
 
-    std::array<byte const, 2> iface_header = { iface_desc_length,
-                                               iface_desc_type };
+    std::array<byte const, 2> iface_header = { interface_description_length,
+                                               interface_description_type };
     std::array<byte const, 5> static_desc_vars = {
       0,  // altsettings
       1,  // num endpoints
@@ -346,7 +340,7 @@ private:
     if (!m_wrote_descriptors) {
       safe_throw(hal::operation_not_permitted(this));
     }
-    std::array<byte, 2> header{ 0, str_desc_type };
+    std::array<byte, 2> header{ 0, string_description_type };
     if (p_index == m_iface_one.str_idx) {
       header[0] = m_name_one.length() + 2;
       auto arr = make_scatter_bytes(

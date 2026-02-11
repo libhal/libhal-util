@@ -37,7 +37,6 @@
 #include "libhal-util/usb/endpoints.hpp"
 #include "utils.hpp"
 
-// TODO: move to util
 namespace hal::v5::usb {
 
 template<typename T>
@@ -50,9 +49,68 @@ constexpr size_t scatter_span_size(scatter_span<T> ss)
 
   return res;
 }
+
+/**
+ * @brief Result of make_sub_scatter_array containing the scatter span array
+ * and the number of valid spans within it.
+ */
+template<typename T, size_t N>
+struct sub_scatter_result
+{
+  // Array of spans composing the sub scatter span
+  std::array<std::span<T>, N> spans;
+  // Number of valid spans in the array (may be less than N if truncated)
+  size_t count;
+};
+
+// TODO: Create proper scatter span data structure and remove this
+/**
+ * @brief Create a sub scatter span from span fragments. Meaning only create a
+ * composite scatter span of a desired length instead of being composed of every
+ * span.
+ *
+ * eg:
+ * first_span = {1, 2, 3}
+ * second_span = {4, 5, 6, 7}
+ * new_sub_span = make_scatter_span_array(5, first_span, second_span) => {1, 2,
+ * 3, 4, 5}
+ *
+ * Unfortunately, it is not as clean as the above psuedo code. In reality
+ * this function returns the required spans of a given sub scatter span and the
+ * number of required spans. As of this time starting location is always the
+ * start of the first span given
+ *
+ * Usage:
+ * @code{.cpp}
+ * std::array<byte, 3> first = {1, 2, 3};
+ * std::array<byte, 4> second = {4, 5, 6, 7};
+ * std::array<byte, 2> third = {8, 9};
+ *
+ * // Request only 5 bytes from 9 total
+ * auto result = make_sub_scatter_bytes(5, first, second, third);
+ *
+ * // result.spans -> Spans in sub scatter span
+ * // result.count -> Number of scatter spans needed to account for desired
+ * elements
+ *
+ * // Use count to limit the scatter_span to valid spans only
+ * auto ss = scatter_span<byte const>(result.spans).first(result.count);
+ * @endcode
+ *
+ * @tparam T - The type each span contains
+ * @tparam Args... - The spans to compose the scatter span
+ *
+ * @param p_count - Number of elements (of type T) desired for scatter span
+ * @param p_spans - The spans that will be used to compose the new sub scatter
+ * span.
+ *
+ * @return A sub_scatter_result containing the spans used within the
+ * scatter_span and the number of spans in the sub scatter span.
+ */
 template<typename T, typename... Args>
-constexpr std::pair<std::array<std::span<T>, sizeof...(Args)>, size_t>
-make_sub_scatter_array(size_t p_count, Args&&... p_spans)
+constexpr sub_scatter_result<T, sizeof...(Args)> make_sub_scatter_array(
+  size_t p_count,
+  Args&&... p_spans)
 {
   std::array<std::span<T>, sizeof...(Args)> full_ss{ std::span<T>(
     std::forward<Args>(p_spans))... };
@@ -62,21 +120,21 @@ make_sub_scatter_array(size_t p_count, Args&&... p_spans)
   std::array<size_t, sizeof...(Args)> lens{ std::span<T>(p_spans).size()... };
 
   if (total_span_len <= p_count) {
-    return std::make_pair(full_ss, full_ss.size());
+    return { .spans = full_ss, .count = full_ss.size() };
   }
   size_t cur_len = 0;
   size_t i = 0;
   for (; i < lens.size(); i++) {
-    auto l = lens[i];
+    auto ith_span_length = lens[i];
 
-    if (p_count >= (cur_len + l)) {
+    if (p_count >= (cur_len + ith_span_length)) {
       res[i] = full_ss[i];
-      cur_len += l;
+      cur_len += ith_span_length;
       continue;
     }
 
     if (cur_len >= p_count) {
-      return std::make_pair(res, i);
+      return { .spans = res, .count = i };
     }
 
     auto delta = p_count - cur_len;
@@ -85,11 +143,15 @@ make_sub_scatter_array(size_t p_count, Args&&... p_spans)
     break;
   }
 
-  return std::make_pair(res, i + 1);
+  return { .spans = res, .count = i + 1 };
 }
 
+/**
+ * @brief Convenience wrapper for make_sub_scatter_array with byte const type.
+ * @see make_sub_scatter_array
+ */
 template<typename... Args>
-constexpr std::pair<std::array<std::span<byte const>, sizeof...(Args)>, size_t>
+constexpr sub_scatter_result<byte const, sizeof...(Args)>
 make_sub_scatter_bytes(size_t p_count, Args&&... p_spans)
 {
   return make_sub_scatter_array<byte const>(p_count,
@@ -101,30 +163,20 @@ class enumerator
 {
 
 public:
-  enumerator(
-    strong_ptr<control_endpoint> const& p_ctrl_ep,
-    strong_ptr<device> const& p_device,
-    strong_ptr<std::array<configuration, num_configs>> const& p_configs,
-    u16 p_lang_str,  // NOLINT
-    u8 p_starting_str_idx,
-    bool enumerate_immediately = true)
-    : m_ctrl_ep(p_ctrl_ep)
-    , m_device(p_device)
-    , m_configs(p_configs)
-    , m_lang_str(p_lang_str)
+  struct args
   {
-    // Verify there is space to actually allocate indexes for configuration
-    // Three string indexes are reserved for the device descriptor, then each
-    // configuration has a name which reserves a string index strings and
-    // Index 0 is reserved for the lang string
-    if (p_starting_str_idx < 1 || p_starting_str_idx > 0xFF - 3 + num_configs) {
-      safe_throw(hal::argument_out_of_domain(this));
-    }
-    m_starting_str_idx = p_starting_str_idx;
+    strong_ptr<control_endpoint> ctrl_ep;
+    strong_ptr<device> device;
+    strong_ptr<std::array<configuration, num_configs>> configs;
+    u16 lang_str;
+  };
 
-    if (enumerate_immediately) {
-      enumerate();
-    }
+  enumerator(args p_args)
+    : m_ctrl_ep(p_args.ctrl_ep)
+    , m_device(p_args.device)
+    , m_configs(p_args.configs)
+    , m_lang_str(p_args.lang_str)
+  {
   }
 
   void enumerate()
@@ -135,25 +187,25 @@ public:
       m_ctrl_ep->connect(false);
     }
 
-    auto cur_str_idx = m_starting_str_idx;
+    // String indexes 1-3 are reserved for device descriptor strings
+    // (manufacturer, product, serial number). Configuration strings start at 4.
+    u8 cur_str_idx = 4;
     byte cur_iface_idx = 0;
     // Phase one: Preperation
 
     // Device
-    m_device->manufacturer_index() = cur_str_idx++;
-    m_device->product_index() = cur_str_idx++;
-    m_device->serial_number_index() = cur_str_idx++;
-    m_device->num_configurations() = num_configs;
+    m_device->set_num_configurations(num_configs);
 
     // Configurations
     for (size_t i = 0; i < num_configs; i++) {
       configuration& config = m_configs->at(i);
-      config.configuration_index() = cur_str_idx++;
-      config.configuration_value() = i + 1;
+      config.set_configuration_index(cur_str_idx++);
+      config.set_configuration_value(i + 1);
     }
 
     for (configuration& config : *m_configs) {
-      auto total_length = static_cast<u16>(constants::config_desc_size);
+      auto total_length =
+        static_cast<u16>(constants::configuration_descriptor_size);
       for (auto const& iface : config.interfaces) {
         auto deltas = iface->write_descriptors(
           { .interface = cur_iface_idx, .string = cur_str_idx },
@@ -164,8 +216,8 @@ public:
         cur_iface_idx += deltas.interface;
         cur_str_idx += deltas.string;
       }
-      config.num_interfaces() = cur_iface_idx;
-      config.total_length() = total_length;
+      config.set_num_interfaces(cur_iface_idx);
+      config.set_total_length(total_length);
     }
 
     // Phase two: Writing
@@ -196,7 +248,7 @@ public:
         continue;
       }
 
-      if (num_bytes_read != constants::size_std_req) {
+      if (num_bytes_read != constants::standard_request_size) {
 
         safe_throw(hal::message_size(num_bytes_read, this));
       }
@@ -252,7 +304,7 @@ public:
 
     if (determine_standard_request(req) ==
           standard_request_types::get_descriptor &&
-        static_cast<descriptor_type>((req.value() & 0xFF << 8) >> 8) ==
+        static_cast<descriptor_type>(req.value() >> 8 & 0xFF) ==
           descriptor_type::string) {
       handle_str_descriptors(req.value() & 0xFF, req.length() > 2);
 
@@ -308,8 +360,8 @@ private:
         if (m_active_conf == nullptr) {
           safe_throw(hal::operation_not_permitted(this));
         }
-        auto scatter_conf = make_scatter_bytes(
-          std::span(&m_active_conf->configuration_value(), 1));
+        auto conf_value = m_active_conf->configuration_value();
+        auto scatter_conf = make_scatter_bytes(std::span(&conf_value, 1));
         m_ctrl_ep->write(scatter_conf);
         break;
       }
@@ -327,21 +379,22 @@ private:
 
   void process_get_descriptor(setup_packet& req)
   {
-    hal::byte desc_type = (req.value() & 0xFF << 8) >> 8;
+    hal::byte desc_type = req.value() >> 8 & 0xFF;
     [[maybe_unused]] hal::byte desc_idx = req.value() & 0xFF;
 
     switch (static_cast<descriptor_type>(desc_type)) {
       case descriptor_type::device: {
         auto header =
-          std::to_array({ constants::device_desc_size,
+          std::to_array({ constants::device_descriptor_size,
                           static_cast<byte>(descriptor_type::device) });
-        m_device->max_packet_size() = static_cast<byte>(m_ctrl_ep->info().size);
+        m_device->set_max_packet_size(
+          static_cast<byte>(m_ctrl_ep->info().size));
         auto scatter_arr_pair =
           make_sub_scatter_bytes(req.length(), header, *m_device);
         hal::v5::write_and_flush(
           *m_ctrl_ep,
-          scatter_span<byte const>(scatter_arr_pair.first)
-            .first(scatter_arr_pair.second));
+          scatter_span<byte const>(scatter_arr_pair.spans)
+            .first(scatter_arr_pair.count));
 
         break;
       }
@@ -349,21 +402,21 @@ private:
       case descriptor_type::configuration: {
         configuration& conf = m_configs->at(desc_idx);
         auto conf_hdr =
-          std::to_array({ constants::config_desc_size,
+          std::to_array({ constants::configuration_descriptor_size,
                           static_cast<byte>(descriptor_type::configuration) });
         auto scatter_conf_pair = make_sub_scatter_bytes(
           req.length(), conf_hdr, static_cast<std::span<u8 const>>(conf));
 
-        m_ctrl_ep->write(scatter_span<byte const>(scatter_conf_pair.first)
-                           .first(scatter_conf_pair.second));
+        m_ctrl_ep->write(scatter_span<byte const>(scatter_conf_pair.spans)
+                           .first(scatter_conf_pair.count));
 
         // Return early if the only thing requested was the config descriptor
-        if (req.length() <= constants::config_desc_size) {
+        if (req.length() <= constants::configuration_descriptor_size) {
           m_ctrl_ep->write({});
           return;
         }
 
-        u16 total_size = constants::config_desc_size;
+        u16 total_size = constants::configuration_descriptor_size;
         for (auto const& iface : conf.interfaces) {
           std::ignore = iface->write_descriptors(
             { .interface = std::nullopt, .string = std::nullopt },
@@ -390,8 +443,8 @@ private:
                             static_cast<byte>(descriptor_type::string) });
           auto lang = setup_packet::to_le_u16(m_lang_str);
           auto scatter_arr_pair = make_scatter_bytes(s_hdr, lang);
-          // auto p = scatter_span<byte const>(scatter_arr_pair.first)
-          //            .first(scatter_arr_pair.second);
+          // auto p = scatter_span<byte const>(scatter_arr_pair.spans)
+          //            .first(scatter_arr_pair.count);
           m_ctrl_ep->write(scatter_arr_pair);
           m_ctrl_ep->write({});
           break;
@@ -410,8 +463,9 @@ private:
 
   void handle_str_descriptors(u8 const target_idx, u16 p_len)
   {
-
-    u8 cfg_string_end = m_starting_str_idx + 3 + num_configs;
+    // Device strings at indexes 1-3, configuration strings start at 4
+    constexpr u8 device_str_start = 1;
+    u8 cfg_string_end = device_str_start + 3 + num_configs;
     if (target_idx <= cfg_string_end) {
       auto r = write_cfg_str_descriptor(target_idx, p_len);
       if (!r) {
@@ -466,23 +520,26 @@ private:
 
   bool write_cfg_str_descriptor(u8 const target_idx, u16 p_len)
   {
-    constexpr u8 dev_manu_offset = 0;
-    constexpr u8 dev_prod_offset = 1;
-    constexpr u8 dev_sn_offset = 2;
+    // Device strings are at fixed indexes: 1=manufacturer, 2=product, 3=serial
+    constexpr u8 manufacturer_idx = 1;
+    constexpr u8 product_idx = 2;
+    constexpr u8 serial_number_idx = 3;
+    constexpr u8 config_start_idx = 4;
+
     std::optional<std::u16string_view> opt_conf_sv;
-    if (target_idx == (m_starting_str_idx + dev_manu_offset)) {
+    if (target_idx == manufacturer_idx) {
       opt_conf_sv = m_device->manufacturer_str;
 
-    } else if (target_idx == (m_starting_str_idx + dev_prod_offset)) {
+    } else if (target_idx == product_idx) {
       opt_conf_sv = m_device->product_str;
 
-    } else if (target_idx == (m_starting_str_idx + dev_sn_offset)) {
+    } else if (target_idx == serial_number_idx) {
       opt_conf_sv = m_device->serial_number_str;
 
     } else {
       for (size_t i = 0; i < m_configs->size(); i++) {
         configuration const& conf = m_configs->at(i);
-        if (target_idx == (m_starting_str_idx + i)) {
+        if (target_idx == (config_start_idx + i)) {
           opt_conf_sv = conf.name;
         }
       }
@@ -519,8 +576,8 @@ private:
     auto scatter_arr_pair =
       make_sub_scatter_bytes(p_len, hdr_arr, conf_sv_span);
 
-    auto p = scatter_span<byte const>(scatter_arr_pair.first)
-               .first(scatter_arr_pair.second);
+    auto p = scatter_span<byte const>(scatter_arr_pair.spans)
+               .first(scatter_arr_pair.count);
     hal::v5::write_and_flush(*m_ctrl_ep, p);
 
     return true;
@@ -530,7 +587,7 @@ private:
   strong_ptr<device> m_device;
   strong_ptr<std::array<configuration, num_configs>> m_configs;
   u16 m_lang_str;
-  u8 m_starting_str_idx;
+
   std::optional<std::pair<u8, strong_ptr<interface>>> m_iface_for_str_desc;
   configuration* m_active_conf = nullptr;
   bool m_has_setup_packet = false;

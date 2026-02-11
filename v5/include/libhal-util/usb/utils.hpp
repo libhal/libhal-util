@@ -22,13 +22,13 @@ namespace hal::v5::usb {
 
 namespace constants {
 
-constexpr byte device_desc_size = 18;
-constexpr byte config_desc_size = 9;
-constexpr byte inferface_desc_size = 9;
-constexpr byte endpoint_desc_size = 7;
-constexpr byte iad_desc_size = 0x08;
+constexpr byte device_descriptor_size = 18;
+constexpr byte configuration_descriptor_size = 9;
+constexpr byte inferface_descriptor_size = 9;
+constexpr byte endpoint_descriptor_size = 7;
+constexpr byte interface_association_descriptor_size = 0x08;
 
-constexpr byte size_std_req = 8;
+constexpr byte standard_request_size = 8;
 
 }  // namespace constants
 

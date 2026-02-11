@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <iterator>
@@ -21,17 +22,16 @@
 #include <thread>
 #include <vector>
 
+#include <libhal-util/mock/usb.hpp>
 #include <libhal-util/usb.hpp>
+#include <libhal-util/usb/descriptors.hpp>
+#include <libhal-util/usb/utils.hpp>
 #include <libhal/error.hpp>
 #include <libhal/pointers.hpp>
 #include <libhal/scatter_span.hpp>
 #include <libhal/serial.hpp>
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
-
-#include "libhal-util/mock/usb.hpp"
-#include "libhal-util/usb/descriptors.hpp"
-#include "libhal-util/usb/utils.hpp"
 
 #include <boost/ut.hpp>
 
@@ -48,23 +48,23 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
   static std::array<byte, 4096> iface_buf;
 
   iface_buf.fill(0);
-  device dev({ .p_bcd_usb = 0x0002,
-               .p_device_class = class_code::application_specific,
-               .p_device_subclass = 0,
-               .p_device_protocol = 0,
-               .p_id_vendor = 0xffff,
-               .p_id_product = 0x0000,
-               .p_bcd_device = 0x0001,
+  device dev({ .bcd_usb = 0x0002,
+               .device_class = class_code::application_specific,
+               .device_subclass = 0,
+               .device_protocol = 0,
+               .id_vendor = 0xffff,
+               .id_product = 0x0000,
+               .bcd_device = 0x0001,
                .p_manufacturer = u"libhal",
                .p_product = u"Unit Test",
                .p_serial_number_str = u"123456789" });
 
   pmr::monotonic_buffer_resource pool(iface_buf.data(), std::size(iface_buf));
   std::array<configuration, 1> conf_arr{ configuration{
-    u"Test Config",
-    configuration::bitmap(true, false),
-    1,
-    &pool,
+    { .name = u"Test Config",
+      .attributes = configuration::bitmap(true, false),
+      .max_power = 1,
+      .allocator = &pool },
     make_strong_ptr<mock>(&pool, mock(u"Mock Iface")) } };
 
   mock_usb_control_endpoint ctrl_ep;
@@ -74,11 +74,17 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
     make_strong_ptr<std::array<configuration, 1>>(&pool, conf_arr);
   auto dev_ptr = make_strong_ptr<device>(&pool, dev);
   auto console_ptr = make_strong_ptr<mock_serial>(&pool, mock_serial());
-  enumerator<1> en{ ctrl_ptr, dev_ptr, conf_arr_ptr, 0x0409, 1, false };
 
-  "basic usb enumeration test"_test = [&en, &ctrl_ptr] {
+  "basic usb enumeration test"_test = [&ctrl_ptr, &dev_ptr, &conf_arr_ptr] {
     // Start enumeration process and verify connection
-    auto f = [&en]() { en.enumerate(); };
+    std::optional<enumerator<1>> en;
+    auto f = [&en, &ctrl_ptr, &dev_ptr, &conf_arr_ptr]() {
+      en.emplace(enumerator<1>::args{ .ctrl_ep = ctrl_ptr,
+                                      .device = dev_ptr,
+                                      .configs = conf_arr_ptr,
+                                      .lang_str = 0x0409 });
+      en->enumerate();
+    };
     constexpr byte delay_time_ms = 1000;
     auto& ctrl_buf = ctrl_ptr->m_out_buf;
     std::thread ejh(f);
@@ -139,7 +145,7 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
       1   // num configuration
     };
 
-    expect(that % (span_eq(std::span<byte const>(dev_expected), dev_actual)));
+    expect(std::ranges::equal(std::span<byte const>(dev_expected), dev_actual));
     ctrl_buf.clear();
 
     // Get a string descriptor header from device
@@ -163,8 +169,8 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
       static_cast<byte const>(descriptor_type::string)
     };
     std::span<byte const> actual_dev_str_hdr(ctrl_buf.data(), 2);
-    expect(that % (span_eq(std::span<byte const>(expected_manu_str_hdr),
-                           actual_dev_str_hdr)));
+    expect(std::ranges::equal(std::span<byte const>(expected_manu_str_hdr),
+                              actual_dev_str_hdr));
     ctrl_buf.clear();
 
     // Get a string descriptor from device
@@ -209,8 +215,8 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
       0x1,   // max power
 
       // Interface descriptor
-      iface_desc_length,
-      iface_desc_type,
+      interface_description_length,
+      interface_description_type,
       0x0,  // iface number
       0x0,  // alt settings
       0x1,  // number of endpoints
@@ -243,8 +249,8 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
     simulate_sending_payload(ctrl_ptr, conf_req);
     ctrl_ptr->simulate_interrupt();
     std::this_thread::sleep_for(std::chrono::milliseconds(delay_time_ms));
-    expect(that % (span_eq(std::span<byte const>(expected_conf_iface_desc),
-                           std::span<byte const>(ctrl_buf))));
+    expect(std::ranges::equal(std::span<byte const>(expected_conf_iface_desc),
+                              std::span<byte const>(ctrl_buf)));
 
     // Set configuration
     setup_packet set_conf_req(
@@ -263,9 +269,9 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
 
     ejh.join();
     // Verify active config
-    expect(that %
-           (span_eq(std::span(expected_conf_iface_desc.data() + 2, 7),
-                    std::span<byte const>(en.get_active_configuration()))));
+    expect(std::ranges::equal(
+      std::span(expected_conf_iface_desc.data() + 2, 7),
+      std::span<byte const>(en->get_active_configuration())));
   };
 };
 

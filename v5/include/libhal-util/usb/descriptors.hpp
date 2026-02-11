@@ -15,6 +15,7 @@
 #pragma once
 
 #include <array>
+#include <libhal/allocated_buffer.hpp>
 #include <memory_resource>
 #include <span>
 #include <string_view>
@@ -26,7 +27,6 @@
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 
-#include "libhal-util/as_bytes.hpp"
 #include "utils.hpp"
 
 /* TODO (PhazonicRidley):
@@ -44,88 +44,91 @@ struct device
 
   struct device_arguments
   {
-    u16 p_bcd_usb;
-    class_code p_device_class;
-    u8 p_device_subclass;  // NOLINT
-    u8 p_device_protocol;
-    u16 p_id_vendor;  // NOLINT
-    u16 p_id_product;
-    u16 p_bcd_device;
+    u16 bcd_usb;
+    class_code device_class;
+    u8 device_subclass;
+    u8 device_protocol;
+    u16 id_vendor;
+    u16 id_product;
+    u16 bcd_device;
     std::u16string_view p_manufacturer;
     std::u16string_view p_product;
     std::u16string_view p_serial_number_str;
   };
 
-  constexpr device(device_arguments&& args)
-    : manufacturer_str(args.p_manufacturer)
-    , product_str(args.p_product)
-    , serial_number_str(args.p_serial_number_str)
+  constexpr device(device_arguments&& p_args)
+    : manufacturer_str(p_args.p_manufacturer)
+    , product_str(p_args.p_product)
+    , serial_number_str(p_args.p_serial_number_str)
   {
     u8 idx = 0;
-    auto bcd_usb_bytes = hal::as_bytes(&args.p_bcd_usb, 1);
+    auto bcd_usb_bytes = setup_packet::to_le_u16(p_args.bcd_usb);
     for (auto& bcd_usb_byte : bcd_usb_bytes) {
       m_packed_arr[idx++] = bcd_usb_byte;
     }
-    m_packed_arr[idx++] = static_cast<u8>(args.p_device_class);
-    m_packed_arr[idx++] = args.p_device_subclass;
-    m_packed_arr[idx++] = args.p_device_protocol;
+    m_packed_arr[idx++] = static_cast<u8>(p_args.device_class);
+    m_packed_arr[idx++] = p_args.device_subclass;
+    m_packed_arr[idx++] = p_args.device_protocol;
 
     m_packed_arr[idx++] = 0;  // Max Packet length handled by the enumerator
-    auto id_vendor_bytes = hal::as_bytes(&args.p_id_vendor, 1);
+    auto id_vendor_bytes = setup_packet::to_le_u16(p_args.id_vendor);
     for (auto& id_vendor_byte : id_vendor_bytes) {
       m_packed_arr[idx++] = id_vendor_byte;
     }
 
-    auto id_product_bytes = hal::as_bytes(&args.p_id_product, 1);
+    auto id_product_bytes = setup_packet::to_le_u16(p_args.id_product);
     for (auto& id_product_byte : id_product_bytes) {
       m_packed_arr[idx++] = id_product_byte;
     }
 
-    auto bcd_device_bytes = hal::as_bytes(&args.p_bcd_device, 1);
+    auto bcd_device_bytes = setup_packet::to_le_u16(p_args.bcd_device);
     for (auto& bcd_device_byte : bcd_device_bytes) {
       m_packed_arr[idx++] = bcd_device_byte;
     }
 
+    // Default string indexes, assuming enumeration will use 4 onward for string
+    // indexes are these are required (can be modified by enumerator if desired)
+    m_packed_arr[idx++] = 1;  // string idx of manufacturer
+    m_packed_arr[idx++] = 2;  // string idx of product
+    m_packed_arr[idx++] = 3;  // string idx of serial number
+
     // Evaluated during enumeration
-    m_packed_arr[idx++] = 0;  // string idx of manufacturer
-    m_packed_arr[idx++] = 0;  // string idx of product
-    m_packed_arr[idx++] = 0;  // string idx of serial number
     m_packed_arr[idx++] = 0;  // Number of possible configurations
   };
 
-  u16& bcd_usb()
+  [[nodiscard]] constexpr u16 bcd_usb() const
   {
-    return *reinterpret_cast<u16*>(&m_packed_arr[0]);
+    return setup_packet::from_le_bytes(m_packed_arr[0], m_packed_arr[1]);
   }
 
-  constexpr u8& device_class()
+  [[nodiscard]] constexpr u8 device_class() const
   {
     return m_packed_arr[2];
   }
 
-  constexpr u8& device_sub_class()
+  [[nodiscard]] constexpr u8 device_sub_class() const
   {
     return m_packed_arr[3];
   }
 
-  constexpr u8& device_protocol()
+  [[nodiscard]] constexpr u8 device_protocol() const
   {
     return m_packed_arr[4];
   }
 
-  u16& id_vendor()
+  [[nodiscard]] constexpr u16 id_vendor() const
   {
-    return *reinterpret_cast<u16*>(&m_packed_arr[6]);
+    return setup_packet::from_le_bytes(m_packed_arr[6], m_packed_arr[7]);
   }
 
-  u16& id_product()
+  [[nodiscard]] constexpr u16 id_product() const
   {
-    return *reinterpret_cast<u16*>(&m_packed_arr[8]);
+    return setup_packet::from_le_bytes(m_packed_arr[8], m_packed_arr[9]);
   }
 
-  u16& bcd_device()
+  [[nodiscard]] constexpr u16 bcd_device() const
   {
-    return *reinterpret_cast<u16*>(&m_packed_arr[10]);
+    return setup_packet::from_le_bytes(m_packed_arr[10], m_packed_arr[11]);
   }
 
   operator std::span<u8 const>() const
@@ -138,26 +141,37 @@ struct device
   std::u16string_view serial_number_str;
 
 private:
-  constexpr u8& max_packet_size()
+  [[nodiscard]] constexpr u8 max_packet_size() const
   {
     return m_packed_arr[5];
   }
+  constexpr void set_max_packet_size(u8 p_size)
+  {
+    m_packed_arr[5] = p_size;
+  }
 
-  constexpr u8& manufacturer_index()
+  [[nodiscard]] constexpr u8 manufacturer_index() const
   {
     return m_packed_arr[12];
   }
-  constexpr u8& product_index()
+
+  [[nodiscard]] constexpr u8 product_index() const
   {
     return m_packed_arr[13];
   }
-  constexpr u8& serial_number_index()
+
+  [[nodiscard]] constexpr u8 serial_number_index() const
   {
     return m_packed_arr[14];
   }
-  constexpr u8& num_configurations()
+
+  [[nodiscard]] constexpr u8 num_configurations() const
   {
     return m_packed_arr[15];
+  }
+  constexpr void set_num_configurations(u8 p_count)
+  {
+    m_packed_arr[15] = p_count;
   }
 
   std::array<hal::byte, 16> m_packed_arr;
@@ -207,14 +221,22 @@ struct configuration
     u8 m_bitmap;
   };
 
+  /** Configuration descriptor info.
+   * @note The name string_view must outlive the configuration object.
+   */
+  struct configuration_info
+  {
+    std::u16string_view name;
+    bitmap attributes;
+    u8 max_power;
+    std::pmr::polymorphic_allocator<> allocator;
+  };
+
   template<usb_interface_concept... Interfaces>
-  constexpr configuration(std::u16string_view p_name,
-                          bitmap&& p_attributes,
-                          u8&& p_max_power,
-                          std::pmr::polymorphic_allocator<> p_allocator,
+  constexpr configuration(configuration_info p_info,
                           strong_ptr<Interfaces>... p_interfaces)
-    : name(p_name)
-    , interfaces(p_allocator)
+    : name(p_info.name)
+    , interfaces(p_info.allocator)
   {
     interfaces.reserve(sizeof...(p_interfaces));
     (interfaces.push_back(p_interfaces), ...);
@@ -227,8 +249,8 @@ struct configuration
     m_packed_arr[idx++] = 0;                  // 3 Config number
     m_packed_arr[idx++] = 0;  // 4 Configuration name string index
 
-    m_packed_arr[idx++] = p_attributes.to_byte();  // 5
-    m_packed_arr[idx++] = p_max_power;             // 6
+    m_packed_arr[idx++] = p_info.attributes.to_byte();  // 5
+    m_packed_arr[idx++] = p_info.max_power;             // 6
   }
 
   operator std::span<u8 const>() const
@@ -240,12 +262,12 @@ struct configuration
   {
     return { m_packed_arr[5] };
   }
-  constexpr u8& attributes_byte()
+  [[nodiscard]] constexpr u8 attributes_byte() const
   {
     return m_packed_arr[5];
   }
 
-  constexpr u8& max_power()
+  [[nodiscard]] constexpr u8 max_power() const
   {
     return m_packed_arr[6];
   }
@@ -253,22 +275,43 @@ struct configuration
   std::u16string_view name;
   std::pmr::vector<strong_ptr<interface>> interfaces;
 
-  // private:
-  u16& total_length()
+private:
+  [[nodiscard]] constexpr u16 total_length() const
   {
-    return *reinterpret_cast<u16*>(&m_packed_arr[0]);
+    return setup_packet::from_le_bytes(m_packed_arr[0], m_packed_arr[1]);
   }
-  constexpr u8& num_interfaces()
+
+  constexpr void set_total_length(u16 p_length)
+  {
+    auto bytes = setup_packet::to_le_u16(p_length);
+    m_packed_arr[0] = bytes[0];
+    m_packed_arr[1] = bytes[1];
+  }
+  [[nodiscard]] constexpr u8 num_interfaces() const
   {
     return m_packed_arr[2];
   }
-  constexpr u8& configuration_value()
+  constexpr void set_num_interfaces(u8 p_count)
+  {
+    m_packed_arr[2] = p_count;
+  }
+
+  [[nodiscard]] constexpr u8 configuration_value() const
   {
     return m_packed_arr[3];
   }
-  constexpr u8& configuration_index()
+  constexpr void set_configuration_value(u8 p_value)
+  {
+    m_packed_arr[3] = p_value;
+  }
+
+  [[nodiscard]] constexpr u8 configuration_index() const
   {
     return m_packed_arr[4];
+  }
+  constexpr void set_configuration_index(u8 p_index)
+  {
+    m_packed_arr[4] = p_index;
   }
 
   std::array<hal::byte, 7> m_packed_arr;
