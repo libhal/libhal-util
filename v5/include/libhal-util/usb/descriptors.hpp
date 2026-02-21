@@ -15,7 +15,6 @@
 #pragma once
 
 #include <array>
-#include <libhal/allocated_buffer.hpp>
 #include <memory_resource>
 #include <span>
 #include <string_view>
@@ -37,8 +36,9 @@
 
 namespace hal::v5::usb {
 
-struct device
+class device
 {
+public:
   template<size_t>
   friend class enumerator;
 
@@ -98,7 +98,7 @@ struct device
 
   [[nodiscard]] constexpr u16 bcd_usb() const
   {
-    return setup_packet::from_le_bytes(m_packed_arr[0], m_packed_arr[1]);
+    return construct_le_u16(m_packed_arr[0], m_packed_arr[1]);
   }
 
   [[nodiscard]] constexpr u8 device_class() const
@@ -118,17 +118,17 @@ struct device
 
   [[nodiscard]] constexpr u16 id_vendor() const
   {
-    return setup_packet::from_le_bytes(m_packed_arr[6], m_packed_arr[7]);
+    return construct_le_u16(m_packed_arr[6], m_packed_arr[7]);
   }
 
   [[nodiscard]] constexpr u16 id_product() const
   {
-    return setup_packet::from_le_bytes(m_packed_arr[8], m_packed_arr[9]);
+    return construct_le_u16(m_packed_arr[8], m_packed_arr[9]);
   }
 
   [[nodiscard]] constexpr u16 bcd_device() const
   {
-    return setup_packet::from_le_bytes(m_packed_arr[10], m_packed_arr[11]);
+    return construct_le_u16(m_packed_arr[10], m_packed_arr[11]);
   }
 
   operator std::span<u8 const>() const
@@ -174,6 +174,11 @@ private:
     m_packed_arr[15] = p_count;
   }
 
+  static u16 construct_le_u16(hal::byte high, hal::byte low)
+  {  // NOLINT
+    return static_cast<u16>(high) << 8 | static_cast<u16>(low);
+  }
+
   std::array<hal::byte, 16> m_packed_arr;
 };
 
@@ -183,9 +188,9 @@ template<typename T>
 concept usb_interface_concept = std::derived_from<T, interface>;
 
 // Calculate: total length, number of interfaces, configuration value
-struct configuration
+class configuration
 {
-
+public:
   template<size_t>
   friend class enumerator;
 
@@ -236,17 +241,17 @@ struct configuration
   constexpr configuration(configuration_info p_info,
                           strong_ptr<Interfaces>... p_interfaces)
     : name(p_info.name)
-    , interfaces(p_info.allocator)
+    , m_interfaces(p_info.allocator)
   {
-    interfaces.reserve(sizeof...(p_interfaces));
-    (interfaces.push_back(p_interfaces), ...);
+    m_interfaces.reserve(sizeof...(p_interfaces));
+    (m_interfaces.push_back(p_interfaces), ...);
     u8 idx = 0;
 
     // Anything marked with 0 is to be populated at enumeration time
     m_packed_arr[idx++] = 0;  // 0 Total Length
     m_packed_arr[idx++] = 0;
-    m_packed_arr[idx++] = interfaces.size();  // 2 number of interfaces
-    m_packed_arr[idx++] = 0;                  // 3 Config number
+    m_packed_arr[idx++] = m_interfaces.size();  // 2 number of interfaces
+    m_packed_arr[idx++] = 0;                    // 3 Config number
     m_packed_arr[idx++] = 0;  // 4 Configuration name string index
 
     m_packed_arr[idx++] = p_info.attributes.to_byte();  // 5
@@ -272,8 +277,12 @@ struct configuration
     return m_packed_arr[6];
   }
 
+  [[nodiscard]] constexpr std::span<strong_ptr<interface>> interfaces()
+  {
+    return m_interfaces;
+  }
+
   std::u16string_view name;
-  std::pmr::vector<strong_ptr<interface>> interfaces;
 
 private:
   [[nodiscard]] constexpr u16 total_length() const
@@ -314,6 +323,7 @@ private:
     m_packed_arr[4] = p_index;
   }
 
+  std::pmr::vector<strong_ptr<interface>> m_interfaces;
   std::array<hal::byte, 7> m_packed_arr;
 };
 }  // namespace hal::v5::usb

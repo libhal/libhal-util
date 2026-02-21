@@ -19,6 +19,7 @@
 #include <cwchar>
 
 #include <array>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -179,6 +180,9 @@ public:
   {
   }
 
+  // TODO: Factor out this function and resume_ctrl_transaction. The logic
+  // should be the same for both and the caller is responsible for polling.
+  // Optional: Have an API that will auto poll
   void enumerate()
   {
     // Renumerate, a config will only be set if
@@ -206,7 +210,7 @@ public:
     for (configuration& config : *m_configs) {
       auto total_length =
         static_cast<u16>(constants::configuration_descriptor_size);
-      for (auto const& iface : config.interfaces) {
+      for (auto const& iface : config.m_interfaces) {
         auto deltas = iface->write_descriptors(
           { .interface = cur_iface_idx, .string = cur_str_idx },
           [&total_length](scatter_span<hal::byte const> p_data) {
@@ -252,11 +256,6 @@ public:
 
         safe_throw(hal::message_size(num_bytes_read, this));
       }
-      //
-      // for (auto const& el : raw_req) {
-      //
-      // }
-      //
 
       if (req.get_recipient() != setup_packet::request_recipient::device) {
         safe_throw(hal::not_connected(this));
@@ -264,7 +263,6 @@ public:
 
       // TODO: Handle exception
       handle_standard_device_request(req);
-      // m_ctrl_ep->write({});  // Send ZLP to complete Data
       // Transaction
       if (static_cast<standard_request_types>(req.request()) ==
           standard_request_types::set_configuration) {
@@ -275,19 +273,29 @@ public:
     } while (!finished_enumeration);
   }
 
-  [[nodiscard]] configuration& get_active_configuration()
+  [[nodiscard]] std::optional<std::reference_wrapper<configuration>>
+  get_active_configuration()
   {
     if (m_active_conf == nullptr) {
-      safe_throw(hal::operation_not_permitted(this));
+      return std::nullopt;
     }
 
-    return *m_active_conf;
+    return std::make_optional(std::ref(*m_active_conf));
   }
 
   void resume_ctrl_transaction()
   {
-    while (!m_has_setup_packet) {
-      continue;
+    if (!m_has_setup_packet) {
+      return;
+    }
+
+    if (m_retry_counter > 3) {
+      m_retry_counter = 0;
+      throw hal::not_connected(this);
+    }
+
+    if (m_ctrl_ep->info().stalled) {
+      m_ctrl_ep->stall(false);
     }
 
     m_has_setup_packet = false;
@@ -306,10 +314,14 @@ public:
           standard_request_types::get_descriptor &&
         static_cast<descriptor_type>(req.value() >> 8 & 0xFF) ==
           descriptor_type::string) {
-      handle_str_descriptors(req.value() & 0xFF, req.length() > 2);
+      handle_str_descriptors(req.value() & 0xFF, req.length());
 
     } else if (req.get_recipient() == setup_packet::request_recipient::device) {
-      handle_standard_device_request(req);
+      try {
+        handle_standard_device_request(req);
+      } catch (hal::exception&) {
+        m_ctrl_ep->stall(true);
+      }
     } else {
       // Handle iface level requests
       interface::endpoint_writer f;
@@ -325,7 +337,14 @@ public:
         };
       }
       bool req_handled = false;
-      for (auto const& iface : get_active_configuration()) {
+      std::optional<std::reference_wrapper<configuration>> active_conf =
+        get_active_configuration();
+      if (!active_conf.has_value()) {
+        m_ctrl_ep->stall(true);
+        m_retry_counter += 1;
+      }
+
+      for (auto const& iface : active_conf.value().get().interfaces()) {
         req_handled = iface->handle_request(req, f);
         if (req_handled) {
           break;
@@ -417,7 +436,7 @@ private:
         }
 
         u16 total_size = constants::configuration_descriptor_size;
-        for (auto const& iface : conf.interfaces) {
+        for (auto const& iface : conf.m_interfaces) {
           std::ignore = iface->write_descriptors(
             { .interface = std::nullopt, .string = std::nullopt },
             [this, &total_size](scatter_span<hal::byte const> byte_stream) {
@@ -427,11 +446,6 @@ private:
         }
 
         m_ctrl_ep->write({});
-        // if (total_size != req.length()) {
-        //   safe_throw(hal::operation_not_supported(
-        //     this));  // TODO: Make specific exception for this
-        // }
-
         break;
       }
 
@@ -443,8 +457,6 @@ private:
                             static_cast<byte>(descriptor_type::string) });
           auto lang = setup_packet::to_le_u16(m_lang_str);
           auto scatter_arr_pair = make_scatter_bytes(s_hdr, lang);
-          // auto p = scatter_span<byte const>(scatter_arr_pair.spans)
-          //            .first(scatter_arr_pair.count);
           m_ctrl_ep->write(scatter_arr_pair);
           m_ctrl_ep->write({});
           break;
@@ -461,7 +473,7 @@ private:
     }
   }
 
-  void handle_str_descriptors(u8 const target_idx, u16 p_len)
+  void handle_str_descriptors(u8 target_idx, u16 p_len)
   {
     // Device strings at indexes 1-3, configuration strings start at 4
     constexpr u8 device_str_start = 1;
@@ -500,7 +512,7 @@ private:
     };
 
     if (m_active_conf != nullptr) {
-      for (auto const& iface : m_active_conf->interfaces) {
+      for (auto const& iface : m_active_conf->m_interfaces) {
         auto res = iface->write_string_descriptor(target_idx, f);
         if (res) {
           return;
@@ -509,7 +521,7 @@ private:
     }
 
     for (configuration const& conf : *m_configs) {
-      for (auto const& iface : conf.interfaces) {
+      for (auto const& iface : conf.m_interfaces) {
         auto res = iface->write_string_descriptor(target_idx, f);
         if (res) {
           break;
@@ -518,7 +530,7 @@ private:
     }
   }
 
-  bool write_cfg_str_descriptor(u8 const target_idx, u16 p_len)
+  bool write_cfg_str_descriptor(u8 const target_idx, u16 le_len)
   {
     // Device strings are at fixed indexes: 1=manufacturer, 2=product, 3=serial
     constexpr u8 manufacturer_idx = 1;
@@ -549,24 +561,6 @@ private:
       return false;
     }
 
-    // Acceptable to access without checking because guaranteed to be Some,
-    // there is no pattern matching in C++ yet so unable to do this cleanly
-    // (would require a check on every single one)
-
-    auto sv = opt_conf_sv.value();
-    std::mbstate_t state{};
-    for (wchar_t const wc : sv) {
-      std::array<char, 1024> tmp;
-      size_t len = std::wcrtomb(tmp.data(), wc, &state);
-      if (len == static_cast<size_t>(-1)) {
-
-        continue;
-      }
-
-      for (size_t i = 0; i < len; i++) {
-      }
-    }
-
     auto const conf_sv_span = hal::as_bytes(opt_conf_sv.value());
     auto desc_len = static_cast<hal::byte>((conf_sv_span.size() + 2));
 
@@ -574,7 +568,7 @@ private:
       { desc_len, static_cast<hal::byte>(descriptor_type::string) });
 
     auto scatter_arr_pair =
-      make_sub_scatter_bytes(p_len, hdr_arr, conf_sv_span);
+      make_sub_scatter_bytes(le_len, hdr_arr, conf_sv_span);
 
     auto p = scatter_span<byte const>(scatter_arr_pair.spans)
                .first(scatter_arr_pair.count);
@@ -591,6 +585,7 @@ private:
   std::optional<std::pair<u8, strong_ptr<interface>>> m_iface_for_str_desc;
   configuration* m_active_conf = nullptr;
   bool m_has_setup_packet = false;
+  u8 m_retry_counter = 0;
 };
 }  // namespace hal::v5::usb
 

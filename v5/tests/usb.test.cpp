@@ -271,7 +271,7 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
     // Verify active config
     expect(std::ranges::equal(
       std::span(expected_conf_iface_desc.data() + 2, 7),
-      std::span<byte const>(en->get_active_configuration())));
+      std::span<byte const>(en->get_active_configuration()->get())));
   };
 };
 
