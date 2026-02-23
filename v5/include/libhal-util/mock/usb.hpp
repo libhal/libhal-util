@@ -43,9 +43,9 @@ constexpr std::vector<hal::byte> pkt_to_scatter(setup_packet const& req)
   std::vector<byte> vec;
   vec.push_back(req.bm_request_type());
   vec.push_back(req.request());
-  vec.append_range(setup_packet::to_le_u16(req.value()));
-  vec.append_range(setup_packet::to_le_u16(req.index()));
-  vec.append_range(setup_packet::to_le_u16(req.length()));
+  vec.append_range(req.value_bytes());
+  vec.append_range(req.index_bytes());
+  vec.append_range(req.length_bytes());
 
   return vec;
 }
@@ -369,7 +369,7 @@ private:
       safe_throw(hal::operation_not_supported(this));
     }
 
-    auto iface_idx = p_pkt.index() & 0xFF;
+    auto iface_idx = p_pkt.index_bytes()[0];
 
     if (iface_idx == m_iface_one.num) {
       return m_iface_one.num;
@@ -387,7 +387,7 @@ private:
       safe_throw(hal::operation_not_supported(this));
     }
 
-    auto iface_idx = p_pkt.index() & 0xFF;
+    auto iface_idx = p_pkt.index_bytes()[0];
 
     if (iface_idx == m_iface_one.num) {
       m_iface_one.feature = p_set;
@@ -400,7 +400,7 @@ private:
 
   u8 driver_get_interface(setup_packet p_pkt)
   {
-    auto iface_idx = p_pkt.index() & 0xFF;
+    auto iface_idx = p_pkt.index_bytes()[0];
 
     if (iface_idx == m_iface_one.num) {
       return m_iface_one.alt_settings;
@@ -413,7 +413,7 @@ private:
 
   void driver_set_interface(setup_packet p_pkt)
   {
-    auto iface_idx = p_pkt.index() & 0xFF;
+    auto iface_idx = p_pkt.index_bytes()[0];
     auto alt_setting = p_pkt.value();
     if (iface_idx == m_iface_one.num) {
       m_iface_one.alt_settings = alt_setting;

@@ -309,12 +309,11 @@ public:
     if (req.get_type() == setup_packet::request_type::invalid) {
       return;
     }
-
     if (determine_standard_request(req) ==
           standard_request_types::get_descriptor &&
-        static_cast<descriptor_type>(req.value() >> 8 & 0xFF) ==
+        static_cast<descriptor_type>(req.value_bytes()[1]) ==
           descriptor_type::string) {
-      handle_str_descriptors(req.value() & 0xFF, req.length());
+      handle_str_descriptors(req.value_bytes()[0], req.length());
 
     } else if (req.get_recipient() == setup_packet::request_recipient::device) {
       try {
@@ -360,12 +359,21 @@ public:
   }
 
 private:
+  u16 assemble_le_u16(std::span<byte const> bytes)
+  {
+    if (bytes.size() != 2) {
+      throw hal::argument_out_of_domain(this);
+    }
+
+    return static_cast<u16>(bytes[0]) | (static_cast<u16>(bytes[1]) << 8);
+  }
+
   void handle_standard_device_request(setup_packet& req)
   {
     switch (determine_standard_request(req)) {
       case standard_request_types::set_address: {
         m_ctrl_ep->write({});
-        m_ctrl_ep->set_address(req.value());
+        m_ctrl_ep->set_address(req.value_bytes()[0]);
 
         break;
       }
@@ -398,9 +406,8 @@ private:
 
   void process_get_descriptor(setup_packet& req)
   {
-    hal::byte desc_type = req.value() >> 8 & 0xFF;
-    [[maybe_unused]] hal::byte desc_idx = req.value() & 0xFF;
-
+    hal::byte desc_type = req.value_bytes()[1];
+    [[maybe_unused]] hal::byte desc_idx = req.value_bytes()[0];
     switch (static_cast<descriptor_type>(desc_type)) {
       case descriptor_type::device: {
         auto header =
@@ -408,8 +415,8 @@ private:
                           static_cast<byte>(descriptor_type::device) });
         m_device->set_max_packet_size(
           static_cast<byte>(m_ctrl_ep->info().size));
-        auto scatter_arr_pair =
-          make_sub_scatter_bytes(req.length(), header, *m_device);
+        auto scatter_arr_pair = make_sub_scatter_bytes(
+          assemble_le_u16(req.length_bytes()), header, *m_device);
         hal::v5::write_and_flush(
           *m_ctrl_ep,
           scatter_span<byte const>(scatter_arr_pair.spans)
@@ -423,8 +430,10 @@ private:
         auto conf_hdr =
           std::to_array({ constants::configuration_descriptor_size,
                           static_cast<byte>(descriptor_type::configuration) });
-        auto scatter_conf_pair = make_sub_scatter_bytes(
-          req.length(), conf_hdr, static_cast<std::span<u8 const>>(conf));
+        auto scatter_conf_pair =
+          make_sub_scatter_bytes(assemble_le_u16(req.length_bytes()),
+                                 conf_hdr,
+                                 static_cast<std::span<u8 const>>(conf));
 
         m_ctrl_ep->write(scatter_span<byte const>(scatter_conf_pair.spans)
                            .first(scatter_conf_pair.count));

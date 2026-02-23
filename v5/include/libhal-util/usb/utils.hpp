@@ -14,14 +14,9 @@
 
 #pragma once
 
-#include <string>
-#include <string_view>
-
 #include <libhal/error.hpp>
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
-
-#include "../bit.hpp"
 
 namespace hal::v5::usb {
 
