@@ -82,8 +82,12 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
       en.emplace(enumerator<1>::args{ .ctrl_ep = ctrl_ptr,
                                       .device = dev_ptr,
                                       .configs = conf_arr_ptr,
-                                      .lang_str = 0x0409 });
-      en->enumerate();
+                                      .lang_str = 0x0409,
+                                      .retry_max = 3 });
+      en->start_enumeration();
+      while (!en->is_enumerated()) {
+        en->process_ctrl_transfer();
+      }
     };
     constexpr byte delay_time_ms = 1000;
     auto& ctrl_buf = ctrl_ptr->m_out_buf;

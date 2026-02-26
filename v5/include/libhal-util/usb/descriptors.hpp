@@ -51,6 +51,8 @@ public:
     u16 id_vendor;
     u16 id_product;
     u16 bcd_device;
+
+    // FIXME: Enforce LE for strings, might need to use a span<u16>
     std::u16string_view p_manufacturer;
     std::u16string_view p_product;
     std::u16string_view p_serial_number_str;

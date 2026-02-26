@@ -170,6 +170,7 @@ public:
     strong_ptr<device> device;
     strong_ptr<std::array<configuration, num_configs>> configs;
     u16 lang_str;
+    u8 retry_max;
   };
 
   enumerator(args p_args)
@@ -177,101 +178,33 @@ public:
     , m_device(p_args.device)
     , m_configs(p_args.configs)
     , m_lang_str(p_args.lang_str)
+    , m_retry_max(p_args.retry_max)
+    , m_eio(*this)
   {
+    m_ctrl_ep->on_receive(
+      [this](control_endpoint::on_receive_tag) { m_has_setup_packet = true; });
   }
 
-  // TODO: Factor out this function and resume_ctrl_transaction. The logic
-  // should be the same for both and the caller is responsible for polling.
-  // Optional: Have an API that will auto poll
-  void enumerate()
+  enumerator(enumerator&&) = delete;
+  bool operator=(enumerator&&) = delete;
+
+  void start_enumeration()
   {
-    // Renumerate, a config will only be set if
     if (m_active_conf != nullptr) {
       m_active_conf = nullptr;
       m_ctrl_ep->connect(false);
+      m_reinit_descriptors = true;
     }
 
-    // String indexes 1-3 are reserved for device descriptor strings
-    // (manufacturer, product, serial number). Configuration strings start at 4.
-    u8 cur_str_idx = 4;
-    byte cur_iface_idx = 0;
-    // Phase one: Preperation
-
-    // Device
-    m_device->set_num_configurations(num_configs);
-
-    // Configurations
-    for (size_t i = 0; i < num_configs; i++) {
-      configuration& config = m_configs->at(i);
-      config.set_configuration_index(cur_str_idx++);
-      config.set_configuration_value(i + 1);
+    if (m_reinit_descriptors) {
+      prepare_descriptors();
+      m_reinit_descriptors = false;
     }
-
-    for (configuration& config : *m_configs) {
-      auto total_length =
-        static_cast<u16>(constants::configuration_descriptor_size);
-      for (auto const& iface : config.m_interfaces) {
-        auto deltas = iface->write_descriptors(
-          { .interface = cur_iface_idx, .string = cur_str_idx },
-          [&total_length](scatter_span<hal::byte const> p_data) {
-            total_length += scatter_span_size(p_data);
-          });
-
-        cur_iface_idx += deltas.interface;
-        cur_str_idx += deltas.string;
-      }
-      config.set_num_interfaces(cur_iface_idx);
-      config.set_total_length(total_length);
-    }
-
-    // Phase two: Writing
-
-    // TODO: Make async
-    bool finished_enumeration = false;
-    bool volatile waiting_for_data = true;
-
-    using on_receive_tag = control_endpoint::on_receive_tag;
-
-    m_ctrl_ep->on_receive(
-      [&waiting_for_data](on_receive_tag) { waiting_for_data = false; });
-    m_ctrl_ep->connect(true);
-
-    // std::array<hal::byte, constants::size_std_req> raw_req;
-    setup_packet req;
-    do {
-      // Seriously, make this async
-      while (waiting_for_data) {
-        continue;
-      }
-      waiting_for_data = true;
-
-      auto scatter_raw_req = make_writable_scatter_bytes(req.raw_request_bytes);
-      auto num_bytes_read = m_ctrl_ep->read(scatter_raw_req);
-
-      if (num_bytes_read == 0) {
-        continue;
-      }
-
-      if (num_bytes_read != constants::standard_request_size) {
-
-        safe_throw(hal::message_size(num_bytes_read, this));
-      }
-
-      if (req.get_recipient() != setup_packet::request_recipient::device) {
-        safe_throw(hal::not_connected(this));
-      }
-
-      // TODO: Handle exception
-      handle_standard_device_request(req);
-      // Transaction
-      if (static_cast<standard_request_types>(req.request()) ==
-          standard_request_types::set_configuration) {
-        finished_enumeration = true;
-        m_ctrl_ep->on_receive(
-          [this](on_receive_tag) { m_has_setup_packet = true; });
-      }
-    } while (!finished_enumeration);
   }
+
+  // TODO: Add run_enumeration once corotines are instated
+  // run_enumeration() will be a non-blocking polling loop that yields when
+  // waiting for a packet
 
   [[nodiscard]] std::optional<std::reference_wrapper<configuration>>
   get_active_configuration()
@@ -283,15 +216,20 @@ public:
     return std::make_optional(std::ref(*m_active_conf));
   }
 
-  void resume_ctrl_transaction()
+  [[nodiscard]] bool is_enumerated() const
+  {
+    return m_active_conf != nullptr;
+  }
+
+  void process_ctrl_transfer()
   {
     if (!m_has_setup_packet) {
       return;
     }
 
-    if (m_retry_counter > 3) {
+    if (m_retry_counter >= m_retry_max) {
       m_retry_counter = 0;
-      throw hal::not_connected(this);
+      throw hal::io_error(this);
     }
 
     if (m_ctrl_ep->info().stalled) {
@@ -300,6 +238,7 @@ public:
 
     m_has_setup_packet = false;
 
+    // TODO: Maybe make an API for this?
     setup_packet req;
     auto& read_buf = req.raw_request_bytes;
     auto scatter_read_buf = make_writable_scatter_bytes(read_buf);
@@ -317,52 +256,136 @@ public:
 
     } else if (req.get_recipient() == setup_packet::request_recipient::device) {
       try {
+        // Developers are responsible for handling all other errors such as
+        // arguments out of domain as thats user defined data.
         handle_standard_device_request(req);
-      } catch (hal::exception&) {
+      } catch (hal::operation_not_supported&) {
         m_ctrl_ep->stall(true);
+        return;
       }
     } else {
       // Handle iface level requests
-      interface::endpoint_writer f;
-      if (req.is_device_to_host()) {
-        f = [this](scatter_span<hal::byte const> resp) {
-          m_ctrl_ep->write(resp);
-        };
-      } else {
-        f = [this](scatter_span<hal::byte> resp) {
-          std::ignore = m_ctrl_ep->read(
-            resp);  // Can't use this... TODO: Maybe add a return for callbacks
-                    // for "bytes processed"
-        };
-      }
       bool req_handled = false;
       std::optional<std::reference_wrapper<configuration>> active_conf =
         get_active_configuration();
       if (!active_conf.has_value()) {
         m_ctrl_ep->stall(true);
         m_retry_counter += 1;
+        return;
       }
 
-      for (auto const& iface : active_conf.value().get().interfaces()) {
-        req_handled = iface->handle_request(req, f);
-        if (req_handled) {
-          break;
+      try {
+        for (auto const& iface : active_conf.value().get().interfaces()) {
+          req_handled = iface->handle_request(req, m_eio);
+          if (req_handled) {
+            break;
+          }
         }
+        // Handle driver exceptions if any, but make sure to inject a STALL in
+        // first
+      } catch (hal::exception& e) {
+        m_ctrl_ep->stall(true);
+        throw e;
       }
-      m_ctrl_ep->write(
-        {});  // A ZLP to terminate Data Transaction just to be safe
 
       if (!req_handled) {
-        safe_throw(hal::argument_out_of_domain(this));
+        m_ctrl_ep->stall(true);
+        m_retry_counter += 1;
+        return;
       }
     }
+
+    m_ctrl_ep->write(
+      {});  // A ZLP to terminate Data Transaction just to be safe
   }
 
 private:
+  class enumerator_eio : endpoint_io
+  {
+    friend class enumerator;
+
+    enumerator_eio(enumerator& p_en)
+      : m_ctrl_ep(p_en.m_ctrl_ep)
+    {
+    }
+
+    usize driver_read(scatter_span<byte> p_buffer) override
+    {
+      auto read = m_ctrl_ep->read(p_buffer);
+      return read;
+    }
+
+    usize driver_write(scatter_span<byte const> p_buffer) override
+    {
+      // FIXME: Change write to return how many bytes written
+      m_ctrl_ep->write(p_buffer);
+      return scatter_span_size(p_buffer);
+    }
+
+    strong_ptr<control_endpoint> m_ctrl_ep;
+  };
+
+  struct size_eio : endpoint_io
+  {
+
+    usize driver_read(scatter_span<byte> p_buffer) override
+    {
+      auto s = scatter_span_size(p_buffer);
+      total_length += s;
+      return s;
+    }
+
+    usize driver_write(scatter_span<byte const> p_buffer) override
+    {
+      auto s = scatter_span_size(p_buffer);
+      total_length += s;
+      return s;
+    }
+
+    usize total_length = 0;
+  };
+
+  void prepare_descriptors()
+  {
+    // String indexes 1-3 are reserved for device descriptor strings
+    // (manufacturer, product, serial number). Configuration strings start at 4.
+    u8 cur_str_idx = 4;
+    byte cur_iface_idx = 0;
+    // Phase one: Preperation
+
+    // Device
+    m_device->set_num_configurations(num_configs);
+
+    // Configurations
+    for (size_t i = 0; i < num_configs; i++) {
+      configuration& config = m_configs->at(i);
+      config.set_configuration_index(cur_str_idx++);
+      config.set_configuration_value(i + 1);
+    }
+
+    size_eio seio;
+    for (configuration& config : *m_configs) {
+      auto total_length =
+        static_cast<u16>(constants::configuration_descriptor_size);
+      for (auto const& iface : config.m_interfaces) {
+        auto deltas = iface->write_descriptors(
+          { .interface = cur_iface_idx, .string = cur_str_idx }, seio);
+
+        cur_iface_idx += deltas.interface;
+        cur_str_idx += deltas.string;
+      }
+      config.set_num_interfaces(cur_iface_idx);
+      total_length += seio.total_length;
+      config.set_total_length(total_length);
+      seio.total_length = 0;
+    }
+
+    m_ctrl_ep->connect(true);
+  }
   u16 assemble_le_u16(std::span<byte const> bytes)
   {
     if (bytes.size() != 2) {
-      throw hal::argument_out_of_domain(this);
+      safe_throw(hal::argument_out_of_domain(this));
     }
 
     return static_cast<u16>(bytes[0]) | (static_cast<u16>(bytes[1]) << 8);
@@ -385,7 +408,7 @@ private:
 
       case standard_request_types::get_configuration: {
         if (m_active_conf == nullptr) {
-          safe_throw(hal::operation_not_permitted(this));
+          safe_throw(hal::operation_not_supported(this));
         }
         auto conf_value = m_active_conf->configuration_value();
         auto scatter_conf = make_scatter_bytes(std::span(&conf_value, 1));
@@ -400,7 +423,7 @@ private:
 
       case standard_request_types::invalid:
       default:
-        safe_throw(hal::not_connected(this));
+        safe_throw(hal::operation_not_supported(this));
     }
   }
 
@@ -417,10 +440,9 @@ private:
           static_cast<byte>(m_ctrl_ep->info().size));
         auto scatter_arr_pair = make_sub_scatter_bytes(
           assemble_le_u16(req.length_bytes()), header, *m_device);
-        hal::v5::write_and_flush(
-          *m_ctrl_ep,
-          scatter_span<byte const>(scatter_arr_pair.spans)
-            .first(scatter_arr_pair.count));
+        hal::v5::write(*m_ctrl_ep,
+                       scatter_span<byte const>(scatter_arr_pair.spans)
+                         .first(scatter_arr_pair.count));
 
         break;
       }
@@ -440,21 +462,15 @@ private:
 
         // Return early if the only thing requested was the config descriptor
         if (req.length() <= constants::configuration_descriptor_size) {
-          m_ctrl_ep->write({});
           return;
         }
 
-        u16 total_size = constants::configuration_descriptor_size;
+        // u16 total_size = constants::configuration_descriptor_size;
         for (auto const& iface : conf.m_interfaces) {
           std::ignore = iface->write_descriptors(
-            { .interface = std::nullopt, .string = std::nullopt },
-            [this, &total_size](scatter_span<hal::byte const> byte_stream) {
-              m_ctrl_ep->write(byte_stream);
-              total_size += scatter_span_size(byte_stream);
-            });
+            { .interface = std::nullopt, .string = std::nullopt }, m_eio);
         }
 
-        m_ctrl_ep->write({});
         break;
       }
 
@@ -467,7 +483,6 @@ private:
           auto lang = setup_packet::to_le_u16(m_lang_str);
           auto scatter_arr_pair = make_scatter_bytes(s_hdr, lang);
           m_ctrl_ep->write(scatter_arr_pair);
-          m_ctrl_ep->write({});
           break;
         }
         handle_str_descriptors(desc_idx, req.length());  // Can throw
@@ -499,30 +514,28 @@ private:
     if (m_iface_for_str_desc.has_value() &&
         m_iface_for_str_desc->first == target_idx) {
       bool success = m_iface_for_str_desc->second->write_string_descriptor(
-        target_idx, [this](scatter_span<hal::byte const> desc) {
-          hal::v5::write_and_flush(*m_ctrl_ep, desc);
-        });
+        target_idx, m_eio);
       if (success) {
         return;
       }
     }
 
     // Iterate through every interface now to find a match
-    auto f = [this, p_len](scatter_span<hal::byte const> desc) {
-      if (p_len > 2) {
-        hal::v5::write_and_flush(*m_ctrl_ep, desc);
-      } else {
-        std::array<hal::byte const, 1> desc_type{ static_cast<hal::byte>(
-          descriptor_type::string) };
-        auto scatter_str_hdr =
-          make_scatter_bytes(std::span(&desc[0][0], 1), desc_type);
-        hal::v5::write_and_flush(*m_ctrl_ep, scatter_str_hdr);
-      }
-    };
+    // auto f = [this, p_len](scatter_span<hal::byte const> desc) {
+    //   if (p_len > 2) {
+    //     hal::v5::write_and_flush(*m_ctrl_ep, desc);
+    //   } else {
+    //     std::array<hal::byte const, 1> desc_type{ static_cast<hal::byte>(
+    //       descriptor_type::string) };
+    //     auto scatter_str_hdr =
+    //       make_scatter_bytes(std::span(&desc[0][0], 1), desc_type);
+    //     hal::v5::write_and_flush(*m_ctrl_ep, scatter_str_hdr);
+    //   }
+    // };
 
     if (m_active_conf != nullptr) {
       for (auto const& iface : m_active_conf->m_interfaces) {
-        auto res = iface->write_string_descriptor(target_idx, f);
+        auto res = iface->write_string_descriptor(target_idx, m_eio);
         if (res) {
           return;
         }
@@ -531,7 +544,7 @@ private:
 
     for (configuration const& conf : *m_configs) {
       for (auto const& iface : conf.m_interfaces) {
-        auto res = iface->write_string_descriptor(target_idx, f);
+        auto res = iface->write_string_descriptor(target_idx, m_eio);
         if (res) {
           break;
         }
@@ -581,7 +594,7 @@ private:
 
     auto p = scatter_span<byte const>(scatter_arr_pair.spans)
                .first(scatter_arr_pair.count);
-    hal::v5::write_and_flush(*m_ctrl_ep, p);
+    hal::v5::write(*m_ctrl_ep, p);
 
     return true;
   }
@@ -593,8 +606,11 @@ private:
 
   std::optional<std::pair<u8, strong_ptr<interface>>> m_iface_for_str_desc;
   configuration* m_active_conf = nullptr;
-  bool m_has_setup_packet = false;
+  bool volatile m_has_setup_packet = false;
+  bool m_reinit_descriptors = true;
   u8 m_retry_counter = 0;
+  u8 const m_retry_max;
+  enumerator_eio m_eio;
 };
 }  // namespace hal::v5::usb
 

@@ -173,7 +173,7 @@ struct mock : public interface
 
   [[nodiscard]] descriptor_count driver_write_descriptors(
     descriptor_start p_start,
-    endpoint_writer const& p_callback) override
+    endpoint_io& p_eio) override
   {
     byte res_iface_idx = 0;
     if (p_start.interface.has_value()) {
@@ -187,14 +187,13 @@ struct mock : public interface
       res_str_idx = 1;
     }
 
-    p_callback(make_scatter_bytes(m_packed_array));
+    p_eio.write(make_scatter_bytes(m_packed_array));
 
     return { .interface = res_iface_idx, .string = res_str_idx };
   }
 
-  [[nodiscard]] bool driver_write_string_descriptor(
-    u8 p_index,
-    endpoint_writer const& p_callback) override
+  [[nodiscard]] bool driver_write_string_descriptor(u8 p_index,
+                                                    endpoint_io& p_eio) override
   {
     if (p_index != interface_name_string_idx()) {
       return false;
@@ -207,16 +206,16 @@ struct mock : public interface
       str_hdr,
       std::span(reinterpret_cast<byte const*>(name.data()), name.length()));
 
-    p_callback(scatter_span<byte const>(scatter_arr));
+    p_eio.write(scatter_span<byte const>(scatter_arr));
 
     return true;
   }
 
   bool driver_handle_request(setup_packet const& p_setup,
-                             endpoint_writer const& p_callback) override
+                             endpoint_io& p_eio) override
   {
     std::ignore = p_setup;
-    std::ignore = p_callback;
+    std::ignore = p_eio;
     return true;
   }
 
@@ -270,7 +269,7 @@ public:
 private:
   [[nodiscard]] descriptor_count driver_write_descriptors(
     descriptor_start p_start,
-    endpoint_writer const& p_callback) override
+    endpoint_io& p_eio) override
   {
     if (!p_start.interface.has_value() || !p_start.string.has_value()) {
       throw hal::argument_out_of_domain(this);
@@ -328,14 +327,13 @@ private:
                                        static_desc_vars,
                                        std::span(iface_two_str_arr));
 
-    p_callback(span_arr);
-    m_wrote_descriptors = true;
+    auto written = p_eio.write(span_arr);
+    m_wrote_descriptors = written != 0;
     return { .interface = 2, .string = 3 };
   }
 
-  [[nodiscard]] bool driver_write_string_descriptor(
-    u8 p_index,
-    endpoint_writer const& p_callback) override
+  [[nodiscard]] bool driver_write_string_descriptor(u8 p_index,
+                                                    endpoint_io& p_eio) override
   {
     if (!m_wrote_descriptors) {
       safe_throw(hal::operation_not_permitted(this));
@@ -347,8 +345,8 @@ private:
         header,
         std::span(reinterpret_cast<byte const*>(m_name_one.data()),
                   m_name_one.length()));
-      p_callback(arr);
-      return true;
+      auto written = p_eio.write(arr);
+      return written != 0;
     } else if (p_index == m_iface_two.str_idx) {
       header[0] = m_iface_two.str_idx + 2;
       auto arr = make_scatter_bytes(
@@ -356,8 +354,8 @@ private:
         std::span(reinterpret_cast<byte const*>(m_name_two.data()),
                   m_name_two.length()));
 
-      p_callback(arr);
-      return true;
+      auto written = p_eio.write(arr);
+      return written != 0;
     }
 
     return false;
@@ -425,10 +423,10 @@ private:
   }
 
   bool driver_handle_request(setup_packet const& p_setup,
-                             endpoint_writer const& p_callback) override
+                             endpoint_io& p_eio) override
   {
     std::ignore = p_setup;
-    std::ignore = p_callback;
+    std::ignore = p_eio;
     return false;
   }
 
