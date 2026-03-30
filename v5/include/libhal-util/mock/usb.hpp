@@ -25,7 +25,6 @@
 #include <libhal/error.hpp>
 #include <libhal/pointers.hpp>
 #include <libhal/scatter_span.hpp>
-#include <libhal/serial.hpp>
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 
@@ -489,30 +488,5 @@ void simulate_sending_payload(
 
 //   return vec;
 // }
-
-class mock_serial : public hal::serial
-{
-  void driver_configure(settings const& p_settings) override
-  {
-    std::ignore = p_settings;
-  }
-
-  write_t driver_write(std::span<byte const> p_data) override
-  {
-    std::string_view sv(reinterpret_cast<char const*>(p_data.data()),
-                        p_data.size());
-    return { .data = p_data };
-  }
-
-  read_t driver_read(std::span<byte> p_data) override
-  {
-    std::ignore = p_data;
-    return { .data = {}, .available = 0, .capacity = 0 };
-  }
-
-  void driver_flush() override
-  {
-  }
-};
 
 }  // namespace hal::v5::usb

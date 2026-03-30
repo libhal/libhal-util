@@ -29,7 +29,6 @@
 #include <libhal/error.hpp>
 #include <libhal/pointers.hpp>
 #include <libhal/scatter_span.hpp>
-#include <libhal/serial.hpp>
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 
@@ -181,8 +180,16 @@ public:
     , m_retry_max(p_args.retry_max)
     , m_eio(*this)
   {
-    m_ctrl_ep->on_receive(
-      [this](control_endpoint::on_receive_tag) { m_has_setup_packet = true; });
+    m_ctrl_ep->on_receive([this](control_endpoint::on_receive_tag) {
+      if (!this->m_ctrl_ep->has_setup().has_value()) {
+        m_has_setup_packet =
+          true;  // We will just assume the packet is a setup packet, enumerator
+                 // checks packet structure already
+        return;
+      }
+
+      m_has_setup_packet = this->m_ctrl_ep->has_setup().value();
+    });
   }
 
   enumerator(enumerator&&) = delete;
@@ -235,17 +242,22 @@ public:
     if (m_ctrl_ep->info().stalled) {
       m_ctrl_ep->stall(false);
     }
-
     m_has_setup_packet = false;
 
     // TODO: Maybe make an API for this?
     setup_packet req;
     auto& read_buf = req.raw_request_bytes;
+
     auto scatter_read_buf = make_writable_scatter_bytes(read_buf);
     auto bytes_read = m_ctrl_ep->read(scatter_read_buf);
-    std::span payload(read_buf.data(), bytes_read);
+    if (bytes_read != 8) {
+      return;  // STATUS OUT ZLP or malformed — not a SETUP packet
+    }
 
+    std::span payload(read_buf.data(), bytes_read);
     if (req.get_type() == setup_packet::request_type::invalid) {
+      m_ctrl_ep->stall(true);
+      m_retry_counter += 1;
       return;
     }
     if (determine_standard_request(req) ==
@@ -263,6 +275,12 @@ public:
         m_ctrl_ep->stall(true);
         return;
       }
+
+      if (determine_standard_request(req) ==
+          standard_request_types::set_address) {
+        return;
+      }
+
     } else {
       // Handle iface level requests
       bool req_handled = false;
@@ -295,8 +313,7 @@ public:
       }
     }
 
-    m_ctrl_ep->write(
-      {});  // A ZLP to terminate Data Transaction just to be safe
+    m_ctrl_ep->write({});  // ZLP
   }
 
 private:
@@ -393,12 +410,12 @@ private:
 
   void handle_standard_device_request(setup_packet& req)
   {
-    switch (determine_standard_request(req)) {
+    auto det = determine_standard_request(req);
+    switch (det) {
       case standard_request_types::set_address: {
-        m_ctrl_ep->write({});
+        m_ctrl_ep->write({});  // ZLP must precede the address change
         m_ctrl_ep->set_address(req.value_bytes()[0]);
-
-        break;
+        return;
       }
 
       case standard_request_types::get_descriptor: {
@@ -443,7 +460,6 @@ private:
         hal::v5::write(*m_ctrl_ep,
                        scatter_span<byte const>(scatter_arr_pair.spans)
                          .first(scatter_arr_pair.count));
-
         break;
       }
 
@@ -465,12 +481,10 @@ private:
           return;
         }
 
-        // u16 total_size = constants::configuration_descriptor_size;
         for (auto const& iface : conf.m_interfaces) {
           std::ignore = iface->write_descriptors(
             { .interface = std::nullopt, .string = std::nullopt }, m_eio);
         }
-
         break;
       }
 
@@ -500,8 +514,7 @@ private:
   void handle_str_descriptors(u8 target_idx, u16 p_len)
   {
     // Device strings at indexes 1-3, configuration strings start at 4
-    constexpr u8 device_str_start = 1;
-    u8 cfg_string_end = device_str_start + 3 + num_configs;
+    u8 cfg_string_end = num_configs + 3;
     if (target_idx <= cfg_string_end) {
       auto r = write_cfg_str_descriptor(target_idx, p_len);
       if (!r) {

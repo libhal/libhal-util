@@ -29,7 +29,6 @@
 #include <libhal/error.hpp>
 #include <libhal/pointers.hpp>
 #include <libhal/scatter_span.hpp>
-#include <libhal/serial.hpp>
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 
@@ -73,20 +72,18 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
   auto const conf_arr_ptr =
     make_strong_ptr<std::array<configuration, 1>>(&pool, conf_arr);
   auto dev_ptr = make_strong_ptr<device>(&pool, dev);
-  auto console_ptr = make_strong_ptr<mock_serial>(&pool, mock_serial());
-
   "basic usb enumeration test"_test = [&ctrl_ptr, &dev_ptr, &conf_arr_ptr] {
     // Start enumeration process and verify connection
-    std::optional<enumerator<1>> en;
-    auto f = [&en, &ctrl_ptr, &dev_ptr, &conf_arr_ptr]() {
-      en.emplace(enumerator<1>::args{ .ctrl_ep = ctrl_ptr,
-                                      .device = dev_ptr,
-                                      .configs = conf_arr_ptr,
-                                      .lang_str = 0x0409,
-                                      .retry_max = 3 });
-      en->start_enumeration();
-      while (!en->is_enumerated()) {
-        en->process_ctrl_transfer();
+    enumerator<1> en(enumerator<1>::args{ .ctrl_ep = ctrl_ptr,
+                                          .device = dev_ptr,
+                                          .configs = conf_arr_ptr,
+                                          .lang_str = 0x0409,
+                                          .retry_max = 3 });
+
+    auto f = [&en]() {
+      en.start_enumeration();
+      while (!en.is_enumerated()) {
+        en.process_ctrl_transfer();
       }
     };
     constexpr byte delay_time_ms = 1000;
@@ -247,7 +244,8 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
     expect(that % expected_total_len == actual_total_len);
     ctrl_buf.clear();
 
-    // Get Configuration Descriptor + interface descriptor + endpoint descriptor
+    // Get Configuration Descriptor + interface descriptor + endpoint
+    // descriptor
     setup_packet conf_req(conf_hdr_req);
     conf_req.length(expected_total_len);
     simulate_sending_payload(ctrl_ptr, conf_req);
@@ -275,7 +273,7 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
     // Verify active config
     expect(std::ranges::equal(
       std::span(expected_conf_iface_desc.data() + 2, 7),
-      std::span<byte const>(en->get_active_configuration()->get())));
+      std::span<byte const>(en.get_active_configuration()->get())));
   };
 };
 
