@@ -88,7 +88,7 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
     };
     constexpr byte delay_time_ms = 1000;
     auto& ctrl_buf = ctrl_ptr->m_out_buf;
-    std::thread ejh(f);
+    std::jthread ejh(f);
     std::this_thread::sleep_for(std::chrono::milliseconds(
       delay_time_ms));  // Should be enough time to connect
     expect(that % true == ctrl_ptr->m_is_connected);

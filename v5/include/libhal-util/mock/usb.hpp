@@ -353,8 +353,8 @@ private:
         std::span(reinterpret_cast<byte const*>(m_name_two.data()),
                   m_name_two.length()));
 
-      auto written = p_eio.write(arr);
-      return written != 0;
+      p_eio.write(arr);
+      return true;
     }
 
     return false;
@@ -447,46 +447,5 @@ void simulate_sending_payload(
 
   ctrl_ptr->write_request(ss);
 }
-
-// u8 calculate_conf_desc_recursive(std::span<configuration> p_conf_arr)
-// {
-//   u8 total_len = 0;
-//   for (configuration& conf : p_conf_arr) {
-//     total_len += 9;
-//     for (auto& iface : conf.interfaces) {
-//       auto real_iface = dynamic_cast<mock*>(&(*iface));
-//       std::ignore = iface->write_descriptors(
-//         { .interface = 0, .string = real_iface->interface_name_string_idx()
-//         },
-//         [&total_len](scatter_span<byte const> p_data) {
-//           total_len += scatter_span_size(p_data);
-//         });
-//     }
-//   }
-
-//   return total_len;
-// }
-
-// std::vector<byte> generate_conf_descriptors(std::span<configuration>
-// p_conf_arr)
-// {
-//   std::vector<byte> vec;
-//   for (configuration const& conf : p_conf_arr) {
-//     vec.append_range(std::span<byte const>(conf));
-//     for (auto const& iface : conf.interfaces) {
-//       std::ignore =
-//         iface->write_descriptors({ .interface = 0, .string = 0 },
-//                                  [&vec](scatter_span<byte const> p_dat) {
-//                                    for (auto const& s : p_dat) {
-//                                      for (auto const& el : s) {
-//                                        vec.push_back(el);
-//                                      }
-//                                    }
-//                                  });
-//     }
-//   }
-
-//   return vec;
-// }
 
 }  // namespace hal::v5::usb

@@ -1,4 +1,4 @@
-// Copyright 2024 - 2025 Khalil Estell and the libhal contributors
+// Copyright 2026 Madeline Schneider and the libhal contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,129 +34,16 @@
 
 #include "descriptors.hpp"
 #include "libhal-util/as_bytes.hpp"
+#include "libhal-util/scatter_span.hpp"
 #include "libhal-util/usb/endpoints.hpp"
 #include "utils.hpp"
 
 namespace hal::v5::usb {
 
-template<typename T>
-constexpr size_t scatter_span_size(scatter_span<T> ss)
-{
-  size_t res = 0;
-  for (auto const& s : ss) {
-    res += s.size();
-  }
-
-  return res;
-}
-
-/**
- * @brief Result of make_sub_scatter_array containing the scatter span array
- * and the number of valid spans within it.
- */
-template<typename T, size_t N>
-struct sub_scatter_result
-{
-  // Array of spans composing the sub scatter span
-  std::array<std::span<T>, N> spans;
-  // Number of valid spans in the array (may be less than N if truncated)
-  size_t count;
-};
-
-// TODO: Create proper scatter span data structure and remove this
-/**
- * @brief Create a sub scatter span from span fragments. Meaning only create a
- * composite scatter span of a desired length instead of being composed of every
- * span.
- *
- * eg:
- * first_span = {1, 2, 3}
- * second_span = {4, 5, 6, 7}
- * new_sub_span = make_scatter_span_array(5, first_span, second_span) => {1, 2,
- * 3, 4, 5}
- *
- * Unfortunately, it is not as clean as the above psuedo code. In reality
- * this function returns the required spans of a given sub scatter span and the
- * number of required spans. As of this time starting location is always the
- * start of the first span given
- *
- * Usage:
- * @code{.cpp}
- * std::array<byte, 3> first = {1, 2, 3};
- * std::array<byte, 4> second = {4, 5, 6, 7};
- * std::array<byte, 2> third = {8, 9};
- *
- * // Request only 5 bytes from 9 total
- * auto result = make_sub_scatter_bytes(5, first, second, third);
- *
- * // result.spans -> Spans in sub scatter span
- * // result.count -> Number of scatter spans needed to account for desired
- * elements
- *
- * // Use count to limit the scatter_span to valid spans only
- * auto ss = scatter_span<byte const>(result.spans).first(result.count);
- * @endcode
- *
- * @tparam T - The type each span contains
- * @tparam Args... - The spans to compose the scatter span
- *
- * @param p_count - Number of elements (of type T) desired for scatter span
- * @param p_spans - The spans that will be used to compose the new sub scatter
- * span.
- *
- * @return A sub_scatter_result containing the spans used within the
- * scatter_span and the number of spans in the sub scatter span.
- */
-template<typename T, typename... Args>
-constexpr sub_scatter_result<T, sizeof...(Args)> make_sub_scatter_array(
-  size_t p_count,
-  Args&&... p_spans)
-{
-  std::array<std::span<T>, sizeof...(Args)> full_ss{ std::span<T>(
-    std::forward<Args>(p_spans))... };
-
-  size_t total_span_len = scatter_span_size(scatter_span<T>(full_ss));
-  std::array<std::span<T>, sizeof...(Args)> res;
-  std::array<size_t, sizeof...(Args)> lens{ std::span<T>(p_spans).size()... };
-
-  if (total_span_len <= p_count) {
-    return { .spans = full_ss, .count = full_ss.size() };
-  }
-  size_t cur_len = 0;
-  size_t i = 0;
-  for (; i < lens.size(); i++) {
-    auto ith_span_length = lens[i];
-
-    if (p_count >= (cur_len + ith_span_length)) {
-      res[i] = full_ss[i];
-      cur_len += ith_span_length;
-      continue;
-    }
-
-    if (cur_len >= p_count) {
-      return { .spans = res, .count = i };
-    }
-
-    auto delta = p_count - cur_len;
-    std::span<T> subspan = std::span(full_ss[i]).first(delta);
-    res[i] = subspan;
-    break;
-  }
-
-  return { .spans = res, .count = i + 1 };
-}
-
-/**
- * @brief Convenience wrapper for make_sub_scatter_array with byte const type.
- * @see make_sub_scatter_array
- */
-template<typename... Args>
-constexpr sub_scatter_result<byte const, sizeof...(Args)>
-make_sub_scatter_bytes(size_t p_count, Args&&... p_spans)
-{
-  return make_sub_scatter_array<byte const>(p_count,
-                                            std::forward<Args>(p_spans)...);
-}
+using hal::v5::make_sub_scatter_array;
+using hal::v5::make_sub_scatter_bytes;
+using hal::v5::scatter_span_size;
+using hal::v5::sub_scatter_result;
 
 template<size_t num_configs>
 class enumerator
@@ -178,7 +65,6 @@ public:
     , m_configs(p_args.configs)
     , m_lang_str(p_args.lang_str)
     , m_retry_max(p_args.retry_max)
-    , m_eio(*this)
   {
     m_ctrl_ep->on_receive([this](control_endpoint::on_receive_tag) {
       if (!this->m_ctrl_ep->has_setup().has_value()) {
@@ -208,10 +94,6 @@ public:
       m_reinit_descriptors = false;
     }
   }
-
-  // TODO: Add run_enumeration once corotines are instated
-  // run_enumeration() will be a non-blocking polling loop that yields when
-  // waiting for a packet
 
   [[nodiscard]] std::optional<std::reference_wrapper<configuration>>
   get_active_configuration()
@@ -244,7 +126,6 @@ public:
     }
     m_has_setup_packet = false;
 
-    // TODO: Maybe make an API for this?
     setup_packet req;
     auto& read_buf = req.raw_request_bytes;
 
@@ -254,7 +135,6 @@ public:
       return;  // STATUS OUT ZLP or malformed — not a SETUP packet
     }
 
-    std::span payload(read_buf.data(), bytes_read);
     if (req.get_type() == setup_packet::request_type::invalid) {
       m_ctrl_ep->stall(true);
       m_retry_counter += 1;
@@ -293,8 +173,9 @@ public:
       }
 
       try {
+        enumerator_eio eio(*this);
         for (auto const& iface : active_conf.value().get().interfaces()) {
-          req_handled = iface->handle_request(req, m_eio);
+          req_handled = iface->handle_request(req, eio);
           if (req_handled) {
             break;
           }
@@ -303,7 +184,7 @@ public:
         // first
       } catch (hal::exception& e) {
         m_ctrl_ep->stall(true);
-        throw e;
+        throw;
       }
 
       if (!req_handled) {
@@ -319,6 +200,11 @@ public:
 private:
   class enumerator_eio : endpoint_io
   {
+
+  public:
+    enumerator_eio() = delete;
+
+  private:
     friend class enumerator;
 
     enumerator_eio(enumerator& p_en)
@@ -345,11 +231,9 @@ private:
   struct size_eio : endpoint_io
   {
 
-    usize driver_read(scatter_span<byte> p_buffer) override
+    usize driver_read(scatter_span<byte>) override
     {
-      auto s = scatter_span_size(p_buffer);
-      total_length += s;
-      return s;
+      return 0;
     }
 
     usize driver_write(scatter_span<byte const> p_buffer) override
@@ -446,9 +330,10 @@ private:
 
   void process_get_descriptor(setup_packet& req)
   {
-    hal::byte desc_type = req.value_bytes()[1];
-    [[maybe_unused]] hal::byte desc_idx = req.value_bytes()[0];
-    switch (static_cast<descriptor_type>(desc_type)) {
+    auto const desc_type = static_cast<descriptor_type>(req.value_bytes()[1]);
+    auto desc_idx = req.value_bytes()[0];
+    enumerator_eio eio(*this);
+    switch (desc_type) {
       case descriptor_type::device: {
         auto header =
           std::to_array({ constants::device_descriptor_size,
@@ -476,6 +361,8 @@ private:
         m_ctrl_ep->write(scatter_span<byte const>(scatter_conf_pair.spans)
                            .first(scatter_conf_pair.count));
 
+        // TODO(#99): `enumerator_eio` should limit the amount written to the
+        // control endpoint based on `request.length()` value.
         // Return early if the only thing requested was the config descriptor
         if (req.length() <= constants::configuration_descriptor_size) {
           return;
@@ -483,7 +370,7 @@ private:
 
         for (auto const& iface : conf.m_interfaces) {
           std::ignore = iface->write_descriptors(
-            { .interface = std::nullopt, .string = std::nullopt }, m_eio);
+            { .interface = std::nullopt, .string = std::nullopt }, eio);
         }
         break;
       }
@@ -503,8 +390,8 @@ private:
         break;
       }
 
-        // TODO: Interface, endpoint, device_qualifier, interface_power,
-        // OTHER_SPEED_CONFIGURATION
+        // TODO(#95): device_qualifier
+        // TODO(#96): OTHER_SPEED_CONFIGURATION
 
       default:
         safe_throw(hal::operation_not_supported(this));
@@ -515,6 +402,7 @@ private:
   {
     // Device strings at indexes 1-3, configuration strings start at 4
     u8 cfg_string_end = num_configs + 3;
+    enumerator_eio eio(*this);
     if (target_idx <= cfg_string_end) {
       auto r = write_cfg_str_descriptor(target_idx, p_len);
       if (!r) {
@@ -526,29 +414,16 @@ private:
 
     if (m_iface_for_str_desc.has_value() &&
         m_iface_for_str_desc->first == target_idx) {
-      bool success = m_iface_for_str_desc->second->write_string_descriptor(
-        target_idx, m_eio);
+      bool success =
+        m_iface_for_str_desc->second->write_string_descriptor(target_idx, eio);
       if (success) {
         return;
       }
     }
 
-    // Iterate through every interface now to find a match
-    // auto f = [this, p_len](scatter_span<hal::byte const> desc) {
-    //   if (p_len > 2) {
-    //     hal::v5::write_and_flush(*m_ctrl_ep, desc);
-    //   } else {
-    //     std::array<hal::byte const, 1> desc_type{ static_cast<hal::byte>(
-    //       descriptor_type::string) };
-    //     auto scatter_str_hdr =
-    //       make_scatter_bytes(std::span(&desc[0][0], 1), desc_type);
-    //     hal::v5::write_and_flush(*m_ctrl_ep, scatter_str_hdr);
-    //   }
-    // };
-
     if (m_active_conf != nullptr) {
       for (auto const& iface : m_active_conf->m_interfaces) {
-        auto res = iface->write_string_descriptor(target_idx, m_eio);
+        auto res = iface->write_string_descriptor(target_idx, eio);
         if (res) {
           return;
         }
@@ -557,7 +432,7 @@ private:
 
     for (configuration const& conf : *m_configs) {
       for (auto const& iface : conf.m_interfaces) {
-        auto res = iface->write_string_descriptor(target_idx, m_eio);
+        auto res = iface->write_string_descriptor(target_idx, eio);
         if (res) {
           break;
         }
@@ -623,7 +498,6 @@ private:
   bool m_reinit_descriptors = true;
   u8 m_retry_counter = 0;
   u8 const m_retry_max;
-  enumerator_eio m_eio;
 };
 }  // namespace hal::v5::usb
 

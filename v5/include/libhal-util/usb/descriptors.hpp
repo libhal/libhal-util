@@ -28,11 +28,10 @@
 
 #include "utils.hpp"
 
-/* TODO (PhazonicRidley):
-  Class, subclass, proto validator
-  Device qualifer descriptor (happens between device and config)
-  Other speed descriptor (happens with configuration)
-*/
+// TODO(#95): Device qualifer descriptor (happens between device and config)
+// TODO(#96): USB 3.x Superspeed descriptors (BOS Descriptor, Device Capability,
+// etc...)
+// TODO(#97): Add Class, subclass, protocol descriptors
 
 namespace hal::v5::usb {
 
@@ -52,7 +51,7 @@ public:
     u16 id_product;
     u16 bcd_device;
 
-    // FIXME: Enforce LE for strings, might need to use a span<u16>
+    // TODO(#98): Enforce LE for strings, might need to use a span<u16>
     std::u16string_view p_manufacturer;
     std::u16string_view p_product;
     std::u16string_view p_serial_number_str;
