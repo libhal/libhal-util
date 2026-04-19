@@ -81,7 +81,6 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
                                           .retry_max = 3 });
 
     auto f = [&en]() {
-      en.start_enumeration();
       while (!en.is_enumerated()) {
         en.process_ctrl_transfer();
       }

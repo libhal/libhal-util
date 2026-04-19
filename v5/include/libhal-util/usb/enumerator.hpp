@@ -81,20 +81,6 @@ public:
   enumerator(enumerator&&) = delete;
   bool operator=(enumerator&&) = delete;
 
-  void start_enumeration()
-  {
-    if (m_active_conf != nullptr) {
-      m_active_conf = nullptr;
-      m_ctrl_ep->connect(false);
-      m_reinit_descriptors = true;
-    }
-
-    if (m_reinit_descriptors) {
-      prepare_descriptors();
-      m_reinit_descriptors = false;
-    }
-  }
-
   [[nodiscard]] std::optional<std::reference_wrapper<configuration>>
   get_active_configuration()
   {
@@ -112,6 +98,7 @@ public:
 
   void process_ctrl_transfer()
   {
+    prepare_enumeration();
     if (!m_has_setup_packet) {
       return;
     }
@@ -198,6 +185,20 @@ public:
   }
 
 private:
+  void prepare_enumeration()
+  {
+    if (m_active_conf != nullptr) {
+      m_active_conf = nullptr;
+      m_ctrl_ep->connect(false);
+      m_reinit_descriptors = true;
+    }
+
+    if (m_reinit_descriptors) {
+      prepare_descriptors();
+      m_reinit_descriptors = false;
+    }
+  }
+
   class enumerator_eio : endpoint_io
   {
 
