@@ -65,20 +65,30 @@ public:
     , m_lang_str(p_args.lang_str)
     , m_retry_max(p_args.retry_max)
   {
-    m_ctrl_ep->on_receive([this](control_endpoint::on_receive_tag) {
-      // NOTE: These APIs will be replaced in a future update (see PR
-      // https://github.com/libhal/libhal-util/pull/100/changes), so suppressing
-      // them for now.
-      SUPPRESS_DEPRECATED_START;
-      if (!this->m_ctrl_ep->has_setup().has_value()) {
-        m_has_setup_packet =
-          true;  // We will just assume the packet is a setup packet, enumerator
-                 // checks packet structure already
-        return;
+    m_ctrl_ep->on_host_event([this](v5::usb::host_event p_event) {
+      switch (p_event) {
+        case v5::usb::host_event::setup_packet:
+          m_has_setup_packet = true;
+          break;
+        case v5::usb::host_event::reset:
+          m_active_conf = nullptr;
+        case v5::usb::host_event::data_packet:
+          m_has_setup_packet = false;
+        case v5::usb::host_event::enumerated:
+          [[fallthrough]];
+        case v5::usb::host_event::resume:
+          [[fallthrough]];
+        case v5::usb::host_event::suspend_with_wakeup:
+          [[fallthrough]];
+        case v5::usb::host_event::suspend_without_wakeup:
+          [[fallthrough]];
+        case v5::usb::host_event::sleep:
+          [[fallthrough]];
+        case v5::usb::host_event::u1_sleep:
+          [[fallthrough]];
+        case v5::usb::host_event::u2_sleep:
+          [[fallthrough]];
       }
-
-      m_has_setup_packet = this->m_ctrl_ep->has_setup().value();
-      SUPPRESS_DEPRECATED_END;
     });
   }
 
@@ -131,6 +141,7 @@ public:
       m_retry_counter += 1;
       return;
     }
+
     if (determine_standard_request(req) ==
           standard_request_types::get_descriptor &&
         static_cast<descriptor_type>(req.value_bytes()[1]) ==
@@ -152,7 +163,7 @@ public:
         return;
       }
 
-    } else {
+    } else {  // TODO(kammce): Try this next
       // Handle iface level requests
       bool req_handled = false;
       std::optional<std::reference_wrapper<configuration>> active_conf =
@@ -257,7 +268,7 @@ private:
     // (manufacturer, product, serial number). Configuration strings start at 4.
     u8 cur_str_idx = 4;
     byte cur_iface_idx = 0;
-    // Phase one: Preperation
+    // Phase one: Preparation
 
     // Device
     m_device->set_num_configurations(num_configs);
@@ -335,10 +346,10 @@ private:
 
   void process_get_descriptor(setup_packet& req)
   {
-    auto const desc_type = static_cast<descriptor_type>(req.value_bytes()[1]);
-    auto desc_idx = req.value_bytes()[0];
+    auto const type = static_cast<descriptor_type>(req.value_bytes()[1]);
+    auto const index = req.value_bytes()[0];
     enumerator_eio eio(*this);
-    switch (desc_type) {
+    switch (type) {
       case descriptor_type::device: {
         auto header =
           std::to_array({ constants::device_descriptor_size,
@@ -354,7 +365,7 @@ private:
       }
 
       case descriptor_type::configuration: {
-        configuration& conf = m_configs->at(desc_idx);
+        configuration& conf = m_configs->at(index);
         auto conf_hdr =
           std::to_array({ constants::configuration_descriptor_size,
                           static_cast<byte>(descriptor_type::configuration) });
@@ -381,17 +392,7 @@ private:
       }
 
       case descriptor_type::string: {
-        if (desc_idx == 0) {
-
-          auto s_hdr =
-            std::to_array({ static_cast<byte>(4),
-                            static_cast<byte>(descriptor_type::string) });
-          auto lang = setup_packet::to_le_u16(m_lang_str);
-          auto scatter_arr_pair = make_scatter_bytes(s_hdr, lang);
-          m_ctrl_ep->write(scatter_arr_pair);
-          break;
-        }
-        handle_str_descriptors(desc_idx, req.length());  // Can throw
+        handle_str_descriptors(index, req.length());  // Can throw
         break;
       }
 
@@ -403,32 +404,22 @@ private:
     }
   }
 
-  void handle_str_descriptors(u8 target_idx, u16 p_len)
+  void handle_str_descriptors(u8 p_target, u16 p_len)
   {
     // Device strings at indexes 1-3, configuration strings start at 4
     u8 cfg_string_end = num_configs + 3;
     enumerator_eio eio(*this);
-    if (target_idx <= cfg_string_end) {
-      auto r = write_cfg_str_descriptor(target_idx, p_len);
+    if (p_target <= cfg_string_end) {
+      auto r = write_cfg_str_descriptor(p_target, p_len);
       if (!r) {
         safe_throw(hal::argument_out_of_domain(this));
       }
-      m_iface_for_str_desc = std::nullopt;
       return;
-    }
-
-    if (m_iface_for_str_desc.has_value() &&
-        m_iface_for_str_desc->first == target_idx) {
-      bool success =
-        m_iface_for_str_desc->second->write_string_descriptor(target_idx, eio);
-      if (success) {
-        return;
-      }
     }
 
     if (m_active_conf != nullptr) {
       for (auto const& iface : m_active_conf->m_interfaces) {
-        auto res = iface->write_string_descriptor(target_idx, eio);
+        auto res = iface->write_string_descriptor(p_target, eio);
         if (res) {
           return;
         }
@@ -437,7 +428,7 @@ private:
 
     for (configuration const& conf : *m_configs) {
       for (auto const& iface : conf.m_interfaces) {
-        auto res = iface->write_string_descriptor(target_idx, eio);
+        auto res = iface->write_string_descriptor(p_target, eio);
         if (res) {
           break;
         }
@@ -445,51 +436,61 @@ private:
     }
   }
 
-  bool write_cfg_str_descriptor(u8 const target_idx, u16 le_len)
+  void write_cfg_str_descriptor(u8 const p_target, u16 p_len)
   {
+    using namespace std::string_view_literals;
+
     // Device strings are at fixed indexes: 1=manufacturer, 2=product, 3=serial
+    constexpr u8 language_id = 0;
     constexpr u8 manufacturer_idx = 1;
     constexpr u8 product_idx = 2;
     constexpr u8 serial_number_idx = 3;
     constexpr u8 config_start_idx = 4;
 
-    std::optional<std::u16string_view> opt_conf_sv;
-    if (target_idx == manufacturer_idx) {
-      opt_conf_sv = m_device->manufacturer_str;
+    if (p_target == language_id) {
+      auto const payload = std::to_array<hal::byte const>({
+        static_cast<byte>(4),                         // length
+        static_cast<byte>(descriptor_type::string),   // type
+        static_cast<byte>(m_lang_str & 0xFF),         // LE0
+        static_cast<byte>((m_lang_str >> 8) & 0xFF),  // LE1
+      });
+      // auto const lang = setup_packet::to_le_u16(m_lang_str);
+      auto const final_payload = hal::v5::make_scatter_array<byte const>(
+        std::span(payload).first(std::min<usize>(p_len, payload.size())));
+      m_ctrl_ep->write(final_payload);
+    }
 
-    } else if (target_idx == product_idx) {
-      opt_conf_sv = m_device->product_str;
+    std::u16string_view str = u""sv;
 
-    } else if (target_idx == serial_number_idx) {
-      opt_conf_sv = m_device->serial_number_str;
+    if (p_target == manufacturer_idx) {
+      str = m_device->manufacturer_str;
+
+    } else if (p_target == product_idx) {
+      str = m_device->product_str;
+
+    } else if (p_target == serial_number_idx) {
+      str = m_device->serial_number_str;
 
     } else {
       for (size_t i = 0; i < m_configs->size(); i++) {
         configuration const& conf = m_configs->at(i);
-        if (target_idx == (config_start_idx + i)) {
-          opt_conf_sv = conf.name;
+        if (p_target == (config_start_idx + i)) {
+          str = conf.name;
         }
       }
     }
 
-    if (opt_conf_sv == std::nullopt) {
-      return false;
-    }
+    auto const conf_sv_span = hal::as_bytes(str);
+    auto const length = static_cast<hal::byte>((conf_sv_span.size() + 2));
 
-    auto const conf_sv_span = hal::as_bytes(opt_conf_sv.value());
-    auto desc_len = static_cast<hal::byte>((conf_sv_span.size() + 2));
+    auto const header = std::to_array(
+      { length, static_cast<hal::byte>(descriptor_type::string) });
 
-    auto hdr_arr = std::to_array(
-      { desc_len, static_cast<hal::byte>(descriptor_type::string) });
-
-    auto scatter_arr_pair =
-      make_sub_scatter_bytes(le_len, hdr_arr, conf_sv_span);
+    auto scatter_arr_pair = make_sub_scatter_bytes(p_len, header, conf_sv_span);
 
     auto p = scatter_span<byte const>(scatter_arr_pair.spans)
                .first(scatter_arr_pair.count);
     hal::v5::write(*m_ctrl_ep, p);
-
-    return true;
   }
 
   strong_ptr<control_endpoint> m_ctrl_ep;

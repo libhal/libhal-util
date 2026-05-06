@@ -25,6 +25,7 @@
 #include <libhal-util/mock/usb.hpp>
 #include <libhal-util/usb.hpp>
 #include <libhal-util/usb/descriptors.hpp>
+#include <libhal-util/usb/enumerator.hpp>
 #include <libhal-util/usb/utils.hpp>
 #include <libhal/error.hpp>
 #include <libhal/pointers.hpp>
