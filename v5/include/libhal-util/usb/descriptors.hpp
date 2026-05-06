@@ -249,11 +249,11 @@ public:
     u8 idx = 0;
 
     // Anything marked with 0 is to be populated at enumeration time
-    m_packed_arr[idx++] = 0;  // 0 Total Length
-    m_packed_arr[idx++] = 0;
+    m_packed_arr[idx++] = 0;                    // 0 Total Length 1/2
+    m_packed_arr[idx++] = 0;                    // 1 Total Length 2/2
     m_packed_arr[idx++] = m_interfaces.size();  // 2 number of interfaces
     m_packed_arr[idx++] = 0;                    // 3 Config number
-    m_packed_arr[idx++] = 0;  // 4 Configuration name string index
+    m_packed_arr[idx++] = 0;                    // 4 Configuration string index
 
     m_packed_arr[idx++] = p_info.attributes.to_byte();  // 5
     m_packed_arr[idx++] = p_info.max_power;             // 6
@@ -315,11 +315,11 @@ private:
     m_packed_arr[3] = p_value;
   }
 
-  [[nodiscard]] constexpr u8 configuration_index() const
+  [[nodiscard]] constexpr u8 configuration_string_index() const
   {
     return m_packed_arr[4];
   }
-  constexpr void set_configuration_index(u8 p_index)
+  constexpr void set_configuration_string_index(u8 p_index)
   {
     m_packed_arr[4] = p_index;
   }
