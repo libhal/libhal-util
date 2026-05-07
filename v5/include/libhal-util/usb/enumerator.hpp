@@ -64,8 +64,10 @@ public:
     , m_lang_str(p_args.lang_str)
     , m_retry_max(p_args.retry_max)
   {
-    m_ctrl_ep->on_host_event(
-      [this](v5::usb::host_event p_event) { *m_event = p_event; });
+    m_ctrl_ep->on_host_event([this](v5::usb::host_event p_event) {
+      // Assign
+      m_event = p_event;
+    });
   }
 
   enumerator(enumerator&&) = delete;
@@ -93,14 +95,13 @@ public:
       throw hal::io_error(this);
     }
 
-    if (not m_event.has_value()) {
+    if (not m_event) {
       return;
     }
 
     switch (*m_event) {
       case v5::usb::host_event::reset:
         m_active_conf = nullptr;
-        // m_ctrl_ep->connect(false);
         prepare_descriptors();
         m_ctrl_ep->connect(true);
         break;
@@ -121,6 +122,9 @@ public:
 private:
   void pass_host_event_to_interfaces()
   {
+    if (m_active_conf == nullptr) {
+      return;
+    }
     for (auto& interface : m_active_conf->interfaces()) {
       interface->handle_host_event(*m_event);
     }
@@ -227,6 +231,8 @@ private:
     if (!request_handled) {
       send_error_to_host();
     }
+
+    m_ctrl_ep->write({});
   }
 
   void send_error_to_host()
@@ -247,10 +253,14 @@ private:
     m_device->set_num_configurations(num_configs);
 
     // Configurations
-    for (size_t i = 0; i < num_configs; i++) {
-      configuration& config = m_configs->at(i);
-      config.set_configuration_string_index(cur_str_idx++);
-      config.set_configuration_value(i + 1);
+    {
+      // Configuration index 0 is reserved/invalid
+      // Configuration index value must be greater than 0.
+      usize index = 1;
+      for (configuration& config : *m_configs) {
+        config.set_configuration_string_index(cur_str_idx++);
+        config.set_configuration_value(index++);
+      }
     }
 
     size_eio size_counting_endpoint;
@@ -294,12 +304,13 @@ private:
         }
         auto conf_value = m_active_conf->configuration_value();
         auto scatter_conf = make_scatter_bytes(std::span(&conf_value, 1));
-        m_ctrl_ep->write(scatter_conf);
+        hal::v5::write_and_flush(*m_ctrl_ep, scatter_conf);
         break;
       }
 
       case standard_request_types::set_configuration: {
         m_active_conf = &(m_configs->at(req.value() - 1));
+        m_ctrl_ep->write({});
         break;
       }
 
@@ -332,11 +343,12 @@ private:
       }
 
       case descriptor_type::configuration: {
-        if (index >= m_configs->size()) {
+        if (m_configs->empty()) {
           send_error_to_host();
           return;
         }
-        configuration& conf = (*m_configs)[index];
+
+        configuration& conf = (*m_configs)[0];
         auto const conf_hdr =
           std::to_array({ constants::configuration_descriptor_size,
                           static_cast<byte>(descriptor_type::configuration) });
@@ -350,6 +362,7 @@ private:
         // control endpoint based on `request.length()` value.
         // Return early if the only thing requested was the config descriptor
         if (req.length() <= constants::configuration_descriptor_size) {
+          m_ctrl_ep->write({});  // ZLP to finish
           return;
         }
 
@@ -374,8 +387,9 @@ private:
         // TODO(#95): device_qualifier
         // TODO(#96): OTHER_SPEED_CONFIGURATION
 
-      default:
+      default: {
         send_error_to_host();
+      }
     }
   }
 
@@ -396,7 +410,6 @@ private:
           static_cast<byte>(m_lang_str & 0xFF),         // LE0
           static_cast<byte>((m_lang_str >> 8) & 0xFF),  // LE1
         });
-        // auto const lang = setup_packet::to_le_u16(m_lang_str);
         auto const final_payload = hal::v5::make_scatter_array<byte const>(
           std::span(payload).first(std::min<usize>(p_len, payload.size())));
         m_ctrl_ep->write(final_payload);
