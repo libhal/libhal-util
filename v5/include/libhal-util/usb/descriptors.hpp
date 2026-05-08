@@ -419,5 +419,7 @@ constexpr auto generate_endpoint_descriptor(usb_endpoint_type auto& p_endpoint,
 namespace hal::usb {
 using v5::usb::configuration;
 using v5::usb::device;
+using v5::usb::generate_endpoint_descriptor;
+using v5::usb::generate_interface_descriptor;
 using v5::usb::usb_interface_concept;
 }  // namespace hal::usb

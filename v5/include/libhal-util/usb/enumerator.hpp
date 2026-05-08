@@ -112,7 +112,9 @@ public:
       return;
     }
 
-    switch (*m_event) {
+    auto event = *m_event;
+
+    switch (event) {
       case v5::usb::host_event::reset:
         m_enumerated = false;
         m_ctrl_ep->connect(true);
@@ -124,7 +126,7 @@ public:
         // Not sure what to do in this case as it shouldn't happen...
         break;
       default:  // The rest...
-        pass_host_event_to_interfaces();
+        pass_host_event_to_interfaces(event);
         break;
     }
 
@@ -132,13 +134,13 @@ public:
   }
 
 private:
-  void pass_host_event_to_interfaces()
+  void pass_host_event_to_interfaces(host_event p_event)
   {
     if (not m_enumerated) {
       return;
     }
     for (auto& interface : m_interfaces) {
-      interface->handle_host_event(*m_event);
+      interface->handle_host_event(p_event);
     }
   }
 
@@ -300,6 +302,7 @@ private:
 
       case standard_request_types::set_configuration: {
         m_enumerated = true;
+        pass_host_event_to_interfaces(hal::v5::usb::host_event::enumerated);
         m_ctrl_ep->write({});
         break;
       }

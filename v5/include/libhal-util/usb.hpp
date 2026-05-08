@@ -14,7 +14,7 @@
 
 #pragma once
 
+#include "usb/constants.hpp"
 #include "usb/descriptors.hpp"
 #include "usb/endpoints.hpp"
 #include "usb/enumerator.hpp"
-#include "usb/utils.hpp"
