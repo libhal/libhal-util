@@ -46,37 +46,36 @@ public:
   struct info
   {
     // ---- Required: no sensible defaults ----
-    u16 vendor_id;
-    u16 product_id;
+    /// Manufacturing name for this USB device
     std::u16string_view manufacturer;
+    /// Name of the USB product
     std::u16string_view product;
+    /// Serial number of this USB device
     std::u16string_view serial_number;
-    std::u16string_view configuration;
+    /// 16-bit Vendor ID
+    u16 vendor_id;
+    /// 16-bit Product ID
+    u16 product_id;
 
     // ---- Optional: reasonable defaults provided ----
 
     /// USB specification version. 0x0201 minimum for WebUSB/BOS support.
     u16 usb_version = 0x0200;
 
-    /// Set to 0x00 when class is defined at the interface level (most devices).
-    u8 device_class = 0x00;
-    u8 device_subclass = 0x00;
-    u8 device_protocol = 0x00;
-
-    /// Firmware/hardware version presented to the host.
-    u16 device_version = 0x0100;
+    /// Maximum bus current drawn in milli-amps. Stored as mA, converted to
+    /// 2mA units when writing the configuration descriptor.
+    u16 max_power_mA = 100;
 
     /// Language ID for string descriptors. 0x0409 = English (US).
     u16 lang_id = 0x0409;
 
-    /// Maximum bus current drawn in milliamps. Stored as mA, converted to
-    /// 2mA units when writing the configuration descriptor.
-    u16 max_power_mA = 100;
+    /// Firmware/hardware version presented to the host.
+    u16 device_version = 0x0100;
+
+    u8 retry_max = 3;
 
     bool self_powered = false;
     bool remote_wakeup = false;
-
-    u8 retry_max = 3;
   };
 
   base_enumerator(strong_ptr<control_endpoint> const& p_ctrl_ep,
@@ -342,9 +341,9 @@ private:
     descriptor[bcd_usb_lo] = bcd_usb[0];
     descriptor[bcd_usb_hi] = bcd_usb[1];
 
-    descriptor[b_device_class] = static_cast<u8>(m_info.device_class);
-    descriptor[b_device_sub_class] = m_info.device_subclass;
-    descriptor[b_device_protocol] = m_info.device_protocol;
+    descriptor[b_device_class] = 0x00;
+    descriptor[b_device_sub_class] = 0x00;
+    descriptor[b_device_protocol] = 0x00;
     descriptor[b_max_packet_size0] = m_ctrl_ep->info().size;
 
     auto const id_vendor = setup_packet::to_le_u16(m_info.vendor_id);
@@ -393,7 +392,7 @@ private:
 
     descriptor[b_num_interfaces] = static_cast<byte>(m_interfaces.size());
     descriptor[b_configuration_value] = 1;
-    descriptor[i_configuration] = 4;  // String index for configuration
+    descriptor[i_configuration] = 0;  // String index for configuration
 
     // Bit 7 is reserved and must be set; bits 6 and 5 are self-powered and
     // remote wakeup respectively.
@@ -462,7 +461,6 @@ private:
     }
   }
 
-  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   void handle_str_descriptors(setup_packet& p_request)
   {
     // Device strings are at fixed indexes: 1=manufacturer, 2=product, 3=serial
@@ -470,7 +468,6 @@ private:
     constexpr u8 manufacturer_index = 1;
     constexpr u8 product_index = 2;
     constexpr u8 serial_number_index = 3;
-    constexpr u8 configuration_index = 4;
 
     auto const target = p_request.value_bytes()[0];
     auto const length = p_request.length();
@@ -501,13 +498,6 @@ private:
       case serial_number_index: {
         write_string_view(m_info.serial_number, length);
         return;
-      }
-      case configuration_index: {
-        // Check if the index is for the configuration string
-        if (target == configuration_index) {
-          write_string_view(m_info.configuration, length);
-          return;
-        }
       }
       default: {
         enumerator_eio endpoint(*this);
@@ -543,8 +533,8 @@ private:
 
   strong_ptr<control_endpoint> m_ctrl_ep;
   std::span<strong_ptr<interface>> m_interfaces;
-  info m_info;
   std::optional<v5::usb::host_event> m_event = v5::usb::host_event::reset;
+  info m_info;
   u8 m_retry_counter = 0;
   bool m_enumerated = false;
 };
