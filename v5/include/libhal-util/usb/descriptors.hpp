@@ -38,7 +38,6 @@ namespace hal::v5::usb {
 class device
 {
 public:
-  template<size_t>
   friend class enumerator;
 
   struct device_arguments
@@ -192,7 +191,6 @@ concept usb_interface_concept = std::derived_from<T, interface>;
 class configuration
 {
 public:
-  template<size_t>
   friend class enumerator;
 
   struct bitmap

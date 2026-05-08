@@ -16,10 +16,8 @@
 
 #include <cstddef>
 #include <cstdlib>
-#include <cwchar>
 
 #include <array>
-#include <functional>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -33,7 +31,6 @@
 #include "../as_bytes.hpp"
 #include "../scatter_span.hpp"
 #include "../usb/endpoints.hpp"
-#include "descriptors.hpp"
 #include "utils.hpp"
 
 namespace hal::v5::usb {
@@ -43,54 +40,71 @@ using hal::v5::make_sub_scatter_bytes;
 using hal::v5::scatter_span_size;
 using hal::v5::sub_scatter_result;
 
-template<size_t num_configs>
-class enumerator
+class base_enumerator
 {
-
 public:
-  struct args
+  struct info
   {
-    strong_ptr<control_endpoint> ctrl_ep;
-    strong_ptr<device> device;
-    strong_ptr<std::array<configuration, num_configs>> configs;
-    u16 lang_str;
-    u8 retry_max;
+    // ---- Required: no sensible defaults ----
+    u16 vendor_id;
+    u16 product_id;
+    std::u16string_view manufacturer;
+    std::u16string_view product;
+    std::u16string_view serial_number;
+    std::u16string_view configuration;
+
+    // ---- Optional: reasonable defaults provided ----
+
+    /// USB specification version. 0x0201 minimum for WebUSB/BOS support.
+    u16 usb_version = 0x0200;
+
+    /// Set to 0x00 when class is defined at the interface level (most devices).
+    u8 device_class = 0x00;
+    u8 device_subclass = 0x00;
+    u8 device_protocol = 0x00;
+
+    /// Firmware/hardware version presented to the host.
+    u16 device_version = 0x0100;
+
+    /// Language ID for string descriptors. 0x0409 = English (US).
+    u16 lang_id = 0x0409;
+
+    /// Maximum bus current drawn in milliamps. Stored as mA, converted to
+    /// 2mA units when writing the configuration descriptor.
+    u16 max_power_mA = 100;
+
+    bool self_powered = false;
+    bool remote_wakeup = false;
+
+    u8 retry_max = 3;
   };
 
-  enumerator(args p_args)
-    : m_ctrl_ep(p_args.ctrl_ep)
-    , m_device(p_args.device)
-    , m_configs(p_args.configs)
-    , m_lang_str(p_args.lang_str)
-    , m_retry_max(p_args.retry_max)
+  base_enumerator(strong_ptr<control_endpoint> const& p_ctrl_ep,
+                  info p_info,
+                  std::span<strong_ptr<interface>> p_interfaces)
+    : m_ctrl_ep(p_ctrl_ep)
+    , m_interfaces(p_interfaces)
+    , m_info(p_info)
   {
-    m_ctrl_ep->on_host_event([this](v5::usb::host_event p_event) {
-      // Assign
-      m_event = p_event;
-    });
+    m_ctrl_ep->on_host_event(
+      [this](v5::usb::host_event p_event) { m_event = p_event; });
+  }
+  ~base_enumerator()
+  {
+    m_ctrl_ep->on_host_event([](v5::usb::host_event) {});
   }
 
-  enumerator(enumerator&&) = delete;
-  bool operator=(enumerator&&) = delete;
-
-  [[nodiscard]] std::optional<std::reference_wrapper<configuration>>
-  get_active_configuration()
-  {
-    if (m_active_conf == nullptr) {
-      return std::nullopt;
-    }
-
-    return std::make_optional(std::ref(*m_active_conf));
-  }
+  base_enumerator(base_enumerator&&) = delete;
+  bool operator=(base_enumerator&&) = delete;
 
   [[nodiscard]] bool is_enumerated() const
   {
-    return m_active_conf != nullptr;
+    return m_enumerated;
   }
 
   void process_ctrl_transfer()
   {
-    if (m_retry_counter >= m_retry_max) {
+    if (m_retry_counter >= m_info.retry_max) {
       m_retry_counter = 0;
       throw hal::io_error(this);
     }
@@ -101,8 +115,7 @@ public:
 
     switch (*m_event) {
       case v5::usb::host_event::reset:
-        m_active_conf = nullptr;
-        prepare_descriptors();
+        m_enumerated = false;
         m_ctrl_ep->connect(true);
         break;
       case v5::usb::host_event::setup_packet:
@@ -122,23 +135,23 @@ public:
 private:
   void pass_host_event_to_interfaces()
   {
-    if (m_active_conf == nullptr) {
+    if (not m_enumerated) {
       return;
     }
-    for (auto& interface : m_active_conf->interfaces()) {
+    for (auto& interface : m_interfaces) {
       interface->handle_host_event(*m_event);
     }
   }
+
   class enumerator_eio : endpoint_io
   {
-
   public:
     enumerator_eio() = delete;
 
   private:
-    friend class enumerator;
+    friend class base_enumerator;
 
-    enumerator_eio(enumerator& p_en)
+    enumerator_eio(base_enumerator& p_en)
       : m_ctrl_ep(p_en.m_ctrl_ep)
     {
     }
@@ -179,10 +192,6 @@ private:
 
   void handle_setup_packet()
   {
-    if (m_ctrl_ep->info().stalled) {
-      send_error_to_host();
-    }
-
     setup_packet req;
     auto& read_buf = req.raw_request_bytes;
     auto scatter_read_buf = make_writable_scatter_bytes(read_buf);
@@ -213,15 +222,10 @@ private:
 
   void handle_interface_request(setup_packet p_request)
   {
-    if (m_active_conf == nullptr) {
-      send_error_to_host();
-      return;
-    }
-
     enumerator_eio eio(*this);
     bool request_handled = false;
 
-    for (auto const& iface : m_active_conf->interfaces()) {
+    for (auto const& iface : m_interfaces) {
       request_handled = iface->handle_request(p_request, eio);
       if (request_handled) {
         break;
@@ -241,45 +245,36 @@ private:
     m_retry_counter += 1;
   }
 
-  void prepare_descriptors()
+  /**
+   * @brief Prepare interfaces with their starting interface and starting string
+   * number.
+   *
+   * @return auto - total length of the interface descriptors
+   */
+  auto prepare_descriptors()
   {
     // String indexes 1-3 are reserved for device descriptor strings
     // (manufacturer, product, serial number). Configuration strings start at 4.
-    u8 cur_str_idx = 4;
-    byte cur_iface_idx = 0;
+    u8 cur_str_index = 4;
+    byte cur_iface_index = 0;
+
     // Phase one: Preparation
-
-    // Device
-    m_device->set_num_configurations(num_configs);
-
-    // Configurations
-    {
-      // Configuration index 0 is reserved/invalid
-      // Configuration index value must be greater than 0.
-      usize index = 1;
-      for (configuration& config : *m_configs) {
-        config.set_configuration_string_index(cur_str_idx++);
-        config.set_configuration_value(index++);
-      }
-    }
-
     size_eio size_counting_endpoint;
-    for (configuration& config : *m_configs) {
-      auto total_length =
-        static_cast<u16>(constants::configuration_descriptor_size);
-      for (auto const& iface : config.m_interfaces) {
-        auto deltas = iface->write_descriptors(
-          { .interface = cur_iface_idx, .string = cur_str_idx },
-          size_counting_endpoint);
 
-        cur_iface_idx += deltas.interface;
-        cur_str_idx += deltas.string;
-      }
-      config.set_num_interfaces(cur_iface_idx);
-      total_length += size_counting_endpoint.total_length;
-      config.set_total_length(total_length);
-      size_counting_endpoint.total_length = 0;
+    for (auto const& iface : m_interfaces) {
+      auto [interface_count, string_count] = iface->write_descriptors(
+        {
+          .interface = cur_iface_index,
+          .string = cur_str_index,
+        },
+        size_counting_endpoint);
+
+      cur_iface_index += interface_count;
+      cur_str_index += string_count;
     }
+
+    return size_counting_endpoint.total_length +
+           static_cast<u16>(constants::configuration_descriptor_size);
   }
 
   void handle_standard_device_request(setup_packet& req)
@@ -298,18 +293,14 @@ private:
       }
 
       case standard_request_types::get_configuration: {
-        if (m_active_conf == nullptr) {
-          send_error_to_host();
-          return;
-        }
-        auto conf_value = m_active_conf->configuration_value();
-        auto scatter_conf = make_scatter_bytes(std::span(&conf_value, 1));
-        hal::v5::write_and_flush(*m_ctrl_ep, scatter_conf);
+        auto const payload = std::to_array<byte const, 1>({ 1 });
+        auto const s_span = make_scatter_array<byte const>(payload);
+        hal::v5::write_and_flush(*m_ctrl_ep, s_span);
         break;
       }
 
       case standard_request_types::set_configuration: {
-        m_active_conf = &(m_configs->at(req.value() - 1));
+        m_enumerated = true;
         m_ctrl_ep->write({});
         break;
       }
@@ -321,54 +312,133 @@ private:
     }
   }
 
+  constexpr auto generate_device_descriptor()
+  {
+    static constexpr u8 b_length = 0;
+    static constexpr u8 b_descriptor_type = 1;
+    static constexpr u8 bcd_usb_lo = 2;
+    static constexpr u8 bcd_usb_hi = 3;
+    static constexpr u8 b_device_class = 4;
+    static constexpr u8 b_device_sub_class = 5;
+    static constexpr u8 b_device_protocol = 6;
+    static constexpr u8 b_max_packet_size0 = 7;
+    static constexpr u8 id_vendor_lo = 8;
+    static constexpr u8 id_vendor_hi = 9;
+    static constexpr u8 id_product_lo = 10;
+    static constexpr u8 id_product_hi = 11;
+    static constexpr u8 bcd_device_lo = 12;
+    static constexpr u8 bcd_device_hi = 13;
+    static constexpr u8 i_manufacturer = 14;
+    static constexpr u8 i_product = 15;
+    static constexpr u8 i_serial_number = 16;
+    static constexpr u8 b_num_configurations = 17;
+
+    std::array<byte, 18> descriptor{};
+
+    descriptor[b_length] = static_cast<byte>(descriptor.size());
+    descriptor[b_descriptor_type] = 1;
+
+    auto const bcd_usb = setup_packet::to_le_u16(m_info.usb_version);
+    descriptor[bcd_usb_lo] = bcd_usb[0];
+    descriptor[bcd_usb_hi] = bcd_usb[1];
+
+    descriptor[b_device_class] = static_cast<u8>(m_info.device_class);
+    descriptor[b_device_sub_class] = m_info.device_subclass;
+    descriptor[b_device_protocol] = m_info.device_protocol;
+    descriptor[b_max_packet_size0] = m_ctrl_ep->info().size;
+
+    auto const id_vendor = setup_packet::to_le_u16(m_info.vendor_id);
+    descriptor[id_vendor_lo] = id_vendor[0];
+    descriptor[id_vendor_hi] = id_vendor[1];
+
+    auto const id_product = setup_packet::to_le_u16(m_info.product_id);
+    descriptor[id_product_lo] = id_product[0];
+    descriptor[id_product_hi] = id_product[1];
+
+    auto const bcd_device = setup_packet::to_le_u16(m_info.device_version);
+    descriptor[bcd_device_lo] = bcd_device[0];
+    descriptor[bcd_device_hi] = bcd_device[1];
+
+    // Default string indexes, assuming enumeration will use 4 onward for string
+    // indexes are these are required (can be modified by enumerator if desired)
+    descriptor[i_manufacturer] = 1;
+    descriptor[i_product] = 2;
+    descriptor[i_serial_number] = 3;
+
+    descriptor[b_num_configurations] = 1;
+
+    return descriptor;
+  }
+
+  constexpr auto generate_configuration_descriptor(u16 p_total_length)
+  {
+    static constexpr u8 b_length = 0;
+    static constexpr u8 b_descriptor_type = 1;
+    static constexpr u8 w_total_length_lo = 2;
+    static constexpr u8 w_total_length_hi = 3;
+    static constexpr u8 b_num_interfaces = 4;
+    static constexpr u8 b_configuration_value = 5;
+    static constexpr u8 i_configuration = 6;
+    static constexpr u8 bm_attributes = 7;
+    static constexpr u8 b_max_power = 8;
+
+    std::array<byte, 9> descriptor{};
+
+    descriptor[b_length] = static_cast<byte>(descriptor.size());
+    descriptor[b_descriptor_type] = 2;
+
+    auto const total_length = setup_packet::to_le_u16(p_total_length);
+    descriptor[w_total_length_lo] = total_length[0];
+    descriptor[w_total_length_hi] = total_length[1];
+
+    descriptor[b_num_interfaces] = static_cast<byte>(m_interfaces.size());
+    descriptor[b_configuration_value] = 1;
+    descriptor[i_configuration] = 4;  // String index for configuration
+
+    // Bit 7 is reserved and must be set; bits 6 and 5 are self-powered and
+    // remote wakeup respectively.
+    descriptor[bm_attributes] = static_cast<byte>(
+      (1u << 7) | (m_info.self_powered << 6) | (m_info.remote_wakeup << 5));
+
+    // bMaxPower is in 2mA units
+    descriptor[b_max_power] = static_cast<byte>(m_info.max_power_mA / 2);
+
+    return descriptor;
+  }
+
   void send_requested_descriptor(setup_packet& req)
   {
     auto const type = static_cast<descriptor_type>(req.value_bytes()[1]);
-    auto const index = req.value_bytes()[0];
 
     switch (type) {
       case descriptor_type::device: {
-        auto header =
-          std::to_array({ constants::device_descriptor_size,
-                          static_cast<byte>(descriptor_type::device) });
-        m_device->set_max_packet_size(
-          static_cast<byte>(m_ctrl_ep->info().size));
-        auto scatter_arr_pair =
-          make_sub_scatter_bytes(req.length(), header, *m_device);
-        hal::v5::write_and_flush(
-          *m_ctrl_ep,
-          scatter_span<byte const>(scatter_arr_pair.spans)
-            .first(scatter_arr_pair.count));
+        auto const descriptor = generate_device_descriptor();
+        auto const length = std::min<usize>(req.length(), descriptor.size());
+        auto const payload = std::span(descriptor).first(length);
+        hal::v5::write_and_flush(*m_ctrl_ep,
+                                 make_scatter_array<byte const>(payload));
         break;
       }
 
       case descriptor_type::configuration: {
-        if (m_configs->empty()) {
-          send_error_to_host();
-          return;
-        }
+        auto const total_size = prepare_descriptors();
+        auto const descriptor = generate_configuration_descriptor(total_size);
+        auto const length = std::min<usize>(req.length(), descriptor.size());
+        auto const payload = std::span(descriptor).first(length);
+        hal::v5::write(*m_ctrl_ep, make_scatter_array<byte const>(payload));
 
-        configuration& conf = (*m_configs)[0];
-        auto const conf_hdr =
-          std::to_array({ constants::configuration_descriptor_size,
-                          static_cast<byte>(descriptor_type::configuration) });
-        auto scatter_conf_pair = make_sub_scatter_bytes(
-          req.length(), conf_hdr, static_cast<std::span<u8 const>>(conf));
-
-        m_ctrl_ep->write(scatter_span<byte const>(scatter_conf_pair.spans)
-                           .first(scatter_conf_pair.count));
-
-        // TODO(#99): `enumerator_eio` should limit the amount written to the
-        // control endpoint based on `request.length()` value.
-        // Return early if the only thing requested was the config descriptor
         if (req.length() <= constants::configuration_descriptor_size) {
           m_ctrl_ep->write({});  // ZLP to finish
           return;
         }
 
         {
+          // TODO(#99): `enumerator_eio` should limit the amount written to the
+          // control endpoint based on `request.length()` value. When the limit
+          // has been reached, the driver_write API of enumerator_eio should
+          // simply do nothing and return early.
           enumerator_eio eio(*this);
-          for (auto const& iface : conf.m_interfaces) {
+          for (auto const& iface : m_interfaces) {
             std::ignore = iface->write_descriptors(
               { .interface = std::nullopt, .string = std::nullopt }, eio);
           }
@@ -379,8 +449,7 @@ private:
       }
 
       case descriptor_type::string: {
-        handle_str_descriptors(index, req.length());
-        m_ctrl_ep->write({});  // ZLP to finish
+        handle_str_descriptors(req);
         break;
       }
 
@@ -394,70 +463,64 @@ private:
   }
 
   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-  void handle_str_descriptors(u8 p_target, u16 p_len)
+  void handle_str_descriptors(setup_packet& p_request)
   {
     // Device strings are at fixed indexes: 1=manufacturer, 2=product, 3=serial
     constexpr u8 language_id = 0;
-    constexpr u8 manufacturer_idx = 1;
-    constexpr u8 product_idx = 2;
-    constexpr u8 serial_number_idx = 3;
+    constexpr u8 manufacturer_index = 1;
+    constexpr u8 product_index = 2;
+    constexpr u8 serial_number_index = 3;
+    constexpr u8 configuration_index = 4;
 
-    switch (p_target) {
+    auto const target = p_request.value_bytes()[0];
+    auto const length = p_request.length();
+
+    switch (target) {
       case language_id: {
         auto const payload = std::to_array<hal::byte const>({
-          static_cast<byte>(4),                         // length
-          static_cast<byte>(descriptor_type::string),   // type
-          static_cast<byte>(m_lang_str & 0xFF),         // LE0
-          static_cast<byte>((m_lang_str >> 8) & 0xFF),  // LE1
+          static_cast<byte>(4),                             // length
+          static_cast<byte>(descriptor_type::string),       // type
+          static_cast<byte>(m_info.lang_id & 0xFF),         // LE0
+          static_cast<byte>((m_info.lang_id >> 8) & 0xFF),  // LE1
         });
-        auto const final_payload = hal::v5::make_scatter_array<byte const>(
-          std::span(payload).first(std::min<usize>(p_len, payload.size())));
-        m_ctrl_ep->write(final_payload);
-        break;
+        auto const payload_length = std::min<usize>(length, payload.size());
+        auto const payload_span = std::span(payload).first(payload_length);
+        auto const final_payload =
+          hal::v5::make_scatter_array<byte const>(payload_span);
+        hal::v5::write_and_flush(*m_ctrl_ep, final_payload);
+        return;
       }
-      case manufacturer_idx: {
-        write_string_view(m_device->manufacturer_str, p_len);
-        break;
+      case manufacturer_index: {
+        write_string_view(m_info.manufacturer, length);
+        return;
       }
-      case product_idx: {
-        write_string_view(m_device->product_str, p_len);
-        break;
+      case product_index: {
+        write_string_view(m_info.product, length);
+        return;
       }
-      case serial_number_idx: {
-        write_string_view(m_device->serial_number_str, p_len);
-        break;
+      case serial_number_index: {
+        write_string_view(m_info.serial_number, length);
+        return;
+      }
+      case configuration_index: {
+        // Check if the index is for the configuration string
+        if (target == configuration_index) {
+          write_string_view(m_info.configuration, length);
+          return;
+        }
       }
       default: {
-        // Check if the index is for the configuration string
-        for (configuration const& conf : *m_configs) {
-          if (p_target == conf.configuration_string_index()) {
-            write_string_view(conf.name, p_len);
-            break;
-          }
-        }
-
         enumerator_eio endpoint(*this);
-
-        // Check if this index belongs to any interfaces
-        if (m_active_conf != nullptr) {
-          for (auto const& iface : m_active_conf->m_interfaces) {
-            if (iface->write_string_descriptor(p_target, endpoint) == true) {
-              return;
-            }
-          }
-        }
-
-        // Check across all configurations
-        for (configuration const& conf : *m_configs) {
-          for (auto const& iface : conf.m_interfaces) {
-            if (iface->write_string_descriptor(p_target, endpoint)) {
-              return;
-            }
+        for (auto const& iface : m_interfaces) {
+          if (iface->write_string_descriptor(target, endpoint) == true) {
+            m_ctrl_ep->write({});
+            return;
           }
         }
         break;
       }
     }
+    send_error_to_host();
   }
 
   void write_string_view(std::u16string_view p_str, u16 p_max_length)
@@ -472,23 +535,45 @@ private:
     auto const scatter_arr_pair =
       make_sub_scatter_bytes(p_max_length, header, string_view_as_bytes);
 
-    auto const p = scatter_span<byte const>(scatter_arr_pair.spans)
-                     .first(scatter_arr_pair.count);
-    hal::v5::write(*m_ctrl_ep, p);
+    auto const payload = scatter_span<byte const>(scatter_arr_pair.spans)
+                           .first(scatter_arr_pair.count);
+
+    hal::v5::write_and_flush(*m_ctrl_ep, payload);
   }
 
   strong_ptr<control_endpoint> m_ctrl_ep;
-  strong_ptr<device> m_device;
-  strong_ptr<std::array<configuration, num_configs>> m_configs;
-  u16 m_lang_str;
-  u8 m_retry_max;
-
+  std::span<strong_ptr<interface>> m_interfaces;
+  info m_info;
   std::optional<v5::usb::host_event> m_event = v5::usb::host_event::reset;
-  configuration* m_active_conf = nullptr;
   u8 m_retry_counter = 0;
+  bool m_enumerated = false;
 };
+
+template<usize InterfaceCount>
+class inplace_enumerator : public base_enumerator
+{
+public:
+  template<typename... Interfaces>
+  inplace_enumerator(strong_ptr<control_endpoint> const& p_ctrl_ep,
+                     info p_info,
+                     Interfaces&&... p_interfaces)
+    : base_enumerator(p_ctrl_ep, p_info, m_interface_storage)
+    , m_interface_storage{ std::forward<Interfaces>(p_interfaces)... }
+  {
+  }
+
+private:
+  std::array<strong_ptr<interface>, InterfaceCount> m_interface_storage;
+};
+
+template<typename... Interfaces>
+inplace_enumerator(strong_ptr<control_endpoint> const&,
+                   base_enumerator::info,
+                   Interfaces&&...)
+  -> inplace_enumerator<sizeof...(Interfaces)>;
 }  // namespace hal::v5::usb
 
 namespace hal::usb {
-using v5::usb::enumerator;
-}
+using v5::usb::base_enumerator;
+using v5::usb::inplace_enumerator;
+}  // namespace hal::usb
