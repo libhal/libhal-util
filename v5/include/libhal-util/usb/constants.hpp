@@ -24,7 +24,7 @@ namespace constants {
 
 constexpr byte device_descriptor_size = 18;
 constexpr byte configuration_descriptor_size = 9;
-constexpr byte inferface_descriptor_size = 9;
+constexpr byte interface_descriptor_size = 9;
 constexpr byte endpoint_descriptor_size = 7;
 constexpr byte interface_association_descriptor_size = 0x08;
 
@@ -62,6 +62,14 @@ enum class class_code : hal::byte
   misc = 0xEF,                  // Miscellaneous
   application_specific = 0xFE,  // Application Specific
   vendor_specific = 0xFF        // Vendor Specific
+};
+
+enum class transfer_type : hal::byte
+{
+  control = 0x00,
+  isochronous = 0x01,
+  bulk = 0x02,
+  interrupt = 0x03,
 };
 
 // Default types

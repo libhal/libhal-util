@@ -31,7 +31,7 @@
 #include "../as_bytes.hpp"
 #include "../scatter_span.hpp"
 #include "../usb/endpoints.hpp"
-#include "utils.hpp"
+#include "constants.hpp"
 
 namespace hal::v5::usb {
 
@@ -332,7 +332,7 @@ private:
     static constexpr u8 i_serial_number = 16;
     static constexpr u8 b_num_configurations = 17;
 
-    std::array<byte, 18> descriptor{};
+    std::array<byte, constants::device_descriptor_size> descriptor{};
 
     descriptor[b_length] = static_cast<byte>(descriptor.size());
     descriptor[b_descriptor_type] = 1;
@@ -381,7 +381,7 @@ private:
     static constexpr u8 bm_attributes = 7;
     static constexpr u8 b_max_power = 8;
 
-    std::array<byte, 9> descriptor{};
+    std::array<byte, constants::configuration_descriptor_size> descriptor{};
 
     descriptor[b_length] = static_cast<byte>(descriptor.size());
     descriptor[b_descriptor_type] = 2;

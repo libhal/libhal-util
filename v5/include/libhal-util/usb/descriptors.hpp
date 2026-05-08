@@ -26,7 +26,7 @@
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 
-#include "utils.hpp"
+#include "constants.hpp"
 
 // TODO(#95): Device qualifer descriptor (happens between device and config)
 // TODO(#96): USB 3.x Superspeed descriptors (BOS Descriptor, Device Capability,
@@ -325,6 +325,95 @@ private:
   std::pmr::vector<strong_ptr<interface>> m_interfaces;
   std::array<hal::byte, 7> m_packed_arr;
 };
+
+struct interface_descriptor_info
+{
+  u8 interface_number;
+  u8 alternate_setting;
+  u8 num_endpoints;
+  class_code interface_class;
+  u8 interface_subclass;
+  u8 interface_protocol;
+  u8 interface_string_index;
+};
+
+constexpr auto generate_interface_descriptor(interface_descriptor_info p_info)
+{
+  static constexpr u8 b_length = 0;
+  static constexpr u8 b_descriptor_type = 1;
+  static constexpr u8 b_interface_number = 2;
+  static constexpr u8 b_alternate_setting = 3;
+  static constexpr u8 b_num_endpoints = 4;
+  static constexpr u8 b_interface_class = 5;
+  static constexpr u8 b_interface_sub_class = 6;
+  static constexpr u8 b_interface_protocol = 7;
+  static constexpr u8 i_interface = 8;
+
+  std::array<byte, constants::interface_descriptor_size> descriptor{};
+
+  descriptor[b_length] = static_cast<byte>(descriptor.size());
+  descriptor[b_descriptor_type] = static_cast<byte>(descriptor_type::interface);
+  descriptor[b_interface_number] = p_info.interface_number;
+  descriptor[b_alternate_setting] = p_info.alternate_setting;
+  descriptor[b_num_endpoints] = p_info.num_endpoints;
+  descriptor[b_interface_class] = static_cast<byte>(p_info.interface_class);
+  descriptor[b_interface_sub_class] = p_info.interface_subclass;
+  descriptor[b_interface_protocol] = p_info.interface_protocol;
+  descriptor[i_interface] = p_info.interface_string_index;
+
+  return descriptor;
+}
+
+template<typename T>
+concept usb_endpoint_type = std::is_base_of_v<hal::usb::endpoint, T>;
+
+constexpr auto generate_endpoint_descriptor(usb_endpoint_type auto& p_endpoint,
+                                            u8 p_interval)
+{
+  using Endpoint = std::remove_reference_t<decltype(p_endpoint)>;
+  using hal::usb::bulk_in_endpoint;
+  using hal::usb::bulk_out_endpoint;
+  using hal::usb::interrupt_in_endpoint;
+  using hal::usb::interrupt_out_endpoint;
+
+  constexpr transfer_type type = [] {
+    if constexpr (std::is_base_of_v<bulk_in_endpoint, Endpoint> or
+                  std::is_base_of_v<bulk_out_endpoint, Endpoint>) {
+      return transfer_type::bulk;
+    } else if constexpr (std::is_base_of_v<interrupt_in_endpoint, Endpoint> or
+                         std::is_base_of_v<interrupt_out_endpoint, Endpoint>) {
+      return transfer_type::interrupt;
+    } else {
+      return transfer_type::control;
+    }
+  }();
+
+  static constexpr u8 b_length = 0;
+  static constexpr u8 b_descriptor_type = 1;
+  static constexpr u8 b_endpoint_address = 2;
+  static constexpr u8 bm_attributes = 3;
+  static constexpr u8 w_max_packet_size_lo = 4;
+  static constexpr u8 w_max_packet_size_hi = 5;
+  static constexpr u8 b_interval = 6;
+
+  std::array<byte, constants::endpoint_descriptor_size> descriptor{};
+
+  auto const ep_info = p_endpoint.info();
+
+  descriptor[b_length] = static_cast<byte>(descriptor.size());
+  descriptor[b_descriptor_type] = static_cast<byte>(descriptor_type::endpoint);
+  descriptor[b_endpoint_address] = ep_info.number;
+  descriptor[bm_attributes] = static_cast<byte>(type);
+
+  auto const max_packet_size_bytes = setup_packet::to_le_u16(ep_info.size);
+  descriptor[w_max_packet_size_lo] = max_packet_size_bytes[0];
+  descriptor[w_max_packet_size_hi] = max_packet_size_bytes[1];
+
+  descriptor[b_interval] = p_interval;
+
+  return descriptor;
+}
+
 }  // namespace hal::v5::usb
 
 namespace hal::usb {
