@@ -12,20 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <algorithm>
 #include <array>
-#include <chrono>
 #include <iterator>
 #include <memory_resource>
 #include <span>
 #include <string_view>
-#include <thread>
 #include <vector>
 
 #include <libhal-util/mock/usb.hpp>
 #include <libhal-util/usb.hpp>
+#include <libhal-util/usb/constants.hpp>
 #include <libhal-util/usb/enumerator.hpp>
-#include <libhal-util/usb/utils.hpp>
 #include <libhal/error.hpp>
 #include <libhal/pointers.hpp>
 #include <libhal/scatter_span.hpp>
@@ -78,12 +75,11 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
     [[maybe_unused]] inplace_enumerator en(
       ctrl_ep,
       {
-        .vendor_id = 0x1209,
-        .product_id = 0x0001,
         .manufacturer = u"libhal",
         .product = u"HALbORD",
         .serial_number = u"001",
-        .configuration = u"Default",
+        .vendor_id = 0x1209,
+        .product_id = 0x0001,
         // everything else takes its default
       },
       usb_interface);

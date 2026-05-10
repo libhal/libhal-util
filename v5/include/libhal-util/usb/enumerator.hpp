@@ -86,11 +86,11 @@ public:
     , m_info(p_info)
   {
     m_ctrl_ep->on_host_event(
-      [this](v5::usb::host_event p_event) { m_event = p_event; });
+      [this](v5::usb::bus_event p_event) { m_event = p_event; });
   }
   ~base_enumerator()
   {
-    m_ctrl_ep->on_host_event([](v5::usb::host_event) {});
+    m_ctrl_ep->on_host_event([](v5::usb::bus_event) {});
   }
 
   base_enumerator(base_enumerator&&) = delete;
@@ -115,18 +115,21 @@ public:
     auto event = *m_event;
 
     switch (event) {
-      case v5::usb::host_event::reset:
+      case v5::usb::bus_event::reset:
         m_enumerated = false;
         m_ctrl_ep->connect(true);
         break;
-      case v5::usb::host_event::setup_packet:
+      case v5::usb::bus_event::setup_packet:
         handle_setup_packet();
         break;
-      case v5::usb::host_event::data_packet:
-        // Not sure what to do in this case as it shouldn't happen...
+      case v5::usb::bus_event::data_packet:
+        if (m_pending_setup) {
+          dispatch_setup_packet(*m_pending_setup);
+          m_pending_setup.reset();
+        }
         break;
       default:  // The rest...
-        pass_host_event_to_interfaces(event);
+        pass_host_event_to_interfaces(map_bus_to_host_event(event));
         break;
     }
 
@@ -134,11 +137,33 @@ public:
   }
 
 private:
+  constexpr host_event map_bus_to_host_event(bus_event p_event)
+  {
+    switch (p_event) {
+      case bus_event::reset:
+        return host_event::reset;
+      case bus_event::setup_packet:
+        return host_event::setup_packet;
+      case bus_event::data_packet:
+        return host_event::data_packet;
+      case bus_event::resume:
+        return host_event::resume;
+      case bus_event::suspend:
+        if (m_ctrl_ep->info().remote_wakeup_granted) {
+          return host_event::suspend_with_wakeup;
+        }
+        return host_event::suspend_without_wakeup;
+      case bus_event::sleep:
+        return host_event::sleep;
+      case bus_event::u1_sleep:
+        return host_event::u1_sleep;
+      case bus_event::u2_sleep:
+        return host_event::u2_sleep;
+    }
+  }
+
   void pass_host_event_to_interfaces(host_event p_event)
   {
-    if (not m_enumerated) {
-      return;
-    }
     for (auto& interface : m_interfaces) {
       interface->handle_host_event(p_event);
     }
@@ -159,7 +184,7 @@ private:
 
     usize driver_read(scatter_span<byte> p_buffer) override
     {
-      auto read = m_ctrl_ep->read(p_buffer);
+      auto const read = m_ctrl_ep->read(p_buffer);
       return read;
     }
 
@@ -183,9 +208,9 @@ private:
 
     usize driver_write(scatter_span<byte const> p_buffer) override
     {
-      auto s = scatter_span_size(p_buffer);
-      total_length += s;
-      return s;
+      auto const length = scatter_span_size(p_buffer);
+      total_length += length;
+      return length;
     }
 
     usize total_length = 0;
@@ -193,10 +218,13 @@ private:
 
   void handle_setup_packet()
   {
-    setup_packet req;
-    auto& read_buf = req.raw_request_bytes;
-    auto scatter_read_buf = make_writable_scatter_bytes(read_buf);
-    auto bytes_read = m_ctrl_ep->read(scatter_read_buf);
+    setup_packet request;
+    // Reset the m_event before the read. After read the data packet can come in
+    // at any time, meaning we want this disengaged this function doesn't get
+    // called
+    m_event.reset();
+    auto bytes_read =
+      m_ctrl_ep->read(make_writable_scatter_bytes(request.raw_request_bytes));
 
     if (bytes_read != 8) {
       // STATUS OUT ZLP or malformed - not a SETUP packet, STALL
@@ -204,6 +232,16 @@ private:
       return;
     }
 
+    if (not request.is_device_to_host() and request.length() > 0) {
+      m_pending_setup = request;
+      return;
+    }
+
+    dispatch_setup_packet(request);
+  }
+
+  void dispatch_setup_packet(setup_packet& req)
+  {
     switch (req.get_recipient()) {
       case setup_packet::request_recipient::invalid:
         send_error_to_host();
@@ -215,9 +253,9 @@ private:
 
       case setup_packet::request_recipient::interface:
         [[fallthrough]];
-      case setup_packet::request_recipient::endpoint: {
+      case setup_packet::request_recipient::endpoint:
         handle_interface_request(req);
-      }
+        break;
     }
   }
 
@@ -278,18 +316,24 @@ private:
            static_cast<u16>(constants::configuration_descriptor_size);
   }
 
-  void handle_standard_device_request(setup_packet& req)
+  void handle_standard_device_request(setup_packet& p_request)
   {
-    auto const request = determine_standard_request(req);
+    enum struct feature : u8
+    {
+      device_remote_wakeup = 1,
+      test_mode = 2
+    };
+
+    auto const request = determine_standard_request(p_request);
     switch (request) {
       case standard_request_types::set_address: {
         m_ctrl_ep->write({});  // ZLP must precede the address change
-        m_ctrl_ep->set_address(req.value_bytes()[0]);
+        m_ctrl_ep->set_address(p_request.value_bytes()[0]);
         return;
       }
 
       case standard_request_types::get_descriptor: {
-        send_requested_descriptor(req);
+        send_requested_descriptor(p_request);
         break;
       }
 
@@ -307,8 +351,38 @@ private:
         break;
       }
 
+      case hal::v5::usb::standard_request_types::get_status: {
+        byte const status = (m_info.self_powered << 0) |
+                            (m_ctrl_ep->info().remote_wakeup_granted << 1);
+        auto const payload = std::to_array<byte const, 2>({ status, 0 });
+        auto const s_span = make_scatter_array<byte const>(payload);
+        hal::v5::write_and_flush(*m_ctrl_ep, s_span);
+        break;
+      }
+
+      case standard_request_types::clear_feature: {
+        auto const value = static_cast<feature>(p_request.value());
+        if (value == feature::device_remote_wakeup and
+            m_ctrl_ep->info().remote_wakeup_granted) {
+          m_ctrl_ep->set_remote_wakeup_enabled(false);
+          m_ctrl_ep->write({});
+          break;
+        }
+        m_ctrl_ep->stall(true);
+        break;
+      }
+      case standard_request_types::set_feature: {
+        auto const value = static_cast<feature>(p_request.value());
+        if (value == feature::device_remote_wakeup and m_info.remote_wakeup and
+            m_ctrl_ep->supports_lpm().remote_wakeup_supported()) {
+          m_ctrl_ep->set_remote_wakeup_enabled(true);
+          m_ctrl_ep->write({});
+          break;
+        }
+        m_ctrl_ep->stall(true);
+        break;
+      }
       case standard_request_types::invalid:
-        [[fallthrough]];
       default:
         send_error_to_host();
     }
@@ -536,7 +610,8 @@ private:
 
   strong_ptr<control_endpoint> m_ctrl_ep;
   std::span<strong_ptr<interface>> m_interfaces;
-  std::optional<v5::usb::host_event> m_event = v5::usb::host_event::reset;
+  std::optional<v5::usb::bus_event> m_event = v5::usb::bus_event::reset;
+  std::optional<setup_packet> m_pending_setup;
   info m_info;
   u8 m_retry_counter = 0;
   bool m_enumerated = false;
@@ -548,12 +623,18 @@ class inplace_enumerator : public base_enumerator
 public:
   template<typename... Interfaces>
   inplace_enumerator(strong_ptr<control_endpoint> const& p_ctrl_ep,
-                     info p_info,
+                     base_enumerator::info p_info,
                      Interfaces&&... p_interfaces)
     : base_enumerator(p_ctrl_ep, p_info, m_interface_storage)
     , m_interface_storage{ std::forward<Interfaces>(p_interfaces)... }
   {
   }
+
+  inplace_enumerator() = delete;
+  inplace_enumerator(inplace_enumerator const&) = delete;
+  inplace_enumerator& operator=(inplace_enumerator const&) = delete;
+  inplace_enumerator(inplace_enumerator&&) noexcept = default;
+  inplace_enumerator& operator=(inplace_enumerator&&) noexcept = default;
 
 private:
   std::array<strong_ptr<interface>, InterfaceCount> m_interface_storage;

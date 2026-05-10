@@ -28,7 +28,7 @@
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 
-#include "../usb/utils.hpp"
+#include "../usb/constants.hpp"
 
 namespace hal::v5::usb {
 constexpr u8 interface_description_length = 9;
