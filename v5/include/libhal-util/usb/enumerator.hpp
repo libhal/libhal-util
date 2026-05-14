@@ -269,38 +269,6 @@ private:
     m_retry_counter += 1;
   }
 
-  /**
-   * @brief Prepare interfaces with their starting interface and starting string
-   * number.
-   *
-   * @return auto - total length of the interface descriptors
-   */
-  auto prepare_descriptors()
-  {
-    // String indexes 1-3 are reserved for device descriptor strings
-    // (manufacturer, product, serial number). Configuration strings start at 4.
-    u8 cur_str_index = 4;
-    byte cur_iface_index = 0;
-
-    // Phase one: Preparation
-    size_eio size_counting_endpoint;
-
-    for (auto const& iface : m_interfaces) {
-      auto [interface_count, string_count] = iface->write_descriptors(
-        {
-          .interface = cur_iface_index,
-          .string = cur_str_index,
-        },
-        size_counting_endpoint);
-
-      cur_iface_index += interface_count;
-      cur_str_index += string_count;
-    }
-
-    return size_counting_endpoint.total_length +
-           static_cast<u16>(constants::configuration_descriptor_size);
-  }
-
   void handle_standard_device_request(setup_packet& p_request)
   {
     enum struct feature : u8
@@ -430,7 +398,50 @@ private:
     return descriptor;
   }
 
-  constexpr auto generate_configuration_descriptor(u16 p_total_length)
+  struct configuration_totals
+  {
+    u16 length;
+    u8 interface_count;
+  };
+
+  /**
+   * @brief Prepare interfaces with their starting interface and starting string
+   * number.
+   *
+   * @return configuration_totals - total length and interface count
+   */
+  configuration_totals prepare_descriptors()
+  {
+    // String indexes 1-3 are reserved for device descriptor strings
+    // (manufacturer, product, serial number). Configuration strings start at 4.
+    u8 cur_str_index = 4;
+    byte cur_iface_index = 0;
+
+    // Phase one: Preparation
+    size_eio size_counting_endpoint;
+
+    for (auto const& iface : m_interfaces) {
+      auto [interface_count, string_count] = iface->write_descriptors(
+        {
+          .interface = cur_iface_index,
+          .string = cur_str_index,
+        },
+        size_counting_endpoint);
+
+      cur_iface_index += interface_count;
+      cur_str_index += string_count;
+    }
+
+    return {
+      .length = static_cast<u16>(
+        size_counting_endpoint.total_length +
+        static_cast<u16>(constants::configuration_descriptor_size)),
+      .interface_count = cur_iface_index,
+    };
+  }
+
+  constexpr auto generate_configuration_descriptor(
+    configuration_totals p_totals)
   {
     static constexpr u8 b_length = 0;
     static constexpr u8 b_descriptor_type = 1;
@@ -447,11 +458,11 @@ private:
     descriptor[b_length] = static_cast<byte>(descriptor.size());
     descriptor[b_descriptor_type] = 2;
 
-    auto const total_length = setup_packet::to_le_u16(p_total_length);
+    auto const total_length = setup_packet::to_le_u16(p_totals.length);
     descriptor[w_total_length_lo] = total_length[0];
     descriptor[w_total_length_hi] = total_length[1];
 
-    descriptor[b_num_interfaces] = static_cast<byte>(m_interfaces.size());
+    descriptor[b_num_interfaces] = p_totals.interface_count;
     descriptor[b_configuration_value] = 1;
     descriptor[i_configuration] = 0;  // String index for configuration
 
