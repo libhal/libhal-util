@@ -127,16 +127,6 @@ public:
         handle_setup_packet();
         break;
       case bus_event::data_packet:
-        // Explanation: If a setup packet appears that has a data stage (length
-        // > 0), then the setup packet is stored within the `m_pending_setup`
-        // and returns as we wait for the data_packet bus_event to occur. Once
-        // the data packet is received, then the setup packet can actually be
-        // dispatched. When the usb::interface attempts to read from the
-        // `endpoint_io::read()` API, the data should be ready.
-        if (m_pending_setup) {
-          dispatch_setup_packet(*m_pending_setup);
-          m_pending_setup.reset();
-        }
         break;
       case bus_event::resume:
         pass_host_event_to_interfaces(host_event::resume);
@@ -229,11 +219,6 @@ private:
     if (bytes_read != 8) {
       // STATUS OUT ZLP or malformed - not a SETUP packet, STALL
       send_error_to_host();
-      return;
-    }
-
-    if (not request.is_device_to_host() and request.length() > 0) {
-      m_pending_setup = request;
       return;
     }
 
@@ -613,7 +598,6 @@ private:
   strong_ptr<control_endpoint> m_ctrl_ep;
   std::span<strong_ptr<interface>> m_interfaces;
   std::optional<v5::usb::bus_event> m_event = v5::usb::bus_event::reset;
-  std::optional<setup_packet> m_pending_setup;
   info m_info;
   u8 m_retry_counter = 0;
   bool m_enumerated = false;

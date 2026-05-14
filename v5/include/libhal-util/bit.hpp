@@ -433,6 +433,7 @@ public:
   constexpr bit_value& operator=(T p_initial_value)
   {
     m_value = p_initial_value;
+    return *this;
   }
 
   /**
@@ -635,6 +636,8 @@ public:
   {
     return m_value;
   }
+
+  constexpr bool operator==(bit_value const&) const = default;
 
 protected:
   T m_value;
