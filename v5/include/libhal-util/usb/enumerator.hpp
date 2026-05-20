@@ -18,7 +18,6 @@
 #include <cstdlib>
 
 #include <array>
-#include <initializer_list>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -41,44 +40,230 @@ using hal::v5::make_sub_scatter_bytes;
 using hal::v5::scatter_span_size;
 using hal::v5::sub_scatter_result;
 
+/**
+ * @brief USB Device Enumerator for handling USB protocol and descriptor
+ * management.
+ *
+ * This class manages the full USB enumeration process, including device
+ * identification, descriptor handling, and interface management. It acts as
+ * the bridge between the hardware USB controller and the device's functional
+ * interfaces, processing USB bus events and setup packets, generating device
+ * responses, and delegating interface-specific work to registered interfaces.
+ *
+ * The enumerator is responsible for:
+ *
+ * - Processing USB bus events (reset, setup packets, suspend/resume)
+ * - Managing device enumeration state
+ * - Generating and sending device and configuration descriptors
+ * - Handling standard USB requests (GET_DESCRIPTOR, SET_ADDRESS, etc.)
+ * - Routing interface-specific requests to registered interfaces
+ * - Forwarding host events to interfaces for state management
+ *
+ * This enumerator is one implementation option for managing USB device
+ * enumeration. Applications are free to implement their own enumerator if this
+ * one does not meet their needs.
+ *
+ * The enumerator takes shared ownership of the control endpoint and interfaces
+ * via strong_ptr. Once objects are given to the enumerator, their virtual APIs
+ * must not be called from outside the enumerator. The enumerator is solely
+ * responsible for driving these APIs; external calls can violate critical
+ * invariants about device state and enumeration progress.
+ */
 class enumerator
 {
 public:
+  /**
+   * @brief Configuration information for a USB device.
+   *
+   * This structure contains both required and optional fields for describing
+   * the USB device to the host during enumeration. Required fields must be
+   * provided at enumerator construction. Optional fields have sensible defaults
+   * suitable for most USB 2.0 devices.
+   *
+   * All string fields (manufacturer, product, serial_number) must be UTF-16
+   * encoded as they are sent directly to the host in string descriptors.
+   */
   struct info
   {
     // ---- Required: no sensible defaults ----
-    /// Manufacturing name for this USB device
+
+    /**
+     * @brief Manufacturing name for this USB device
+     *
+     * This UTF-16 string is sent as string descriptor index 1 during
+     * enumeration. It identifies the manufacturer to the host and must not
+     * be empty. Typically a company name like "Acme Corporation".
+     */
     std::u16string_view manufacturer;
-    /// Name of the USB product
+
+    /**
+     * @brief Product name for this USB device
+     *
+     * This UTF-16 string is sent as string descriptor index 2 during
+     * enumeration. It identifies the product to the host and must not be
+     * empty. Typically a descriptive product name like "USB Serial Adapter".
+     */
     std::u16string_view product;
-    /// Serial number of this USB device
+
+    /**
+     * @brief Serial number of this USB device
+     *
+     * This UTF-16 string is sent as string descriptor index 3 during
+     * enumeration. It uniquely identifies individual units of the same product
+     * to the host and must not be empty. Typically a numeric or alphanumeric
+     * code assigned during manufacturing.
+     */
     std::u16string_view serial_number;
-    /// 16-bit Vendor ID
+
+    /**
+     * @brief 16-bit USB Vendor ID
+     *
+     * The official Vendor ID assigned by the USB Implementers Forum (USB-IF).
+     * This identifies the manufacturer and must be a valid, registered ID
+     * obtained from the USB-IF. Common IDs for development/prototyping may
+     * require explicit permission from the USB-IF.
+     */
     u16 vendor_id;
-    /// 16-bit Product ID
+
+    /**
+     * @brief 16-bit USB Product ID
+     *
+     * The Product ID assigned by the manufacturer. Combined with vendor_id,
+     * this uniquely identifies this product and its revision. The manufacturer
+     * is responsible for assigning unique IDs within their vendor space.
+     */
     u16 product_id;
 
     // ---- Optional: reasonable defaults provided ----
 
-    /// USB specification version. 0x0201 minimum for WebUSB/BOS support.
+    /**
+     * @brief USB specification version in binary-coded decimal format
+     *
+     * Indicates which USB specification version this device complies with.
+     * Format is 0xJJMN where JJ is the major version and MN is the minor
+     * version.
+     *
+     * Common values:
+     * - 0x0200 (USB 2.0) — Default, suitable for most devices
+     * - 0x0201 (USB 2.0 with enhancements) — Required for WebUSB and Binary
+     *   Object Store (BOS) descriptor support
+     * - 0x0300 (USB 3.0) — For SuperSpeed devices
+     * - 0x0310 (USB 3.1) — For SuperSpeed+ devices
+     *
+     * Default: 0x0200
+     */
     u16 usb_version = 0x0200;
 
-    /// Maximum bus current drawn in milli-amps. Stored as mA, converted to
-    /// 2mA units when writing the configuration descriptor.
-    u16 max_power_mA = 100;
+    /**
+     * @brief Maximum bus current drawn by this device in milliamps
+     *
+     * The maximum current the device draws from the USB bus, specified in mA.
+     * The enumerator converts this to 2mA units when writing the configuration
+     * descriptor, so this value is internally divided by 2 before transmission.
+     *
+     * The host uses this value to prevent overloading the USB power supply and
+     * ensure sufficient current is available for the device. Most devices draw
+     * between 50–500mA depending on their functionality.
+     *
+     * Bus-powered devices must not request more than 500mA. Self-powered
+     * devices may request less to indicate minimal bus draw.
+     *
+     * Default: 500mA
+     */
+    u16 max_power_mA = 250;
 
-    /// Language ID for string descriptors. 0x0409 = English (US).
+    /**
+     * @brief LANGID (Unicode Language ID) for string descriptors
+     *
+     * Specifies the primary language used in string descriptors. This value
+     * is sent in the language ID string descriptor and allows the host to
+     * select string descriptors in the appropriate language.
+     *
+     * Common values:
+     * - 0x0409 (English - United States) — Default, widely supported
+     * - 0x0809 (English - United Kingdom)
+     * - 0x040C (French - France)
+     * - 0x0407 (German - Germany)
+     *
+     * Default: 0x0409
+     */
     u16 lang_id = 0x0409;
 
-    /// Firmware/hardware version presented to the host.
+    /**
+     * @brief Device firmware/hardware version in binary-coded decimal format
+     *
+     * A version number presented to the host to identify the device's
+     * firmware and/or hardware revision. Format is 0xJJMN where JJ is the
+     * major version and MN is the minor version.
+     *
+     * This allows the host to track which firmware/hardware revisions are
+     * deployed and may be used by drivers to determine compatibility or
+     * apply version-specific workarounds.
+     *
+     * Default: 0x0100 (version 1.0)
+     */
     u16 device_version = 0x0100;
 
+    /**
+     * @brief Maximum number of control endpoint retries on protocol errors
+     *
+     * When the enumerator encounters certain USB protocol errors (such as
+     * receiving a malformed setup packet), it stalls the control endpoint and
+     * increments an internal retry counter. If the counter reaches this limit,
+     * an `io_error` exception is thrown.
+     *
+     * This provides a safety mechanism to prevent infinite retry loops on
+     * hardware or communication issues.
+     *
+     * Default: 3
+     */
     u8 retry_max = 3;
 
+    /**
+     * @brief Whether this device is self-powered or bus-powered
+     *
+     * Set to true if the device draws some or all of its power from an
+     * external source (not the USB bus). Set to false if the device draws
+     * all of its power from the USB bus.
+     *
+     * This value is reported in the device status and configuration
+     * descriptors. The host uses this information to manage power delivery
+     * and display appropriate UI indications to the user.
+     *
+     * Default: false (bus-powered)
+     */
     bool self_powered = false;
+
+    /**
+     * @brief Whether this device supports remote wakeup
+     *
+     * Set to true if the device hardware is capable of signaling the host to
+     * wake from suspend state. The host may grant permission for remote wakeup
+     * via the SET_FEATURE(DEVICE_REMOTE_WAKEUP) request during enumeration.
+     *
+     * Even if set to true, the host must grant permission before the device
+     * can initiate wakeup. When remote wakeup is enabled by the host, writing
+     * to an IN endpoint while the bus is suspended will automatically assert
+     * resume signaling before completing the transfer.
+     *
+     * Default: false
+     */
     bool remote_wakeup = false;
   };
 
+  /**
+   * @brief Construct a new USB device enumerator.
+   *
+   * Initializes the enumerator with the provided control endpoint, device
+   * information, and interface list. This constructor also sets up a callback
+   * on the control endpoint to capture and store incoming USB bus events.
+   *
+   * @param p_ctrl_ep A strong pointer to the device's control endpoint.
+   * @param p_info Configuration information for the USB device.
+   * @param p_interfaces A span of strong pointers to the device's interfaces.
+   *                     The lifetime of the array backing this span must
+   *                     outlive this enumerator object.
+   */
   enumerator(strong_ptr<control_endpoint> const& p_ctrl_ep,
              info p_info,
              std::span<strong_ptr<interface>> p_interfaces)
@@ -89,6 +274,7 @@ public:
     m_ctrl_ep->on_host_event(
       [this](v5::usb::bus_event p_event) { m_event = p_event; });
   }
+
   ~enumerator()
   {
     m_ctrl_ep->on_host_event([](v5::usb::bus_event) {});
@@ -97,11 +283,38 @@ public:
   enumerator(enumerator&&) = delete;
   bool operator=(enumerator&&) = delete;
 
+  /**
+   * @brief Check whether the device has completed USB enumeration.
+   *
+   * Returns whether the host has successfully completed the enumeration
+   * process by sending a SET_CONFIGURATION request. Prior to enumeration,
+   * the device can only respond to standard requests like GET_DESCRIPTOR
+   * and SET_ADDRESS. After enumeration, the device's interfaces become
+   * active and can process interface-specific requests.
+   *
+   * @return true if the device has been enumerated; false otherwise
+   */
   [[nodiscard]] bool is_enumerated() const
   {
     return m_enumerated;
   }
 
+  /**
+   * @brief Process the current USB bus event captured by the enumerator.
+   *
+   * This function handles USB bus events (reset, setup packets, suspend,
+   * resume, etc.) that have been captured by the control endpoint's host
+   * event callback. It dispatches events appropriately: reset events trigger
+   * device reconnection, setup packets are dispatched to the request handler,
+   * and suspend/resume/sleep events are forwarded to registered interfaces.
+   *
+   * This function must be called regularly in the main application loop to
+   * process incoming USB events. A retry counter tracks protocol errors; if
+   * the counter reaches the configured maximum, an io_error is thrown as a
+   * safety mechanism to prevent infinite error loops.
+   *
+   * @throws hal::io_error if the retry counter exceeds the configured maximum
+   */
   void process_ctrl_transfer()
   {
     if (m_retry_counter >= m_info.retry_max) {
@@ -113,9 +326,10 @@ public:
       return;
     }
 
-    auto event = *m_event;
+    auto const event = m_event.value();
 
     using bus_event = v5::usb::bus_event;
+    auto const previous_retry_count = m_retry_counter;
 
     switch (event) {
       case bus_event::reset:
@@ -146,6 +360,12 @@ public:
       case bus_event::u2_sleep:
         pass_host_event_to_interfaces(host_event::u2_sleep);
         break;
+    }
+
+    // If the retry count hasn't increased, then communication was successful
+    // and we can reset the retry counter.
+    if (previous_retry_count == m_retry_counter) {
+      m_retry_counter = 0;
     }
 
     m_event.reset();
@@ -180,7 +400,8 @@ private:
 
     usize driver_write(scatter_span<byte const> p_buffer) override
     {
-      // FIXME: Change write to return how many bytes written
+      // TODO(#99): Add code to limit the amount of data transmitted and return
+      // the amount actually written.
       m_ctrl_ep->write(p_buffer);
       return scatter_span_size(p_buffer);
     }
@@ -190,7 +411,6 @@ private:
 
   struct size_eio : endpoint_io
   {
-
     usize driver_read(scatter_span<byte>) override
     {
       return 0;
@@ -464,7 +684,7 @@ private:
 
     descriptor[b_num_interfaces] = p_totals.interface_count;
     descriptor[b_configuration_value] = 1;
-    descriptor[i_configuration] = 0;  // String index for configuration
+    descriptor[i_configuration] = 0;  // No string index for configuration
 
     // Bit 7 is reserved and must be set; bits 6 and 5 are self-powered and
     // remote wakeup respectively.
@@ -614,11 +834,51 @@ private:
   bool m_enumerated = false;
 };
 
+/**
+ * @brief USB Device Enumerator with in-place interface storage.
+ *
+ * This template class extends the base enumerator to provide storage for a
+ * fixed number of interfaces directly within the enumerator object. This
+ * eliminates the need to separately allocate and manage interface objects,
+ * making it ideal for embedded systems with static or fixed configurations.
+ *
+ * The template parameter specifies the exact number of interfaces at compile
+ * time, ensuring efficient memory usage with no dynamic allocation. Interfaces
+ * are passed to the constructor as forwarding references and are stored in an
+ * internal array.
+ *
+ * @tparam InterfaceCount The number of interfaces this enumerator will manage.
+ *
+ * Example usage:
+ *
+ * @code
+ * auto usb_cdc = make_strong<usb::cdc_acm_interface>(...);
+ * auto usb_hid = make_strong<usb::hid_interface>(...);
+ * inplace_enumerator<2> enumerator(ctrl_ep, device_info, usb_cdc, usb_hid);
+ * @endcode
+ */
 template<usize InterfaceCount>
 class inplace_enumerator : public enumerator
 {
 public:
+  /**
+   * @brief Construct an inplace enumerator with interfaces.
+   *
+   * Initializes the enumerator with a control endpoint, device configuration,
+   * and a variable number of interface objects. All interfaces are forwarded
+   * directly into the enumerator's internal storage array, avoiding the need
+   * for external allocation or management.
+   *
+   * All interface objects must be derived from hal::usb::interface.
+   *
+   * @tparam Interfaces Parameter pack of interface types, all derived from
+   *                    hal::usb::interface
+   * @param p_ctrl_ep Strong pointer to the device's control endpoint
+   * @param p_info Configuration information for the USB device
+   * @param p_interfaces Variable number of interface objects to manage
+   */
   template<typename... Interfaces>
+    requires(std::derived_from<Interfaces, hal::usb::interface> && ...)
   inplace_enumerator(strong_ptr<control_endpoint> const& p_ctrl_ep,
                      enumerator::info p_info,
                      Interfaces&&... p_interfaces)
@@ -634,7 +894,8 @@ public:
   inplace_enumerator& operator=(inplace_enumerator&&) noexcept = default;
 
 private:
-  std::array<strong_ptr<interface>, InterfaceCount> m_interface_storage;
+  std::array<strong_ptr<hal::usb::interface>, InterfaceCount>
+    m_interface_storage;
 };
 
 template<typename... Interfaces>
