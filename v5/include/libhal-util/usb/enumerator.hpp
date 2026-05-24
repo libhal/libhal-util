@@ -23,8 +23,6 @@
 #include <optional>
 #include <span>
 #include <string_view>
-#include <tuple>
-#include <utility>
 
 #include <libhal/error.hpp>
 #include <libhal/pointers.hpp>
@@ -32,10 +30,11 @@
 #include <libhal/units.hpp>
 #include <libhal/usb.hpp>
 
+#include "../as_bytes.hpp"
+#include "../macros.hpp"
+#include "../scatter_span.hpp"
 #include "descriptors.hpp"
-#include "libhal-util/as_bytes.hpp"
-#include "libhal-util/scatter_span.hpp"
-#include "libhal-util/usb/endpoints.hpp"
+#include "endpoints.hpp"
 #include "utils.hpp"
 
 namespace hal::v5::usb {
@@ -67,6 +66,10 @@ public:
     , m_retry_max(p_args.retry_max)
   {
     m_ctrl_ep->on_receive([this](control_endpoint::on_receive_tag) {
+      // NOTE: These APIs will be replaced in a future update (see PR
+      // https://github.com/libhal/libhal-util/pull/100/changes), so suppressing
+      // them for now.
+      SUPPRESS_DEPRECATED_START;
       if (!this->m_ctrl_ep->has_setup().has_value()) {
         m_has_setup_packet =
           true;  // We will just assume the packet is a setup packet, enumerator
@@ -75,6 +78,7 @@ public:
       }
 
       m_has_setup_packet = this->m_ctrl_ep->has_setup().value();
+      SUPPRESS_DEPRECATED_END;
     });
   }
 
