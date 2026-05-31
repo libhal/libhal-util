@@ -41,6 +41,184 @@ using hal::v5::scatter_span_size;
 using hal::v5::sub_scatter_result;
 
 /**
+ * @brief Configuration information for a USB device.
+ *
+ * This structure contains both required and optional fields for describing
+ * the USB device to the host during enumeration. Required fields must be
+ * provided at enumerator construction. Optional fields have sensible defaults
+ * suitable for most USB 2.0 devices.
+ *
+ * All string fields (manufacturer, product, serial_number) must be UTF-16
+ * encoded as they are sent directly to the host in string descriptors.
+ */
+struct info
+{
+  // ---- Required: no sensible defaults ----
+
+  /**
+   * @brief Manufacturing name for this USB device
+   *
+   * This UTF-16 string is sent as string descriptor index 1 during
+   * enumeration. It identifies the manufacturer to the host and must not
+   * be empty. Typically a company name like "Acme Corporation".
+   */
+  std::u16string_view manufacturer;
+
+  /**
+   * @brief Product name for this USB device
+   *
+   * This UTF-16 string is sent as string descriptor index 2 during
+   * enumeration. It identifies the product to the host and must not be
+   * empty. Typically a descriptive product name like "USB Serial Adapter".
+   */
+  std::u16string_view product;
+
+  /**
+   * @brief Serial number of this USB device
+   *
+   * This UTF-16 string is sent as string descriptor index 3 during
+   * enumeration. It uniquely identifies individual units of the same product
+   * to the host and must not be empty. Typically a numeric or alphanumeric
+   * code assigned during manufacturing.
+   */
+  std::u16string_view serial_number;
+
+  /**
+   * @brief 16-bit USB Vendor ID
+   *
+   * The official Vendor ID assigned by the USB Implementers Forum (USB-IF).
+   * This identifies the manufacturer and must be a valid, registered ID
+   * obtained from the USB-IF. Common IDs for development/prototyping may
+   * require explicit permission from the USB-IF.
+   */
+  u16 vendor_id;
+
+  /**
+   * @brief 16-bit USB Product ID
+   *
+   * The Product ID assigned by the manufacturer. Combined with vendor_id,
+   * this uniquely identifies this product and its revision. The manufacturer
+   * is responsible for assigning unique IDs within their vendor space.
+   */
+  u16 product_id;
+
+  // ---- Optional: reasonable defaults provided ----
+
+  /**
+   * @brief USB specification version in binary-coded decimal format
+   *
+   * Indicates which USB specification version this device complies with.
+   * Format is 0xJJMN where JJ is the major version and MN is the minor
+   * version.
+   *
+   * Common values:
+   * - 0x0200 (USB 2.0) — Default, suitable for most devices
+   * - 0x0201 (USB 2.0 with enhancements) — Required for WebUSB and Binary
+   *   Object Store (BOS) descriptor support
+   * - 0x0300 (USB 3.0) — For SuperSpeed devices
+   * - 0x0310 (USB 3.1) — For SuperSpeed+ devices
+   *
+   * Default: 0x0200
+   */
+  u16 usb_version = 0x0200;
+
+  /**
+   * @brief Maximum bus current drawn by this device in milliamps
+   *
+   * The maximum current the device draws from the USB bus, specified in mA.
+   * The enumerator converts this to 2mA units when writing the configuration
+   * descriptor, so this value is internally divided by 2 before transmission.
+   *
+   * The host uses this value to prevent overloading the USB power supply and
+   * ensure sufficient current is available for the device. Most devices draw
+   * between 50–500mA depending on their functionality.
+   *
+   * Bus-powered devices must not request more than 500mA. Self-powered
+   * devices may request less to indicate minimal bus draw.
+   *
+   * Default: 500mA
+   */
+  u16 max_power_mA = 250;
+
+  /**
+   * @brief LANGID (Unicode Language ID) for string descriptors
+   *
+   * Specifies the primary language used in string descriptors. This value
+   * is sent in the language ID string descriptor and allows the host to
+   * select string descriptors in the appropriate language.
+   *
+   * Common values:
+   * - 0x0409 (English - United States) — Default, widely supported
+   * - 0x0809 (English - United Kingdom)
+   * - 0x040C (French - France)
+   * - 0x0407 (German - Germany)
+   *
+   * Default: 0x0409
+   */
+  u16 lang_id = 0x0409;
+
+  /**
+   * @brief Device firmware/hardware version in binary-coded decimal format
+   *
+   * A version number presented to the host to identify the device's
+   * firmware and/or hardware revision. Format is 0xJJMN where JJ is the
+   * major version and MN is the minor version.
+   *
+   * This allows the host to track which firmware/hardware revisions are
+   * deployed and may be used by drivers to determine compatibility or
+   * apply version-specific workarounds.
+   *
+   * Default: 0x0100 (version 1.0)
+   */
+  u16 device_version = 0x0100;
+
+  /**
+   * @brief Maximum number of control endpoint retries on protocol errors
+   *
+   * When the enumerator encounters certain USB protocol errors (such as
+   * receiving a malformed setup packet), it stalls the control endpoint and
+   * increments an internal retry counter. If the counter reaches this limit,
+   * an `io_error` exception is thrown.
+   *
+   * This provides a safety mechanism to prevent infinite retry loops on
+   * hardware or communication issues.
+   *
+   * Default: 3
+   */
+  u8 retry_max = 3;
+
+  /**
+   * @brief Whether this device is self-powered or bus-powered
+   *
+   * Set to true if the device draws some or all of its power from an
+   * external source (not the USB bus). Set to false if the device draws
+   * all of its power from the USB bus.
+   *
+   * This value is reported in the device status and configuration
+   * descriptors. The host uses this information to manage power delivery
+   * and display appropriate UI indications to the user.
+   *
+   * Default: false (bus-powered)
+   */
+  bool self_powered = false;
+
+  /**
+   * @brief Whether this device supports remote wakeup
+   *
+   * Set to true if the device hardware is capable of signaling the host to
+   * wake from suspend state. The host may grant permission for remote wakeup
+   * via the SET_FEATURE(DEVICE_REMOTE_WAKEUP) request during enumeration.
+   *
+   * Even if set to true, the host must grant permission before the device
+   * can initiate wakeup. When remote wakeup is enabled by the host, writing
+   * to an IN endpoint while the bus is suspended will automatically assert
+   * resume signaling before completing the transfer.
+   *
+   * Default: false
+   */
+  bool remote_wakeup = false;
+};
+/**
  * @brief USB Device Enumerator for handling USB protocol and descriptor
  * management.
  *
@@ -72,185 +250,6 @@ using hal::v5::sub_scatter_result;
 class enumerator
 {
 public:
-  /**
-   * @brief Configuration information for a USB device.
-   *
-   * This structure contains both required and optional fields for describing
-   * the USB device to the host during enumeration. Required fields must be
-   * provided at enumerator construction. Optional fields have sensible defaults
-   * suitable for most USB 2.0 devices.
-   *
-   * All string fields (manufacturer, product, serial_number) must be UTF-16
-   * encoded as they are sent directly to the host in string descriptors.
-   */
-  struct info
-  {
-    // ---- Required: no sensible defaults ----
-
-    /**
-     * @brief Manufacturing name for this USB device
-     *
-     * This UTF-16 string is sent as string descriptor index 1 during
-     * enumeration. It identifies the manufacturer to the host and must not
-     * be empty. Typically a company name like "Acme Corporation".
-     */
-    std::u16string_view manufacturer;
-
-    /**
-     * @brief Product name for this USB device
-     *
-     * This UTF-16 string is sent as string descriptor index 2 during
-     * enumeration. It identifies the product to the host and must not be
-     * empty. Typically a descriptive product name like "USB Serial Adapter".
-     */
-    std::u16string_view product;
-
-    /**
-     * @brief Serial number of this USB device
-     *
-     * This UTF-16 string is sent as string descriptor index 3 during
-     * enumeration. It uniquely identifies individual units of the same product
-     * to the host and must not be empty. Typically a numeric or alphanumeric
-     * code assigned during manufacturing.
-     */
-    std::u16string_view serial_number;
-
-    /**
-     * @brief 16-bit USB Vendor ID
-     *
-     * The official Vendor ID assigned by the USB Implementers Forum (USB-IF).
-     * This identifies the manufacturer and must be a valid, registered ID
-     * obtained from the USB-IF. Common IDs for development/prototyping may
-     * require explicit permission from the USB-IF.
-     */
-    u16 vendor_id;
-
-    /**
-     * @brief 16-bit USB Product ID
-     *
-     * The Product ID assigned by the manufacturer. Combined with vendor_id,
-     * this uniquely identifies this product and its revision. The manufacturer
-     * is responsible for assigning unique IDs within their vendor space.
-     */
-    u16 product_id;
-
-    // ---- Optional: reasonable defaults provided ----
-
-    /**
-     * @brief USB specification version in binary-coded decimal format
-     *
-     * Indicates which USB specification version this device complies with.
-     * Format is 0xJJMN where JJ is the major version and MN is the minor
-     * version.
-     *
-     * Common values:
-     * - 0x0200 (USB 2.0) — Default, suitable for most devices
-     * - 0x0201 (USB 2.0 with enhancements) — Required for WebUSB and Binary
-     *   Object Store (BOS) descriptor support
-     * - 0x0300 (USB 3.0) — For SuperSpeed devices
-     * - 0x0310 (USB 3.1) — For SuperSpeed+ devices
-     *
-     * Default: 0x0200
-     */
-    u16 usb_version = 0x0200;
-
-    /**
-     * @brief Maximum bus current drawn by this device in milliamps
-     *
-     * The maximum current the device draws from the USB bus, specified in mA.
-     * The enumerator converts this to 2mA units when writing the configuration
-     * descriptor, so this value is internally divided by 2 before transmission.
-     *
-     * The host uses this value to prevent overloading the USB power supply and
-     * ensure sufficient current is available for the device. Most devices draw
-     * between 50–500mA depending on their functionality.
-     *
-     * Bus-powered devices must not request more than 500mA. Self-powered
-     * devices may request less to indicate minimal bus draw.
-     *
-     * Default: 500mA
-     */
-    u16 max_power_mA = 250;
-
-    /**
-     * @brief LANGID (Unicode Language ID) for string descriptors
-     *
-     * Specifies the primary language used in string descriptors. This value
-     * is sent in the language ID string descriptor and allows the host to
-     * select string descriptors in the appropriate language.
-     *
-     * Common values:
-     * - 0x0409 (English - United States) — Default, widely supported
-     * - 0x0809 (English - United Kingdom)
-     * - 0x040C (French - France)
-     * - 0x0407 (German - Germany)
-     *
-     * Default: 0x0409
-     */
-    u16 lang_id = 0x0409;
-
-    /**
-     * @brief Device firmware/hardware version in binary-coded decimal format
-     *
-     * A version number presented to the host to identify the device's
-     * firmware and/or hardware revision. Format is 0xJJMN where JJ is the
-     * major version and MN is the minor version.
-     *
-     * This allows the host to track which firmware/hardware revisions are
-     * deployed and may be used by drivers to determine compatibility or
-     * apply version-specific workarounds.
-     *
-     * Default: 0x0100 (version 1.0)
-     */
-    u16 device_version = 0x0100;
-
-    /**
-     * @brief Maximum number of control endpoint retries on protocol errors
-     *
-     * When the enumerator encounters certain USB protocol errors (such as
-     * receiving a malformed setup packet), it stalls the control endpoint and
-     * increments an internal retry counter. If the counter reaches this limit,
-     * an `io_error` exception is thrown.
-     *
-     * This provides a safety mechanism to prevent infinite retry loops on
-     * hardware or communication issues.
-     *
-     * Default: 3
-     */
-    u8 retry_max = 3;
-
-    /**
-     * @brief Whether this device is self-powered or bus-powered
-     *
-     * Set to true if the device draws some or all of its power from an
-     * external source (not the USB bus). Set to false if the device draws
-     * all of its power from the USB bus.
-     *
-     * This value is reported in the device status and configuration
-     * descriptors. The host uses this information to manage power delivery
-     * and display appropriate UI indications to the user.
-     *
-     * Default: false (bus-powered)
-     */
-    bool self_powered = false;
-
-    /**
-     * @brief Whether this device supports remote wakeup
-     *
-     * Set to true if the device hardware is capable of signaling the host to
-     * wake from suspend state. The host may grant permission for remote wakeup
-     * via the SET_FEATURE(DEVICE_REMOTE_WAKEUP) request during enumeration.
-     *
-     * Even if set to true, the host must grant permission before the device
-     * can initiate wakeup. When remote wakeup is enabled by the host, writing
-     * to an IN endpoint while the bus is suspended will automatically assert
-     * resume signaling before completing the transfer.
-     *
-     * Default: false
-     */
-    bool remote_wakeup = false;
-  };
-
   /**
    * @brief Construct a new USB device enumerator.
    *
@@ -875,12 +874,12 @@ public:
    *                    hal::usb::interface
    * @param p_ctrl_ep Strong pointer to the device's control endpoint
    * @param p_info Configuration information for the USB device
-   * @param p_interfaces Variable number of interface objects to manage
+   * @param p_interfaces Variable number of interface objects to manage. These
+   * objects must be wrapped in a strong_ptr<Interface>.
    */
   template<typename... Interfaces>
-    requires(std::derived_from<Interfaces, hal::usb::interface> && ...)
   inplace_enumerator(strong_ptr<control_endpoint> const& p_ctrl_ep,
-                     enumerator::info p_info,
+                     info p_info,
                      Interfaces&&... p_interfaces)
     : enumerator(p_ctrl_ep, p_info, m_interface_storage)
     , m_interface_storage{ std::forward<Interfaces>(p_interfaces)... }
@@ -899,13 +898,12 @@ private:
 };
 
 template<typename... Interfaces>
-inplace_enumerator(strong_ptr<control_endpoint> const&,
-                   enumerator::info,
-                   Interfaces&&...)
+inplace_enumerator(strong_ptr<control_endpoint> const&, info, Interfaces&&...)
   -> inplace_enumerator<sizeof...(Interfaces)>;
 }  // namespace hal::v5::usb
 
 namespace hal::usb {
 using v5::usb::enumerator;
+using v5::usb::info;
 using v5::usb::inplace_enumerator;
 }  // namespace hal::usb

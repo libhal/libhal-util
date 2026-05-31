@@ -68,9 +68,9 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
   auto ctrl_ep = make_strong_ptr<mock_usb_control_endpoint>(&pool);
   ctrl_ep->m_endpoint.m_info = { .size = 8, .number = 0, .stalled = false };
 
-  auto usb_interface = make_strong_ptr<mock_usb_interface>(&pool);
+  auto mock = make_strong_ptr<mock_usb_interface>(&pool);
 
-  "basic usb enumeration test"_test = [&ctrl_ep, &usb_interface] {
+  "basic usb enumeration test"_test = [&ctrl_ep, &mock] {
     // Start enumeration process and verify connection
     [[maybe_unused]] inplace_enumerator en(
       ctrl_ep,
@@ -82,7 +82,7 @@ boost::ut::suite<"enumeration_test"> enumeration_test = [] {
         .product_id = 0xBEEF,
         // everything else takes its default
       },
-      usb_interface);
+      mock);
   };
 };
 
