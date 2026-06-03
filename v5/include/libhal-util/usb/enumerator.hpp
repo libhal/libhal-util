@@ -270,13 +270,13 @@ public:
     , m_interfaces(p_interfaces)
     , m_info(p_info)
   {
-    m_ctrl_ep->on_host_event(
+    m_ctrl_ep->on_bus_event(
       [this](v5::usb::bus_event p_event) { m_event = p_event; });
   }
 
   ~enumerator()
   {
-    m_ctrl_ep->on_host_event([](v5::usb::bus_event) {});
+    m_ctrl_ep->on_bus_event([](v5::usb::bus_event) {});
   }
 
   enumerator(enumerator&&) = delete;
