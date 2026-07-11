@@ -14,6 +14,7 @@
 
 cmake_minimum_required(VERSION 4.0)
 
+# TODO(kammce): remove line below
 set(LIBHAL_ENABLE_CLANG_TIDY OFF)
 
 project(libhal-util LANGUAGES CXX)
