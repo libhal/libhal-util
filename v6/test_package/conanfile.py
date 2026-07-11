@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# Copyright 2024 - 2025 Khalil Estell and the libhal contributors
+# Copyright 2026 Madeline Schneider and the libhal contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,22 +16,31 @@
 
 from conan import ConanFile
 from conan.tools.build import cross_building
-from conan.tools.cmake import CMake, cmake_layout
+from conan.tools.cmake import CMake, cmake_layout, CMakeToolchain, CMakeDeps
 from pathlib import Path
 
 
 class TestPackageConan(ConanFile):
     settings = "os", "arch", "compiler", "build_type"
-    generators = "CMakeToolchain", "CMakeDeps", "VirtualRunEnv"
+    generators = "VirtualRunEnv"
 
     def build_requirements(self):
-        self.tool_requires("cmake/3.27.1")
+        self.tool_requires("cmake/[^4.0.0]")
+        self.tool_requires("ninja/[^1.13.1]")
 
     def requirements(self):
         self.requires(self.tested_reference_str)
 
     def layout(self):
         cmake_layout(self)
+
+    def generate(self):
+        tc = CMakeToolchain(self)
+        tc.generator = "Ninja"
+        tc.generate()
+
+        deps = CMakeDeps(self)
+        deps.generate()
 
     def build(self):
         cmake = CMake(self)

@@ -17,9 +17,10 @@
 from conan import ConanFile
 from conan.tools.cmake import CMake, cmake_layout, CMakeToolchain, CMakeDeps
 from conan.tools.files import copy
+from conan.errors import ConanInvalidConfiguration
 from conan.tools.build import check_min_cppstd
+from conan.tools.scm import Version
 from pathlib import Path
-import os
 
 
 required_conan_version = ">=2.2.0"
@@ -30,12 +31,11 @@ class libhal_util_conan(ConanFile):
     license = "Apache-2.0"
     url = "https://github.com/libhal/libhal-util"
     homepage = "https://libhal.github.io/libhal-util"
-    description = ("A collection of interfaces and abstractions for embedded "
-                   "peripherals and devices using modern C++")
-    topics = ("peripherals", "hardware", "abstraction", "devices", "hal")
+    description = ("Utility functions and tools for embedded systems "
+                   "using modern C++")
+    topics = ("utilities", "embedded", "hardware", "hal")
     settings = "compiler", "build_type", "os", "arch"
     exports_sources = "modules/*", "tests/*", "CMakeLists.txt", "LICENSE"
-    python_requires = "conan_module_support/1.0.0"
     package_type = "static-library"
     shared = False
 
@@ -46,32 +46,70 @@ class libhal_util_conan(ConanFile):
     @property
     def _compilers_minimum_version(self):
         return {
-            "gcc": "14",        # GCC 14+ for modules
-            "clang": "19",      # Clang 19+ for modules
-            "apple-clang": "19.0.0",
-            "msvc": "193.4"     # MSVC 14.34+ for modules
+            "gcc": ("14", "GCC 14+ required for libhal-util"),
+            "clang": (
+                "19",
+                "Clang 19+ required for libhal-util"
+            ),
+            "apple-clang": (
+                "19.0.0",
+                "Apple Clang 19+ for libhal-util"
+            ),
+            "msvc": (
+                "193.4",
+                "MSVC 14.34+ (Visual Studio 17.4+) for libhal-util"
+            )
         }
+
+    def _validate_compiler_version(self):
+        """Validate compiler version against minimum requirements"""
+        compiler = str(self.settings.compiler)
+        version = str(self.settings.compiler.version)
+
+        # Map Visual Studio to msvc for consistency
+        compiler_key = "msvc" if compiler == "Visual Studio" else compiler
+
+        min_versions = self._compilers_minimum_version
+        if compiler_key not in min_versions:
+            raise ConanInvalidConfiguration(
+                f"Compiler {compiler} is not supported for C++20 modules")
+
+        min_version, error_msg = min_versions[compiler_key]
+        if Version(version) < min_version:
+            raise ConanInvalidConfiguration(error_msg)
 
     def validate(self):
         if self.settings.get_safe("compiler.cppstd"):
             check_min_cppstd(self, self._min_cppstd)
 
+        self._validate_compiler_version()
+
     def build_requirements(self):
-        self.tool_requires("cmake/4.1.1")
-        self.tool_requires("ninja/1.13.1")
-        self.tool_requires("libhal-cmake-util/[^4.0.5]")
+        self.tool_requires("cmake/[^4.0.0]")
+        self.tool_requires("ninja/[^1.3.0]")
         self.test_requires("boost-ext-ut/2.3.1")
+        self.tool_requires("libhal-cmake-util/[^5.0.7]")
 
     def requirements(self):
-        self.requires("libhal/5.0.0")
+        self.requires("libhal/[^5.0.0]")
 
     def layout(self):
-        cmake_layout(self)
+        build_path = Path("build") / (
+            str(self.settings.arch) + "-" +
+            str(self.settings.os) + "-" +
+            str(self.settings.compiler) + "-" +
+            str(self.settings.compiler.version)
+        )
+        cmake_layout(self, build_folder=str(build_path))
+
+    def set_version(self):
+        # Use latest if not specified via command line
+        if not self.version:
+            self.version = "latest"
 
     def generate(self):
         tc = CMakeToolchain(self)
         tc.generator = "Ninja"
-        tc.cache_variables["CMAKE_CXX_SCAN_FOR_MODULES"] = True
         tc.generate()
 
         deps = CMakeDeps(self)
@@ -81,22 +119,19 @@ class libhal_util_conan(ConanFile):
         cmake = CMake(self)
         cmake.configure()
         cmake.build()
+        if not self.conf.get("tools.build:skip_test", default=False):
+            cmake.ctest(["--output-on-failure"])
 
     def package(self):
-        copy(self, "LICENSE",
-             dst=os.path.join(self.package_folder, "licenses"),
-             src=self.source_folder)
-
         cmake = CMake(self)
         cmake.install()
 
-    def package_info(self):
-        self.cpp_info.libs = ["hal-util"]
-        self.cpp_info.set_property("cmake_target_name", "libhal::util")
-        self.cpp_info.bindirs = []
-        self.cpp_info.frameworkdirs = []
-        self.cpp_info.resdirs = []
-        self.cpp_info.includedirs = []
+        copy(self, "LICENSE",
+             dst=Path(self.package_folder) / "licenses",
+             src=self.source_folder)
 
-        MOD_SUPPORT = self.python_requires["conan_module_support"]
-        MOD_SUPPORT.module.generate_mod_map_file(self, "hal-util")
+    def package_info(self):
+        # DISABLE Conan's config file generation
+        self.cpp_info.set_property("cmake_find_mode", "none")
+        # Tell CMake to include this directory in its search path
+        self.cpp_info.builddirs.append("lib/cmake")

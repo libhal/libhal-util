@@ -31,7 +31,7 @@ export module hal.util:math;
 
 import hal;
 
-export namespace hal::inline v6 {
+namespace hal::inline v6 {
 /**
  * @ingroup Math
  * @brief Perform multiply operation and return an error code
@@ -44,14 +44,14 @@ export namespace hal::inline v6 {
  * @returns std::optional<T> - the resultant, std::nullopt if the operation
  * overflows.
  */
-template<typename T>
+export template<typename T>
 [[nodiscard]] std::optional<T> multiply(T p_lhs, T p_rhs)
 {
   if (p_lhs == 0 || p_rhs == 0) {
     return T{ 0 };
   }
 
-  T result = p_lhs * p_rhs;
+  T const result = p_lhs * p_rhs;
 
   if (p_lhs != result / p_rhs) {
     return std::nullopt;
@@ -78,7 +78,7 @@ template<typename T>
  * @param p_value - integer value to be made positive
  * @return T - positive representation of the integer
  */
-template<typename T>
+export template<typename T>
 [[nodiscard]] constexpr T absolute_value(T p_value) noexcept
 {
   if constexpr (std::is_unsigned_v<T>) {
@@ -94,7 +94,7 @@ template<typename T>
   }
 }
 
-template<typename T>
+export template<typename T>
 struct division
 {
   T numerator;
@@ -107,19 +107,18 @@ struct division
  * place is greater than or equal to 0.5.
  *
  * @tparam T - integral type of the two operands
- * @param p_numerator - the value to be divided
- * @param p_denominator - the value to divide the numerator against
+ * @param p_terms - numerator and denominator to be divided
  * @return T - rounded quotient between numerator and denominator.
  * Returns 0 if the denominator is greater than the numerator.
  */
-template<typename T>
-[[nodiscard]] constexpr T rounding_division(T p_numerator, T p_denominator)
+export template<typename T>
+[[nodiscard]] constexpr T rounding_division(division<T> p_terms)
 {
-  bool num_sign = p_numerator >= 0;
-  bool den_sign = p_denominator >= 0;
+  bool const num_sign = p_terms.numerator >= 0;
+  bool const den_sign = p_terms.denominator >= 0;
 
-  auto numerator = absolute_value(p_numerator);
-  auto denominator = absolute_value(p_denominator);
+  auto const numerator = absolute_value(p_terms.numerator);
+  auto const denominator = absolute_value(p_terms.denominator);
 
   if (denominator > numerator || denominator == 0) {
     return T{ 0 };
@@ -151,7 +150,7 @@ template<typename T>
  * @returns constexpr T - absolute value of the difference between the two
  * points.
  */
-template<typename T>
+export template<typename T>
 [[nodiscard]] constexpr T distance(T p_left, T p_right)
 {
   if (p_right > p_left) {
@@ -181,7 +180,7 @@ template<typename T>
  * @returns constexpr T - absolute value of the difference between the two
  * points.
  */
-template<std::integral T>
+export template<std::integral T>
 [[nodiscard]] constexpr std::make_unsigned_t<T> distance(T p_left, T p_right)
 {
   // NOLINTEND(bugprone-easily-swappable-parameters)
@@ -189,22 +188,22 @@ template<std::integral T>
 
   using unsigned_t = std::make_unsigned_t<T>;
   // Put left and right values into 64-bit containers to prevent overflow
-  int64_t left{ p_left };
-  int64_t right{ p_right };
+  int64_t const left{ p_left };
+  int64_t const right{ p_right };
 
   if (right > left) {
     // Subtraction operation on right to left in this order can never overflow
     // because the maximum resultant of left and right being INT32_MAX and
     // INT32_MIN, will equal UINT32_MAX which can be stored within an int64_t
     // value.
-    int64_t difference = right - left;
+    int64_t const difference = right - left;
     // Casting this value to the unsigned variant will always fit as the
     // distance between any 32-bit signed numbers can always fit in a 32-bit
     // unsigned number.
     return static_cast<unsigned_t>(difference);
   } else {
     // Same logic as the if statement block above.
-    int64_t difference = left - right;
+    int64_t const difference = left - right;
     return static_cast<unsigned_t>(difference);
   }
 }
@@ -218,17 +217,17 @@ template<std::integral T>
  * @return true - difference is less than epsilon
  * @return false - difference is more than epsilon
  */
-[[nodiscard]] constexpr bool equals(std::floating_point auto p_value1,
-                                    std::floating_point auto p_value2,
-                                    float p_epsilon = 1e-9f)
+export [[nodiscard]] constexpr bool equals(std::floating_point auto p_value1,
+                                           std::floating_point auto p_value2,
+                                           float p_epsilon = 1e-9f)
 {
   if (p_value1 == p_value2) {
     return true;
   }
-  auto value1_abs = std::abs(p_value1);
-  auto value2_abs = std::abs(p_value2);
-  auto diff = std::abs(p_value1 - p_value2);
-  auto absolute_values_sum = value1_abs + value2_abs;
+  auto const value1_abs = std::abs(p_value1);
+  auto const value2_abs = std::abs(p_value2);
+  auto const diff = std::abs(p_value1 - p_value2);
+  auto const absolute_values_sum = value1_abs + value2_abs;
 
   using float_t = decltype(absolute_values_sum);
 
@@ -236,7 +235,7 @@ template<std::integral T>
       (absolute_values_sum < std::numeric_limits<float_t>::min())) {
     return diff < (p_epsilon * std::numeric_limits<float_t>::min());
   } else {
-    auto relative_error =
+    auto const relative_error =
       diff / std::min(absolute_values_sum, std::numeric_limits<float_t>::max());
     return relative_error < p_epsilon;
   }

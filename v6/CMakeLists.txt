@@ -12,63 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 4.0)
 
-project(hal-util LANGUAGES CXX)
+set(LIBHAL_ENABLE_CLANG_TIDY OFF)
 
-# Require Ninja or Visual Studio for modules
-if(NOT CMAKE_GENERATOR MATCHES "Ninja|Visual Studio")
-    message(FATAL_ERROR "C++20 modules require Ninja or Visual Studio generator")
-endif()
+project(libhal-util LANGUAGES CXX)
 
-# Create the library target
-add_library(hal-util)
+# libhal cmake utilities from libhal-cmake-util
+# Source: https://github.com/libhal/libhal-cmake-util
+find_package(LibhalCMakeUtil REQUIRED)
 
 find_package(libhal REQUIRED)
 
-# Add module files
-target_sources(hal-util PUBLIC
-    FILE_SET CXX_MODULES
-    TYPE CXX_MODULES
-    FILES
-    modules/hal.util.cppm
-    modules/math.cppm
-    modules/to_array.cppm
+libhal_project_init()
+libhal_add_library(util
+    MODULES
+        modules/hal.util.cppm
+        modules/math.cppm
+        modules/to_array.cppm
 )
 
-target_compile_features(hal-util PUBLIC cxx_std_23)
-target_link_libraries(hal-util PUBLIC libhal::libhal)
-
-install(
-    TARGETS hal-util
-    EXPORT hal-util_targets
-    FILE_SET CXX_MODULES DESTINATION .
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
+target_link_libraries(util
+    PUBLIC
+        libhal::libhal
 )
 
-install(
-    DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/hal-util.dir/
-    DESTINATION modules
-    FILES_MATCHING PATTERN "*.pcm"
+libhal_apply_compile_options(util)
+libhal_install_library(util NAMESPACE libhal)
+libhal_add_tests(util
+    TEST_NAMES
+        main
+        math
 )
-
-# ==============================================================================
-# Unit testing
-# ==============================================================================
-
-find_package(ut REQUIRED)
-
-add_executable(unit_test)
-
-# Add module files
-target_sources(unit_test
-  PRIVATE
-      tests/main.test.cpp
-)
-
-target_compile_features(unit_test PUBLIC cxx_std_23)
-target_link_libraries(unit_test PRIVATE hal-util boost-ext-ut::ut)
-
-# Run unit tests
-add_custom_target(run_tests ALL DEPENDS unit_test COMMAND unit_test)

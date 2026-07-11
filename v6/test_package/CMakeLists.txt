@@ -1,4 +1,4 @@
-# Copyright 2024 - 2025 Khalil Estell and the libhal contributors
+# Copyright 2026 Madeline Schneider and the libhal contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,17 +12,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 4.0)
 
-set(CMAKE_C_COMPILER_WORKS 1)
-set(CMAKE_CXX_COMPILER_WORKS 1)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_COLOR_DIAGNOSTICS ON)
 
 project(test_package LANGUAGES CXX)
 
-find_package(libhal-util REQUIRED CONFIG)
+if(NOT CMAKE_GENERATOR MATCHES "Ninja|Visual Studio")
+    message(FATAL_ERROR "C++20 modules require Ninja or Visual Studio generator")
+endif()
+
+find_package(util REQUIRED CONFIG)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+    string(APPEND CMAKE_CXX_FLAGS " -Qunused-arguments")
+endif()
 
 add_executable(${PROJECT_NAME} main.cpp)
-
 target_include_directories(${PROJECT_NAME} PUBLIC .)
-target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
+target_compile_options(${PROJECT_NAME} PRIVATE -fno-rtti)
 target_link_libraries(${PROJECT_NAME} PRIVATE libhal::util)
+
+if(NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=address)
+    target_link_options(${PROJECT_NAME} PRIVATE -g -fsanitize=address)
+endif()
+
+add_custom_target(copy_compile_commands ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_BINARY_DIR}/compile_commands.json
+        ${CMAKE_SOURCE_DIR}/compile_commands.json
+    DEPENDS ${CMAKE_BINARY_DIR}/compile_commands.json)
