@@ -44,4 +44,5 @@ libhal_add_tests(util
     TEST_NAMES
         main
         math
+        to_array
 )
