@@ -21,6 +21,7 @@ export import :enumeration;
 export import :i2c;
 export import :map;
 export import :math;
+export import :serial;
 export import :spi;
 export import :steady_clock;
 export import :to_array;

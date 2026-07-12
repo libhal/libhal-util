@@ -36,6 +36,7 @@ libhal_add_library(util
         modules/i2c.cppm
         modules/map.cppm
         modules/math.cppm
+        modules/serial.cppm
         modules/spi.cppm
         modules/steady_clock.cppm
         modules/to_array.cppm
@@ -60,6 +61,7 @@ libhal_add_tests(util
         i2c
         map
         math
+        serial
         spi
         steady_clock
         to_array
