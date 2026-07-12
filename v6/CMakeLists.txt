@@ -36,6 +36,7 @@ libhal_add_library(util
         modules/i2c.cppm
         modules/map.cppm
         modules/math.cppm
+        modules/overflow_counter.cppm
         modules/serial.cppm
         modules/spi.cppm
         modules/steady_clock.cppm
@@ -61,6 +62,7 @@ libhal_add_tests(util
         i2c
         map
         math
+        overflow_counter
         serial
         spi
         steady_clock

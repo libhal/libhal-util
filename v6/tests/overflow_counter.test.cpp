@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <libhal-util/overflow_counter.hpp>
-
 #include <boost/ut.hpp>
 
-namespace hal {
-boost::ut::suite<"overflow_counter_test"> overflow_counter_test = [] {
+import hal.util;
+
+namespace {
+
+void update_test()
+{
   using namespace boost::ut;
 
   "overflow_counter::update() increment by 1"_test = []() {
-    overflow_counter counter;
+    hal::overflow_counter counter;
 
     expect(that % 0 == counter.update(0));
     expect(that % 1 == counter.update(1));
@@ -35,7 +37,7 @@ boost::ut::suite<"overflow_counter_test"> overflow_counter_test = [] {
   // This is the case when a counter has been stopped. It shouldn't detect an
   // overflow as the value hasn't overflowed it just has not moved.
   "overflow_counter::update() increment by 0 expect no change"_test = []() {
-    overflow_counter counter;
+    hal::overflow_counter counter;
 
     expect(that % 10 == counter.update(10));
     expect(that % 10 == counter.update(10));
@@ -49,7 +51,7 @@ boost::ut::suite<"overflow_counter_test"> overflow_counter_test = [] {
   // This is the case when a counter has been stopped. It shouldn't detect an
   // overflow as the value hasn't overflowed it just has not moved.
   "overflow_counter::update() overflow w/ 32 bits"_test = []() {
-    overflow_counter counter;
+    hal::overflow_counter counter;
 
     expect(that % 0x0'0000'000A == counter.update(0xA));
     expect(that % 0x1'0000'0000 == counter.update(0x0));
@@ -75,7 +77,7 @@ boost::ut::suite<"overflow_counter_test"> overflow_counter_test = [] {
   };
 
   "overflow_counter::update() overflow w/ 8 bits"_test = []() {
-    overflow_counter<8> counter;
+    hal::overflow_counter<8> counter;
 
     expect(that % 0x00A == counter.update(0xA));
     expect(that % 0x100 == counter.update(0x0));
@@ -101,7 +103,7 @@ boost::ut::suite<"overflow_counter_test"> overflow_counter_test = [] {
   };
 
   "overflow_counter::update() reset"_test = []() {
-    overflow_counter<8> counter;
+    hal::overflow_counter<8> counter;
 
     expect(that % 0x00A == counter.update(0xA));
     expect(that % 0x100 == counter.update(0x0));
@@ -120,5 +122,11 @@ boost::ut::suite<"overflow_counter_test"> overflow_counter_test = [] {
 
     expect(that % 0x00A == counter.update(0xA));
   };
-};
-}  // namespace hal
+}
+
+}  // namespace
+
+int main()
+{
+  update_test();
+}

@@ -174,7 +174,7 @@ export [[nodiscard]] async::future<bool> probe(async::context& p_ctx,
  * @brief Set of I2C transaction operations
  *
  */
-export enum class i2c_operation {
+export enum class i2c_operation : u8 {
   /// Denotes an i2c write operation
   write = 0,
   /// Denotes an i2c read operation
@@ -193,7 +193,7 @@ export [[nodiscard]] inline hal::byte to_8_bit_address(
   hal::byte p_address,
   i2c_operation p_operation) noexcept
 {
-  hal::byte v8bit_address = static_cast<hal::byte>(p_address << 1);
+  auto v8bit_address = static_cast<hal::byte>(p_address << 1);
   v8bit_address |= hal::value(p_operation);
   return v8bit_address;
 }
