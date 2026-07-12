@@ -14,9 +14,11 @@
 
 module;
 
+#include <cstddef>
+
 #include <span>
 
-module hal.util:as_bytes;
+export module hal.util:as_bytes;
 
 import hal;
 
@@ -35,7 +37,7 @@ namespace hal::inline v6 {
  * @param p_number_of_elements - the number of valid elements after the first
  * @return constexpr std::span<hal::byte> - span of elements
  */
-template<typename T>
+export template<typename T>
 constexpr std::span<hal::byte> as_writable_bytes(T* p_address,
                                                  size_t p_number_of_elements)
 {
@@ -53,7 +55,7 @@ constexpr std::span<hal::byte> as_writable_bytes(T* p_address,
  * @param p_number_of_elements - the number of valid elements after the first
  * @return constexpr std::span<hal::byte const> - span of elements
  */
-template<typename T>
+export template<typename T>
 constexpr std::span<hal::byte const> as_bytes(T const* p_address,
                                               size_t p_number_of_elements)
 {
@@ -70,7 +72,7 @@ constexpr std::span<hal::byte const> as_bytes(T const* p_address,
  *
  * @tparam T - type of the container
  */
-template<typename T>
+export template<typename T>
 concept convertible_to_bytes = requires(T a) {
                                  *a.data();
                                  a.size();
@@ -85,7 +87,7 @@ concept convertible_to_bytes = requires(T a) {
  * @param p_container - Container containing the contiguous array of elements.
  * @return constexpr std::span<hal::byte const> - span of elements
  */
-constexpr std::span<hal::byte> as_writable_bytes(
+export constexpr std::span<hal::byte> as_writable_bytes(
   convertible_to_bytes auto& p_container)
 {
   return as_writable_bytes(p_container.data(), p_container.size());
@@ -99,7 +101,7 @@ constexpr std::span<hal::byte> as_writable_bytes(
  * @param p_container - Container containing the contiguous array of elements.
  * @return constexpr std::span<hal::byte const> - span of elements
  */
-constexpr std::span<hal::byte const> as_bytes(
+export constexpr std::span<hal::byte const> as_bytes(
   convertible_to_bytes auto const& p_container)
 {
   return as_bytes(p_container.data(), p_container.size());

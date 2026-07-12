@@ -12,35 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <libhal-util/bit.hpp>
-#include <libhal/units.hpp>
+#include <ios>
 
 #include <boost/ut.hpp>
 
-namespace hal {
-boost::ut::suite<"bit_test"> bit_test = [] {
+import hal;
+import hal.util;
+
+namespace {
+
+void bit_modify_compile_time_test()
+{
   using namespace boost::ut;
 
   "hal::bit_modify<template> compile time masks APIs"_test = []() {
     // Setup
     std::uint32_t volatile control_register = 1 << 15 | 1 << 16;
-    constexpr auto enable_bit = bit_mask::from(1);
-    constexpr auto high_power_mode = bit_mask::from(15);
-    constexpr auto clock_divider = bit_mask::from(20, 23);
-    constexpr auto phase_delay = bit_mask::from(24, 27);
-    constexpr auto extractor_mask = bit_mask::from(16, 23);
-    constexpr auto single_bit_mask = bit_mask::from(1);
+    constexpr auto enable_bit = hal::bit_mask::from(1);
+    constexpr auto high_power_mode = hal::bit_mask::from(15);
+    constexpr auto clock_divider = hal::bit_mask::from(20, 23);
+    constexpr auto phase_delay = hal::bit_mask::from(24, 27);
+    constexpr auto extractor_mask = hal::bit_mask::from(16, 23);
+    constexpr auto single_bit_mask = hal::bit_mask::from(1);
 
     // Exercise
-    bit_modify(control_register)
+    hal::bit_modify(control_register)
       .set<enable_bit>()
       .clear<high_power_mode>()
       .insert<clock_divider>(0xAU)
       .insert<phase_delay, 0x3U>();
-    auto extracted = bit_extract<extractor_mask>(control_register);
-    auto probed = bit_extract<single_bit_mask>(control_register);
-    auto probed_inline =
-      bit_extract<bit_mask{ .position = 15, .width = 1 }>(control_register);
+    auto extracted = hal::bit_extract<extractor_mask>(control_register);
+    auto probed = hal::bit_extract<single_bit_mask>(control_register);
+    auto probed_inline = hal::bit_extract<hal::bit_mask{ .position = 15,
+                                                          .width = 1 }>(
+      control_register);
 
     // Verify
     expect(that % 0x03A1'0002 == control_register);
@@ -48,25 +53,30 @@ boost::ut::suite<"bit_test"> bit_test = [] {
     expect(that % 1 == probed);
     expect(that % 0 == probed_inline);
   };
+}
+
+void bit_modify_runtime_test()
+{
+  using namespace boost::ut;
 
   "hal::bit_modify runtime APIs"_test = []() {
     // Setup
     std::uint32_t volatile control_register = 1 << 15 | 1 << 16;
-    constexpr auto enable_bit = bit_mask::from(1);
-    constexpr auto high_power_mode = bit_mask::from(15);
-    constexpr auto clock_divider = bit_mask::from(20, 23);
-    constexpr auto extractor_mask = bit_mask::from(16, 23);
-    constexpr auto single_bit_mask = bit_mask::from(1);
+    constexpr auto enable_bit = hal::bit_mask::from(1);
+    constexpr auto high_power_mode = hal::bit_mask::from(15);
+    constexpr auto clock_divider = hal::bit_mask::from(20, 23);
+    constexpr auto extractor_mask = hal::bit_mask::from(16, 23);
+    constexpr auto single_bit_mask = hal::bit_mask::from(1);
 
     // Exercise
-    bit_modify(control_register)
+    hal::bit_modify(control_register)
       .set(enable_bit)
       .clear(high_power_mode)
       .insert(clock_divider, 0xAU);
-    auto extracted = bit_extract(extractor_mask, control_register);
-    auto probed = bit_extract(single_bit_mask, control_register);
-    auto probed_inline =
-      bit_extract(bit_mask{ .position = 15, .width = 1 }, control_register);
+    auto extracted = hal::bit_extract(extractor_mask, control_register);
+    auto probed = hal::bit_extract(single_bit_mask, control_register);
+    auto probed_inline = hal::bit_extract(
+      hal::bit_mask{ .position = 15, .width = 1 }, control_register);
 
     // Verify
     expect(that % 0x00A1'0002 == control_register);
@@ -74,6 +84,11 @@ boost::ut::suite<"bit_test"> bit_test = [] {
     expect(that % 1 == probed);
     expect(that % 0 == probed_inline);
   };
+}
+
+void nibble_byte_mask_test()
+{
+  using namespace boost::ut;
 
   "Test nibble_m & byte_m"_test = []() {
     constexpr std::uint32_t expected = 0xAA'55'02'34;
@@ -90,5 +105,13 @@ boost::ut::suite<"bit_test"> bit_test = [] {
       << " :: start = " << hal::nibble_mask<1, 3>::value.width
       << " :: end = " << hal::nibble_mask<1, 3>::value.position;
   };
-};
-}  // namespace hal
+}
+
+}  // namespace
+
+int main()
+{
+  bit_modify_compile_time_test();
+  bit_modify_runtime_test();
+  nibble_byte_mask_test();
+}

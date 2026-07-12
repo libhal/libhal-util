@@ -14,5 +14,9 @@
 
 export module hal.util;
 
+export import :as_bytes;
+export import :bit;
 export import :math;
+export import :steady_clock;
 export import :to_array;
+export import :units;

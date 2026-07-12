@@ -35,7 +35,7 @@ class libhal_util_conan(ConanFile):
                    "using modern C++")
     topics = ("utilities", "embedded", "hardware", "hal")
     settings = "compiler", "build_type", "os", "arch"
-    exports_sources = "modules/*", "tests/*", "CMakeLists.txt", "LICENSE"
+    exports_sources = "modules/*", "src/*", "tests/*", "CMakeLists.txt", "LICENSE"
     package_type = "static-library"
     shared = False
 

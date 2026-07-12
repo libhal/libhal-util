@@ -12,15 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <libhal-util/as_bytes.hpp>
-
 #include <span>
 #include <vector>
 
 #include <boost/ut.hpp>
 
-namespace hal {
-boost::ut::suite<"as_bytes_test"> as_bytes_test = [] {
+import hal;
+import hal.util;
+
+namespace {
+
+void as_bytes_test()
+{
   using namespace boost::ut;
 
   "hal::as_bytes()"_test = []() {
@@ -131,5 +134,11 @@ boost::ut::suite<"as_bytes_test"> as_bytes_test = [] {
       }
     };
   };
-};
-}  // namespace hal
+}
+
+}  // namespace
+
+int main()
+{
+  as_bytes_test();
+}

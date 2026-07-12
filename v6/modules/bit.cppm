@@ -22,7 +22,7 @@ module;
 #include <concepts>
 #include <limits>
 
-module hal.util:bit;
+export module hal.util:bit;
 
 // NOTE: DO not include libhal/units.hpp here. We want this file to stay as a
 // dropp in header only library that just uses C++'s stdlib.
@@ -31,7 +31,7 @@ module hal.util:bit;
  * @defgroup Bit Bit Operations
  *
  */
-export namespace hal::inline v6 {
+namespace hal::inline v6 {
 /**
  * @ingroup BitLimits
  * @brief Generate a mask of 1s at compile time
@@ -40,7 +40,7 @@ export namespace hal::inline v6 {
  * @tparam T - the type
  * @return consteval uint32_t - mask with 1s at the LSB
  */
-template<size_t BitWidth, std::integral T>
+export template<size_t BitWidth, std::integral T>
 [[nodiscard]] consteval T generate_field_of_ones()
 {
   T result = 0;
@@ -59,7 +59,7 @@ template<size_t BitWidth, std::integral T>
  * @tparam int_t - the containing type. Will generate a compile error if the
  * containing type's bit width is smaller than the BitWidth value.
  */
-template<size_t BitWidth, std::integral int_t>
+export template<size_t BitWidth, std::integral int_t>
 struct bit_limits
 {
   // Check that the bit width is less than or equal to the size of the int_t.
@@ -118,7 +118,7 @@ struct bit_limits
  * @brief Represents a bit mask of contiguous bits
  *
  */
-struct bit_mask
+export struct bit_mask
 {
   /// Where the bit mask starts
   std::uint32_t position;
@@ -324,7 +324,7 @@ struct bit_mask
  * @tparam ByteIndex1 - starting byte position
  * @tparam ByteIndex2 - ending byte position
  */
-template<size_t ByteIndex1, size_t ByteIndex2 = ByteIndex1>
+export template<size_t ByteIndex1, size_t ByteIndex2 = ByteIndex1>
 struct byte_mask
 {
   static constexpr auto bits_per_byte = 8;
@@ -348,7 +348,7 @@ struct byte_mask
  * @tparam ByteIndex1 - the byte position to make a mask for
  * @tparam ByteIndex2 - the byte position to make a mask for
  */
-template<size_t ByteIndex1, size_t ByteIndex2 = ByteIndex1>
+export template<size_t ByteIndex1, size_t ByteIndex2 = ByteIndex1>
 constexpr hal::bit_mask byte_m = byte_mask<ByteIndex1, ByteIndex2>::value;
 
 /**
@@ -373,7 +373,7 @@ constexpr hal::bit_mask byte_m = byte_mask<ByteIndex1, ByteIndex2>::value;
  * @tparam NibbleIndex1 - starting nibble position
  * @tparam NibbleIndex2 - ending nibble position
  */
-template<std::size_t NibbleIndex1, std::size_t NibbleIndex2 = NibbleIndex1>
+export template<std::size_t NibbleIndex1, std::size_t NibbleIndex2 = NibbleIndex1>
 struct nibble_mask
 {
   static constexpr auto bits_per_nibble = 4;
@@ -392,7 +392,7 @@ struct nibble_mask
  * @tparam NibbleIndex1 - starting nibble position
  * @tparam NibbleIndex2 - ending nibble position
  */
-template<std::size_t NibbleIndex1, std::size_t NibbleIndex2 = NibbleIndex1>
+export template<std::size_t NibbleIndex1, std::size_t NibbleIndex2 = NibbleIndex1>
 constexpr hal::bit_mask nibble_m =
   nibble_mask<NibbleIndex1, NibbleIndex2>::value;
 
@@ -418,7 +418,7 @@ constexpr hal::bit_mask nibble_m =
  * @return A value representing only the specified field, with all other bits
  * set to zero.
  */
-template<bit_mask field>
+export template<bit_mask field>
 constexpr auto bit_extract(std::unsigned_integral auto p_value)
 {
   using T = decltype(p_value);
@@ -451,7 +451,7 @@ constexpr auto bit_extract(std::unsigned_integral auto p_value)
  * @return A value representing only the specified field, with all other bits
  * set to zero.
  */
-constexpr auto bit_extract(bit_mask p_field,
+export constexpr auto bit_extract(bit_mask p_field,
                            std::unsigned_integral auto p_value)
 {
   using T = decltype(p_value);
@@ -487,7 +487,7 @@ constexpr auto bit_extract(bit_mask p_field,
  * @tparam T - defaults to `std::uint32_t`, but can be any unsigned integral
  * type.
  */
-template<std::unsigned_integral T = std::uint32_t>
+export template<std::unsigned_integral T = std::uint32_t>
 class bit_value
 {
 public:
@@ -744,7 +744,7 @@ protected:
  * @tparam T - defaults to `std::uint32_t`, but can be any unsigned integral
  * type.
  */
-template<std::unsigned_integral T>
+export template<std::unsigned_integral T>
 class bit_modify : public bit_value<T>
 {
 public:

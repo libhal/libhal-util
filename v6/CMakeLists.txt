@@ -29,8 +29,13 @@ libhal_project_init()
 libhal_add_library(util
     MODULES
         modules/hal.util.cppm
+        modules/as_bytes.cppm
+        modules/bit.cppm
         modules/math.cppm
+        modules/steady_clock.cppm
         modules/to_array.cppm
+        modules/units.cppm
+    SOURCES
 )
 
 target_link_libraries(util
@@ -43,6 +48,11 @@ libhal_install_library(util NAMESPACE libhal)
 libhal_add_tests(util
     TEST_NAMES
         main
+        as_bytes
+        bit
+        bit_functions
         math
+        steady_clock
         to_array
+        units
 )

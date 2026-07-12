@@ -12,20 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+module;
 
-#include <libhal/error.hpp>
-#include <libhal/steady_clock.hpp>
-#include <libhal/timeout.hpp>
+#include <coroutine>
+#include <type_traits>
 
-#include "units.hpp"
+export module hal.util:steady_clock;
+
+import hal;
+
+import :units;
 
 /**
  * @defgroup SteadyClock Steady Clock
  *
  */
 
-namespace hal {
+namespace hal::inline v6 {
 /**
  * @ingroup SteadyClock
  * @brief Function to compute a future timestamp in ticks
@@ -46,111 +49,25 @@ namespace hal {
  * less than or equal to 1, it will be set to 1 to ensure at least one tick is
  * waited.
  */
-std::uint64_t future_deadline(hal::steady_clock& p_steady_clock,
-                              hal::time_duration p_duration);
-
-/**
- * @ingroup SteadyClock
- * @brief Timeout object based on hal::steady_clock
- *
- * Do not use this class directly. Use `hal::create_timeout(hal::steady_clock&)`
- * instead of instantiating this class directly.
- *
- */
-class steady_clock_timeout
+export async::future<hal::u64> future_deadline(
+  async::context& p_ctx,
+  hal::steady_clock& p_steady_clock,
+  hal::time_duration p_duration)
 {
-public:
-  /**
-   * @ingroup SteadyClock
-   * @brief Construct a new counter timeout object
-   *
-   * @param p_steady_clock - steady clock implementation
-   * @param p_duration - number of cycles until timeout
-   */
-  steady_clock_timeout(hal::steady_clock& p_steady_clock,
-                       hal::time_duration p_duration);
 
-  /**
-   * @ingroup SteadyClock
-   * @brief Construct a new counter timeout object
-   *
-   * @param p_timeout - other steady_clock_timeout
-   */
-  steady_clock_timeout(steady_clock_timeout const& p_timeout) = default;
-  /**
-   * @ingroup SteadyClock
-   * @brief Assign construct a new counter timeout object
-   *
-   * @param p_timeout - other steady_clock_timeout
-   * @return steady_clock_timeout&
-   */
-  steady_clock_timeout& operator=(steady_clock_timeout const& p_timeout) =
-    default;
-  /**
-   * @ingroup SteadyClock
-   * @brief Construct a new counter timeout object
-   *
-   * @param p_timeout - other steady_clock_timeout
-   */
-  steady_clock_timeout(steady_clock_timeout&& p_timeout) = default;
-  /**
-   * @ingroup SteadyClock
-   * @brief Move assign construct a new counter timeout object
-   *
-   * @param p_timeout - other steady_clock_timeout
-   * @return steady_clock_timeout&
-   */
-  steady_clock_timeout& operator=(steady_clock_timeout&& p_timeout) = default;
+  using period = decltype(p_duration)::period;
+  auto const frequency = co_await p_steady_clock.frequency(p_ctx);
+  auto const tick_period = wavelength<period>(frequency);
+  auto ticks_required = p_duration.count() / tick_period.count();
+  using unsigned_ticks = std::make_unsigned_t<decltype(ticks_required)>;
 
-  /**
-   * @ingroup SteadyClock
-   * @brief Call this object to check if it has timed out.
-   * @throws std::errc::timed_out - if the timeout time has been exceeded.
-   */
-  void operator()();
+  if (ticks_required <= 1) {
+    ticks_required = 1;
+  }
 
-private:
-  hal::steady_clock* m_counter;
-  std::uint64_t m_cycles_until_timeout = 0;
-};
+  auto const ticks = static_cast<unsigned_ticks>(ticks_required);
+  auto const future_timestamp = ticks + co_await p_steady_clock.uptime(p_ctx);
 
-/**
- * @ingroup SteadyClock
- * @brief Create a timeout object based on hal::steady_clock.
- *
- * NOTE: Multiple timeout objects can be made from a single steady_clock
- * without influencing other timeout objects.
- *
- * @param p_steady_clock - hal::steady_clock implementation
- * @param p_duration - amount of time until timeout
- * @return hal::steady_clock_timeout - timeout object
- */
-steady_clock_timeout create_timeout(hal::steady_clock& p_steady_clock,
-                                    hal::time_duration p_duration);
-
-/**
- * @ingroup SteadyClock
- * @brief Delay execution for a duration of time using a hardware steady_clock.
- *
- * @param p_steady_clock - steady_clock driver
- * @param p_duration - the amount of time to delay for. Zero or negative time
- * duration will delay for one tick of the p_steady_clock.
- */
-void delay(hal::steady_clock& p_steady_clock, hal::time_duration p_duration);
-
-/**
- * @ingroup SteadyClock
- * @brief Generates a function that, when passed a duration, returns a timeout
- *
- * @param p_steady_clock - steady_clock driver that must out live the lifetime
- * of the returned lambda.
- * @return auto - a callable that returns a new timeout object each time a time
- * duration is passed to it.
- */
-inline auto timeout_generator(hal::steady_clock& p_steady_clock)
-{
-  return [&p_steady_clock](hal::time_duration p_duration) {
-    return create_timeout(p_steady_clock, p_duration);
-  };
+  co_return future_timestamp;
 }
-}  // namespace hal
+}  // namespace hal::inline v6
