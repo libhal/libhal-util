@@ -12,21 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+module;
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdlib>
-#include <memory_resource>
 #include <optional>
 
-#include <libhal/can.hpp>
-#include <libhal/pointers.hpp>
+export module hal.util:can;
+
+import hal;
 
 /**
  * @defgroup CAN_Utilities CAN Utilities
  *
  */
 
-namespace hal {
+namespace hal::inline v6 {
 /**
  * @brief Generic settings for a can peripheral
  * @ingroup CAN_Utilities
@@ -39,7 +41,7 @@ namespace hal {
  *       \______/\________/\____________/\____________/
  *                                       ^ Sample point
  */
-struct can_bus_divider_t
+export struct can_bus_divider_t
 {
   /**
    * @brief Bus clock rate in hertz
@@ -106,8 +108,8 @@ struct can_bus_divider_t
  * @param p_rhs A CAN bus setting to compare against another
  * @return A boolean if they are the same or not.
  */
-[[nodiscard]] constexpr auto operator==(can_bus_divider_t const& p_lhs,
-                                        can_bus_divider_t const& p_rhs)
+export [[nodiscard]] constexpr auto operator==(can_bus_divider_t const& p_lhs,
+                                               can_bus_divider_t const& p_rhs)
 {
   return p_lhs.clock_divider == p_rhs.clock_divider &&
          p_lhs.propagation_delay == p_rhs.propagation_delay &&
@@ -116,7 +118,7 @@ struct can_bus_divider_t
          p_lhs.synchronization_jump_width == p_rhs.synchronization_jump_width;
 }
 
-[[nodiscard]] constexpr std::uint16_t bit_width(
+export [[nodiscard]] constexpr std::uint16_t bit_width(
   can_bus_divider_t const& p_settings)
 {
   // The sum of 4x 8-bit numbers can never exceed uint16_t and thus this
@@ -133,22 +135,22 @@ struct can_bus_divider_t
  * Preferred method of calculating the bus divider values for a can bus
  * peripheral or device. The algorithm checks each possible time quanta (tq)
  * width from 25tq to 8tq. The algorithm always checks starting with the
- * greatest time quanta in order to achieve the longest bit width and sync jump
- * value. The aim is to provide the most flexibility in the sync jump value
- * which should help in most topologies.
+ * greatest time quanta in order to achieve the longest bit width and sync
+ * jump value. The aim is to provide the most flexibility in the sync jump
+ * value which should help in most topologies.
  *
  * @param p_operating_frequency - frequency of the input clock to the can bus
  * bit timing module.
  * @param p_target_baud_rate - the baud (bit) rate to set the can bus to.
- * @return std::optional<can_bus_divider_t> - the resulting dividers for the can
- * bus peripheral. Returns std::nullopt if the target baud rate is not
+ * @return std::optional<can_bus_divider_t> - the resulting dividers for the
+ * can bus peripheral. Returns std::nullopt if the target baud rate is not
  * achievable with the provided operating frequency.
  */
-[[nodiscard]] inline std::optional<can_bus_divider_t> calculate_can_bus_divider(
-  hertz p_operating_frequency,
-  hertz p_target_baud_rate)
+export [[nodiscard]] std::optional<can_bus_divider_t>
+calculate_can_bus_divider(hertz p_operating_frequency,
+                          hertz p_target_baud_rate)
 {
-  can_bus_divider_t timing;
+  can_bus_divider_t timing{};
 
   // Set phase segments and propagation delay to balanced values
   timing.propagation_delay = 1;
@@ -156,13 +158,18 @@ struct can_bus_divider_t
   // use a value of zero in total tq to know if no tq and divider combo worked
   timing.total_tq = 0;
 
-  if (p_operating_frequency < 0.0f || p_target_baud_rate < 0.0f ||
-      p_operating_frequency <= p_target_baud_rate) {
+  auto const operating_frequency_value =
+    p_operating_frequency.numerical_value_in(hertz::unit);
+  auto const target_baud_rate_value =
+    p_target_baud_rate.numerical_value_in(hertz::unit);
+
+  if (operating_frequency_value <= 0 || target_baud_rate_value <= 0 ||
+      operating_frequency_value <= target_baud_rate_value) {
     return std::nullopt;
   }
 
-  auto const operating_frequency = static_cast<i32>(p_operating_frequency);
-  auto const desired_baud_rate = static_cast<i32>(p_target_baud_rate);
+  auto const operating_frequency = static_cast<i32>(operating_frequency_value);
+  auto const desired_baud_rate = static_cast<i32>(target_baud_rate_value);
 
   using inner_div_t =
     decltype(std::div(operating_frequency, desired_baud_rate));
@@ -181,7 +188,7 @@ struct can_bus_divider_t
     return std::nullopt;
   }
 
-  timing.clock_divider = division.quot;
+  timing.clock_divider = static_cast<std::uint8_t>(division.quot);
   timing.phase_segment1 = (timing.total_tq - timing.sync_segment) / 2U;
   timing.phase_segment2 = timing.total_tq - timing.sync_segment -
                           timing.phase_segment1 - timing.propagation_delay;
@@ -194,18 +201,18 @@ struct can_bus_divider_t
 }
 
 /**
- * @brief A hal::can_transceiver wrapper class that makes finding message via ID
- * easier with a find API
+ * @brief A hal::can_transceiver wrapper class that makes finding message via
+ * ID easier with a find API
  *
  * If your driver plans to use this wrapper, rather than storing both the
  * pointer to the hal::can_transceiver and this object, simply construct this
  * object with the hal::can_transceiver object's address and use this object's
- * transceiver() API to get access to the underlying transceiver implementation.
- * This will ensure that the driver doesn't store the implementation's address
- * twice.
+ * transceiver() API to get access to the underlying transceiver
+ * implementation. This will ensure that the driver doesn't store the
+ * implementation's address twice.
  *
  */
-class can_message_finder
+export class can_message_finder
 {
 public:
   /**
@@ -221,15 +228,15 @@ public:
   }
 
   /**
-   * @brief Find a message within the receive buffer matching the input message
-   * ID.
+   * @brief Find a message within the receive buffer matching the input
+   * message ID.
    *
-   * This API performs a double copy of the can message in order to confirm that
-   * the message did not get modified by the driver during the copy.
+   * This API performs a double copy of the can message in order to confirm
+   * that the message did not get modified by the driver during the copy.
    *
-   * @return std::optional<hal::can_message> - a copy of the can message within
-   * the buffer. The return is set to std::nullopt if the message could not be
-   * found OR was modified during the copy.
+   * @return std::optional<hal::can_message> - a copy of the can message
+   * within the buffer. The return is set to std::nullopt if the message
+   * could not be found OR was modified during the copy.
    */
   [[nodiscard]] std::optional<hal::can_message> find()
   {
@@ -237,16 +244,16 @@ public:
     auto cursor = m_transceiver->receive_cursor();
     hal::can_message message = {};
 
-    // Run through the circular buffer until the cursor is reached or until an
-    // ID match is found.
+    // Run through the circular buffer until the cursor is reached or until
+    // an ID match is found.
     while (m_receive_cursor != cursor) {
       if (m_id == buffer[m_receive_cursor].id) {
         message = buffer[m_receive_cursor];
         // Can message buffers are typically updated via interrupt which can
-        // happen at any time. If the cursor has moved past the received message
-        // and changed its bits mid way To ensure that an interrupt has not
-        // occurred and modified the bits of the buffer message, a second copy
-        // is created in order to perform a stability check.
+        // happen at any time. If the cursor has moved past the received
+        // message and changed its bits mid way To ensure that an interrupt
+        // has not occurred and modified the bits of the buffer message, a
+        // second copy is created in order to perform a stability check.
         hal::can_message const copy = buffer[m_receive_cursor];
         bool const message_is_stable = copy == message;
         bool const copy_id_matches = copy.id == m_id;
@@ -268,9 +275,9 @@ public:
   /**
    * @brief Returns the underlying can hal::can_transceiver allowing
    *
-   * This API makes it possible for drivers and applications using this wrapper
-   * to fully access the hal::can_transceiver without needing to store the
-   * pointer twice.
+   * This API makes it possible for drivers and applications using this
+   * wrapper to fully access the hal::can_transceiver without needing to
+   * store the pointer twice.
    *
    * @return hal::can_transceiver& - the underlying hal::can_transceiver
    */
@@ -294,114 +301,4 @@ private:
   hal::u32 m_id;
   std::size_t m_receive_cursor = 0;
 };
-
-/**
- * @brief Adapter to convert hal::v5::can_bus_manager to hal::can_bus_manager
- *
- * This adapter allows using the new v5 interface with code expecting the
- * legacy interface. The main difference is the on_bus_off parameter passing
- * (by reference vs by value).
- */
-class can_bus_manager_adapter
-  : public hal::can_bus_manager
-  , public hal::v5::enable_strong_from_this<can_bus_manager_adapter>
-{
-public:
-  /**
-   * @brief Construct adapter wrapping a v5 can bus manager
-   *
-   * @param p_allocator - reference to the v5 can bus manager to wrap
-   * @param p_v5_manager - reference to the v5 can bus manager to wrap
-   */
-  static hal::v5::strong_ptr<can_bus_manager_adapter> create(
-    std::pmr::polymorphic_allocator<> p_allocator,
-    hal::v5::strong_ptr<hal::v5::can_bus_manager> const& p_v5_manager)
-  {
-    return hal::v5::make_strong_ptr<can_bus_manager_adapter>(p_allocator,
-                                                             p_v5_manager);
-  }
-
-  /**
-   * @brief Constructor for can_bus_manager_adapter driver
-   *
-   * @warning This constructor should not be called directly. Use the static
-   *          create() method instead to ensure proper initialization.
-   *
-   * @param p_v5_manager - reference to the v5 can bus manager to wrap
-   */
-  explicit can_bus_manager_adapter(
-    hal::v5::strong_ptr_only_token,
-    hal::v5::strong_ptr<hal::v5::can_bus_manager> const& p_v5_manager)
-    : m_v5_manager(p_v5_manager)
-  {
-  }
-
-  ~can_bus_manager_adapter() override
-  {
-    hal::v5::can_bus_manager::optional_bus_off_handler v5_callback =
-      std::nullopt;
-    m_v5_manager->on_bus_off(v5_callback);
-  }
-
-private:
-  void driver_baud_rate(hal::u32 p_hertz) override
-  {
-    m_v5_manager->baud_rate(p_hertz);
-  }
-
-  void driver_filter_mode(accept p_accept) override
-  {
-    // Convert from legacy enum to v5 enum
-    hal::v5::can_bus_manager::accept v5_accept;
-    switch (p_accept) {
-      case accept::none:
-        v5_accept = hal::v5::can_bus_manager::accept::none;
-        break;
-      case accept::all:
-        v5_accept = hal::v5::can_bus_manager::accept::all;
-        break;
-      case accept::filtered:
-        v5_accept = hal::v5::can_bus_manager::accept::filtered;
-        break;
-    }
-    m_v5_manager->filter_mode(v5_accept);
-  }
-
-  void driver_on_bus_off(optional_bus_off_handler p_callback) override
-  {
-    // Convert from legacy callback to v5 callback
-    // The key difference: legacy passes by value, v5 expects by reference
-    if (p_callback.has_value()) {
-      // Store the callback and create a v5-compatible version
-      m_stored_callback = p_callback;
-      auto self = weak_from_this();
-      hal::v5::can_bus_manager::optional_bus_off_handler v5_callback =
-        [self](hal::v5::can_bus_manager::bus_off_tag) {
-          auto adaptor = self.lock();
-          if (not adaptor) {
-            return;
-          }
-          if (adaptor->m_stored_callback.has_value()) {
-            adaptor->m_stored_callback.value()(
-              hal::can_bus_manager::bus_off_tag{});
-          }
-        };
-      m_v5_manager->on_bus_off(v5_callback);
-    } else {
-      // Clear the callback
-      m_stored_callback = std::nullopt;
-      hal::v5::can_bus_manager::optional_bus_off_handler v5_callback =
-        std::nullopt;
-      m_v5_manager->on_bus_off(v5_callback);
-    }
-  }
-
-  void driver_bus_on() override
-  {
-    m_v5_manager->bus_on();
-  }
-
-  hal::v5::strong_ptr<hal::v5::can_bus_manager> m_v5_manager;
-  optional_bus_off_handler m_stored_callback;
-};
-}  // namespace hal
+}  // namespace hal::inline v6
