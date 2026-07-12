@@ -20,52 +20,7 @@
 
 import hal;
 import hal.util;
-import scatter_span;
-
-namespace mem {
-/* Prints the logical element sequence of a scatter_span, e.g. `[1, 2, 3]`.
- * Lets boost::ut print the operands of a failed `expect` involving a
- * scatter_span.
- */
-template<typename T>
-std::ostream& operator<<(std::ostream& p_os, scatter_span<T> const& p_ssp)
-{
-  p_os << "[";
-  for (auto const& chunk : p_ssp) {
-    auto const* addr = static_cast<void const*>(chunk.data());
-    p_os << "(" << addr << " : " << chunk.size() << "), ";
-  }
-  p_os << "]";
-  return p_os;
-}
-
-/* A helper function to compare two scatter_spans. This is only useful for
- * testing
- */
-template<typename T>
-bool operator==(scatter_span<T> const& lhs, scatter_span<T> const& rhs)
-{
-
-  if (lhs.length() != rhs.length()) {
-    return false;
-  }
-
-  if (lhs.length() == 0) {
-    return true;
-  }
-
-  auto r_iter = rhs.begin();
-  auto l_iter = lhs.begin();
-
-  for (; r_iter != rhs.end() and l_iter != lhs.end(); r_iter++, l_iter++) {
-    if (r_iter->data() != l_iter->data() and r_iter->size() != l_iter->size()) {
-      return false;
-    }
-  }
-
-  return true;
-}
-}  // namespace mem
+import test_util;
 
 namespace {
 
@@ -125,14 +80,6 @@ private:
   }
 };
 
-template<typename T>
-void finish(async::future<T>& p_future)
-{
-  while (not p_future.done()) {
-    p_future.resume();
-  }
-}
-
 async::inplace_context<1024> ctx;
 
 constexpr auto empty_scatter_span = mem::scatter_span<hal::byte>{};
@@ -150,14 +97,14 @@ void write_test()
     std::array<hal::byte, 2> buffer3{};
 
     mem::scatter_array<hal::byte const, 3> payload{ buffer1, buffer2, buffer3 };
-    mem::scatter_span s_payload = payload;
-
     // Exercise
-    auto future = hal::write(ctx, spi, s_payload);
+    auto future = hal::write(ctx, spi, payload);
     finish(future);
 
     // Verify
-    expect(that % s_payload == spi.m_out);
+    expect(that %
+             mem::scatter_span<hal::byte const>{ buffer1, buffer2, buffer3 } ==
+           spi.m_out);
     expect(that % empty_scatter_span == spi.m_in);
   };
 }

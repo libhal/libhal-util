@@ -18,6 +18,7 @@ export import :as_bytes;
 export import :bit;
 export import :comparison;
 export import :enumeration;
+export import :i2c;
 export import :map;
 export import :math;
 export import :spi;

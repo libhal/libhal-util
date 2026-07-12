@@ -33,6 +33,7 @@ libhal_add_library(util
         modules/bit.cppm
         modules/comparison.cppm
         modules/enum.cppm
+        modules/i2c.cppm
         modules/map.cppm
         modules/math.cppm
         modules/spi.cppm
@@ -56,10 +57,17 @@ libhal_add_tests(util
         bit
         bit_functions
         enum
+        i2c
         map
         math
         spi
         steady_clock
         to_array
         units
+    MODULES
+        tests/util.cppm
+    LINK_LIBRARIES
+        libhal::libhal
+    PACKAGES
+        libhal
 )

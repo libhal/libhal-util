@@ -12,303 +12,279 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <libhal-util/i2c.hpp>
-
-#include <vector>
-
-#include <libhal/error.hpp>
-#include <libhal/functional.hpp>
+#include <algorithm>
+#include <array>
 
 #include <boost/ut.hpp>
 
-namespace hal {
-boost::ut::suite<"i2c_test"> i2c_test = [] {
-  using namespace boost::ut;
+import hal;
+import hal.util;
+import scatter_span;
+import test_util;
 
-  static constexpr hal::byte successful_address{ 0x15 };
-  static constexpr hal::byte failure_address{ 0x33 };
-  static constexpr hal::byte filler_byte{ 0xA5 };
+namespace {
 
-  struct test_timeout_t
+constexpr hal::byte successful_address{ 0x15 };
+constexpr hal::byte failure_address{ 0x33 };
+constexpr hal::byte filler_byte{ 0xA5 };
+
+class test_i2c : public hal::i2c
+{
+public:
+  ~test_i2c() override = default;
+
+  hal::byte m_address = hal::byte{ 0 };
+  mem::scatter_span<hal::byte const> m_out{};
+  mem::scatter_span<hal::byte> m_in{};
+
+private:
+  async::future<void> driver_configure(async::context&,
+                                       settings const&) override
   {
-    void operator()()
-    {
-      was_called = true;
-    }
-    bool was_called = false;
-  };
+    return {};
+  }
 
-  class test_i2c : public hal::i2c
+  async::future<void> driver_transaction(
+    async::context&,
+    hal::byte p_address,
+    mem::scatter_span<hal::byte const> p_data_out,
+    mem::scatter_span<hal::byte> p_data_in) override
   {
-  public:
-    void driver_configure(settings const&) override
-    {
-    }
+    m_address = p_address;
+    m_out = p_data_out;
+    m_in = p_data_in;
 
-    void driver_transaction(
-      hal::byte p_address,
-      std::span<hal::byte const> p_out,
-      std::span<hal::byte> p_in,
-      hal::function_ref<hal::timeout_function> p_timeout) override
-    {
-      m_address = p_address;
-      m_out = p_out;
-      m_in = p_in;
-
-      std::ranges::fill(m_in, filler_byte);
-
-      if (m_address == failure_address) {
-        safe_throw(hal::no_such_device(m_address, this));
+    for (auto chunk : p_data_in) {
+      for (auto& elem : chunk) {
+        elem = filler_byte;
       }
-
-      p_timeout();
     }
 
-    ~test_i2c() override = default;
+    if (m_address == failure_address) {
+      throw hal::no_such_device(m_address, this);
+    }
 
-    hal::byte m_address = hal::byte{ 0 };
-    std::span<hal::byte const> m_out = std::span<hal::byte const>{};
-    std::span<hal::byte> m_in = std::span<hal::byte>{};
-  };
+    return {};
+  }
+};
 
-  "operator==(i2c::settings)"_test = []() {
-    i2c::settings a{};
-    i2c::settings b{};
+async::inplace_context<1024> ctx;
 
-    expect(a == b);
-  };
+constexpr auto empty_scatter_span = mem::scatter_span<hal::byte>{};
+constexpr auto empty_const_scatter_span = mem::scatter_span<hal::byte const>{};
 
-  "operator!=(i2c::settings)"_test = []() {
-    i2c::settings a{ .clock_rate = 100.0_kHz };
-    i2c::settings b{ .clock_rate = 1200.0_kHz };
-
-    expect(a != b);
-  };
+void write_test()
+{
+  using namespace boost::ut;
 
   "[success] write"_test = []() {
     // Setup
     test_i2c i2c;
-    test_timeout_t test_timeout;
     std::array<hal::byte, 4> const expected_payload{};
+    mem::scatter_array<hal::byte const, 1> payload{ expected_payload };
 
     // Exercise
-    write(i2c, successful_address, expected_payload, std::ref(test_timeout));
+    auto future = hal::write(ctx, i2c, successful_address, payload);
+    finish(future);
 
     // Verify
     expect(successful_address == i2c.m_address);
-    expect(that % expected_payload.data() == i2c.m_out.data());
-    expect(that % expected_payload.size() == i2c.m_out.size());
-    expect(that % nullptr == i2c.m_in.data());
-    expect(that % 0 == i2c.m_in.size());
-    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
-    expect(that % false == test_timeout.was_called);
+    expect(that % payload == i2c.m_out);
+    expect(that % empty_scatter_span == i2c.m_in);
   };
 
   "[failure] write"_test = []() {
     // Setup
     test_i2c i2c;
-    test_timeout_t test_timeout;
     std::array<hal::byte, 4> const expected_payload{};
+    mem::scatter_array<hal::byte const, 1> payload{ expected_payload };
 
     // Exercise
-    expect(
-      throws<hal::no_such_device>([&i2c, &expected_payload, &test_timeout]() {
-        write(i2c, failure_address, expected_payload, std::ref(test_timeout));
-      }));
+    expect(throws<hal::no_such_device>([&i2c, &payload]() {
+      auto future = hal::write(ctx, i2c, failure_address, payload);
+      finish(future);
+    }));
 
     // Verify
     expect(failure_address == i2c.m_address);
-    expect(that % expected_payload.data() == i2c.m_out.data());
-    expect(that % expected_payload.size() == i2c.m_out.size());
-    expect(that % nullptr == i2c.m_in.data());
-    expect(that % 0 == i2c.m_in.size());
-    expect(that % false == test_timeout.was_called);
+    expect(that % payload == i2c.m_out);
+    expect(that % empty_scatter_span == i2c.m_in);
   };
+}
+
+void read_test()
+{
+  using namespace boost::ut;
 
   "[success] read"_test = []() {
     // Setup
     test_i2c i2c;
-    test_timeout_t test_timeout;
     std::array<hal::byte, 4> expected_buffer;
+    mem::scatter_array<hal::byte, 1> payload{ expected_buffer };
 
     // Exercise
-    read(i2c, successful_address, expected_buffer, std::ref(test_timeout));
+    auto future = hal::read(ctx, i2c, successful_address, payload);
+    finish(future);
 
     // Verify
     expect(successful_address == i2c.m_address);
-    expect(that % expected_buffer.data() == i2c.m_in.data());
-    expect(that % expected_buffer.size() == i2c.m_in.size());
-    expect(that % nullptr == i2c.m_out.data());
-    expect(that % 0 == i2c.m_out.size());
-    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
-    expect(that % false == test_timeout.was_called);
+    expect(that % payload == i2c.m_in);
+    expect(that % empty_const_scatter_span == i2c.m_out);
   };
 
   "[failure] read"_test = []() {
     // Setup
     test_i2c i2c;
-    test_timeout_t test_timeout;
     std::array<hal::byte, 4> expected_buffer;
+    mem::scatter_array<hal::byte, 1> payload{ expected_buffer };
 
     // Exercise
-    expect(
-      throws<hal::no_such_device>([&i2c, &expected_buffer, &test_timeout]() {
-        read(i2c, failure_address, expected_buffer, std::ref(test_timeout));
-      }));
+    expect(throws<hal::no_such_device>([&i2c, &payload]() {
+      auto future = hal::read(ctx, i2c, failure_address, payload);
+      finish(future);
+    }));
 
     // Verify
     expect(failure_address == i2c.m_address);
-    expect(that % expected_buffer.data() == i2c.m_in.data());
-    expect(that % expected_buffer.size() == i2c.m_in.size());
-    expect(that % nullptr == i2c.m_out.data());
-    expect(that % 0 == i2c.m_out.size());
-    expect(that % false == test_timeout.was_called);
+    expect(that % payload == i2c.m_in);
+    expect(that % empty_const_scatter_span == i2c.m_out);
   };
 
   "[success] read<Length>"_test = []() {
     // Setup
     test_i2c i2c;
-    test_timeout_t test_timeout;
     std::array<hal::byte, 5> expected;
     expected.fill(filler_byte);
 
     // Exercise
-    auto actual =
-      read<expected.size()>(i2c, successful_address, std::ref(test_timeout));
+    auto future = hal::read<expected.size()>(ctx, i2c, successful_address);
+    finish(future);
+    auto actual = future.value();
 
     // Verify
     expect(successful_address == i2c.m_address);
     expect(std::equal(expected.begin(), expected.end(), actual.begin()));
-    expect(that % nullptr == i2c.m_out.data());
-    expect(that % 0 == i2c.m_out.size());
-    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
-    expect(that % false == test_timeout.was_called);
+    expect(that % empty_const_scatter_span == i2c.m_out);
   };
 
   "[failure] read<Length>"_test = []() {
     // Setup
     test_i2c i2c;
-    test_timeout_t test_timeout;
 
     // Exercise
     expect(throws<hal::no_such_device>([&i2c]() {
-      [[maybe_unused]] auto result =
-        read<5>(i2c, failure_address, never_timeout());
+      auto future = hal::read<5>(ctx, i2c, failure_address);
+      finish(future);
     }));
 
     // Verify
     expect(failure_address == i2c.m_address);
-    expect(that % nullptr == i2c.m_out.data());
-    expect(that % 0 == i2c.m_out.size());
-    expect(that % false == test_timeout.was_called);
+    expect(that % empty_const_scatter_span == i2c.m_out);
   };
+}
+
+void write_then_read_test()
+{
+  using namespace boost::ut;
 
   "[success] write_then_read"_test = []() {
     // Setup
     test_i2c i2c;
-    test_timeout_t test_timeout;
     std::array<hal::byte, 4> const expected_payload{};
     std::array<hal::byte, 4> expected_buffer;
+    mem::scatter_array<hal::byte const, 1> out_payload{ expected_payload };
+    mem::scatter_array<hal::byte, 1> in_payload{ expected_buffer };
 
     // Exercise
-    write_then_read(i2c,
-                    successful_address,
-                    expected_payload,
-                    expected_buffer,
-                    std::ref(test_timeout));
+    auto future = hal::write_then_read(
+      ctx, i2c, successful_address, out_payload, in_payload);
+    finish(future);
 
     // Verify
     expect(successful_address == i2c.m_address);
-    expect(that % expected_payload.data() == i2c.m_out.data());
-    expect(that % expected_payload.size() == i2c.m_out.size());
-    expect(that % expected_buffer.data() == i2c.m_in.data());
-    expect(that % expected_buffer.size() == i2c.m_in.size());
-    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
-    expect(that % false == test_timeout.was_called);
+    expect(that % out_payload == i2c.m_out);
+    expect(that % in_payload == i2c.m_in);
   };
 
   "[failure] write_then_read"_test = []() {
     // Setup
     test_i2c i2c;
-    test_timeout_t test_timeout;
     std::array<hal::byte, 4> const expected_payload{};
     std::array<hal::byte, 4> expected_buffer;
     expected_buffer.fill(filler_byte);
+    mem::scatter_array<hal::byte const, 1> out_payload{ expected_payload };
+    mem::scatter_array<hal::byte, 1> in_payload{ expected_buffer };
 
     // Exercise
-    expect(throws<hal::no_such_device>(
-      [&i2c, &expected_payload, &expected_buffer, &test_timeout]() {
-        write_then_read(i2c,
-                        failure_address,
-                        expected_payload,
-                        expected_buffer,
-                        std::ref(test_timeout));
-      }));
+    expect(throws<hal::no_such_device>([&i2c, &out_payload, &in_payload]() {
+      auto future = hal::write_then_read(
+        ctx, i2c, failure_address, out_payload, in_payload);
+      finish(future);
+    }));
 
     // Verify
     expect(failure_address == i2c.m_address);
-    expect(that % expected_payload.data() == i2c.m_out.data());
-    expect(that % expected_payload.size() == i2c.m_out.size());
-    expect(that % expected_buffer.data() == i2c.m_in.data());
-    expect(that % expected_buffer.size() == i2c.m_in.size());
-    expect(that % false == test_timeout.was_called);
+    expect(that % out_payload == i2c.m_out);
+    expect(that % in_payload == i2c.m_in);
   };
 
   "[success] write_then_read<Length>"_test = []() {
     // Setup
     test_i2c i2c;
-    test_timeout_t test_timeout;
     std::array<hal::byte, 4> const expected_payload{};
     std::array<hal::byte, 4> expected{};
     expected.fill(filler_byte);
+    mem::scatter_array<hal::byte const, 1> out_payload{ expected_payload };
 
     // Exercise
-    auto actual = write_then_read<5>(
-      i2c, successful_address, expected_payload, std::ref(test_timeout));
+    auto future = hal::write_then_read<expected.size()>(
+      ctx, i2c, successful_address, out_payload);
+    finish(future);
+    auto actual = future.value();
 
     // Verify
     expect(successful_address == i2c.m_address);
-    expect(that % expected_payload.data() == i2c.m_out.data());
-    expect(that % expected_payload.size() == i2c.m_out.size());
+    expect(that % out_payload == i2c.m_out);
     expect(std::equal(expected.begin(), expected.end(), actual.begin()));
-    // Verify: timeout will be ignored from libhal 4.5.0 and beyond
-    expect(that % false == test_timeout.was_called);
   };
 
   "[failure] write_then_read<Length>"_test = []() {
     // Setup
     test_i2c i2c;
-    test_timeout_t test_timeout;
     std::array<hal::byte, 4> const expected_payload{};
+    mem::scatter_array<hal::byte const, 1> out_payload{ expected_payload };
 
     // Exercise
-    expect(
-      throws<hal::no_such_device>([&i2c, &expected_payload, &test_timeout]() {
-        [[maybe_unused]] auto result = write_then_read<5>(
-          i2c, failure_address, expected_payload, std::ref(test_timeout));
-      }));
+    expect(throws<hal::no_such_device>([&i2c, &out_payload]() {
+      auto future =
+        hal::write_then_read<5>(ctx, i2c, failure_address, out_payload);
+      finish(future);
+    }));
 
     // Verify
     expect(failure_address == i2c.m_address);
-    expect(that % expected_payload.data() == i2c.m_out.data());
-    expect(that % expected_payload.size() == i2c.m_out.size());
-    expect(that % false == test_timeout.was_called);
+    expect(that % out_payload == i2c.m_out);
   };
+}
+
+void probe_test()
+{
+  using namespace boost::ut;
 
   "[success] probe(i2c&)"_test = []() {
     // Setup
     test_i2c i2c;
 
     // Exercise
-    auto exists = probe(i2c, successful_address);
+    auto future = hal::probe(ctx, i2c, successful_address);
+    finish(future);
+    auto exists = future.value();
 
     // Verify
     expect(exists);
     expect(successful_address == i2c.m_address);
-    expect(that % 1 == i2c.m_in.size());
-    expect(that % nullptr != i2c.m_in.data());
-    expect(that % 0 == i2c.m_out.size());
-    expect(that % nullptr == i2c.m_out.data());
+    expect(that % 1 == i2c.m_in.length());
+    expect(that % 0 == i2c.m_out.length());
   };
 
   "[failure] probe(i2c&)"_test = []() {
@@ -316,32 +292,24 @@ boost::ut::suite<"i2c_test"> i2c_test = [] {
     test_i2c i2c;
 
     // Exercise
-    auto exists = probe(i2c, failure_address);
+    auto future = hal::probe(ctx, i2c, failure_address);
+    finish(future);
+    auto exists = future.value();
 
     // Verify
     expect(!exists);
     expect(failure_address == i2c.m_address);
-    expect(that % 1 == i2c.m_in.size());
-    expect(that % nullptr != i2c.m_in.data());
-    expect(that % 0 == i2c.m_out.size());
-    expect(that % nullptr == i2c.m_out.data());
+    expect(that % 1 == i2c.m_in.length());
+    expect(that % 0 == i2c.m_out.length());
   };
+}
 
-  "Use all APIs without timeout parameter"_test = []() {
-    // Setup
-    test_i2c i2c;
+}  // namespace
 
-    std::array<hal::byte, 4> const write_data{};
-    std::array<hal::byte, 4> read_data{};
-
-    // Exercise
-    // Verify
-    write(i2c, successful_address, write_data);
-    read(i2c, successful_address, read_data);
-    write_then_read(i2c, successful_address, write_data, read_data);
-    [[maybe_unused]] auto r_array = read<2>(i2c, successful_address);
-    [[maybe_unused]] auto wr_array =
-      write_then_read<2>(i2c, successful_address, write_data);
-  };
-};
-}  // namespace hal
+int main()
+{
+  write_test();
+  read_test();
+  write_then_read_test();
+  probe_test();
+}
