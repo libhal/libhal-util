@@ -16,7 +16,11 @@ export module hal.util;
 
 export import :as_bytes;
 export import :bit;
+export import :comparison;
+export import :enumeration;
+export import :map;
 export import :math;
+export import :spi;
 export import :steady_clock;
 export import :to_array;
 export import :units;

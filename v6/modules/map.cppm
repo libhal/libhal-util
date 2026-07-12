@@ -12,15 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+module;
 
 #include <algorithm>
+#include <utility>
+
+export module hal.util:map;
 
 /**
  * @defgroup Map Map
  *
  */
-namespace hal {
+namespace hal::inline v6 {
 /**
  * @ingroup Map
  * @brief Map an target value [x] from an input range [a,b] to an output range
@@ -49,7 +52,7 @@ namespace hal {
  * @return constexpr float - value mapped from input range to the output
  * range. The output is clamped to the output range.
  */
-[[nodiscard]] constexpr float map(float p_target,
+export [[nodiscard]] constexpr float map(float p_target,
                                   std::pair<float, float> p_input_range,
                                   std::pair<float, float> p_output_range)
 {

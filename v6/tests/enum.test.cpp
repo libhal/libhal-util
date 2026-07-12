@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <libhal-util/enum.hpp>
-
 #include <boost/ut.hpp>
 
-namespace hal {
-boost::ut::suite<"enum_test"> enum_test = [] {
+import hal.util;
+
+namespace {
+
+void enum_test()
+{
   using namespace boost::ut;
 
   "hal::value(enum)"_test = []() {
@@ -30,8 +32,14 @@ boost::ut::suite<"enum_test"> enum_test = [] {
       enum_value2 = expected2,
     };
 
-    expect(that % expected1 == value(test_enum::enum_value1));
-    expect(that % expected2 == value(test_enum::enum_value2));
+    expect(that % expected1 == hal::value(test_enum::enum_value1));
+    expect(that % expected2 == hal::value(test_enum::enum_value2));
   };
-};
-}  // namespace hal
+}
+
+}  // namespace
+
+int main()
+{
+  enum_test();
+}

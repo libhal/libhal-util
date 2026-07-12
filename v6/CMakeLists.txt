@@ -31,7 +31,11 @@ libhal_add_library(util
         modules/hal.util.cppm
         modules/as_bytes.cppm
         modules/bit.cppm
+        modules/comparison.cppm
+        modules/enum.cppm
+        modules/map.cppm
         modules/math.cppm
+        modules/spi.cppm
         modules/steady_clock.cppm
         modules/to_array.cppm
         modules/units.cppm
@@ -51,7 +55,10 @@ libhal_add_tests(util
         as_bytes
         bit
         bit_functions
+        enum
+        map
         math
+        spi
         steady_clock
         to_array
         units

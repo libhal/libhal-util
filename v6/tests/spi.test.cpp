@@ -12,101 +12,193 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <libhal-util/spi.hpp>
-
-#include <libhal/error.hpp>
+#include <algorithm>
+#include <array>
+#include <coroutine>
 
 #include <boost/ut.hpp>
 
-namespace hal {
-boost::ut::suite<"spi_test"> spi_test = [] {
-  using namespace boost::ut;
+import hal;
+import hal.util;
+import scatter_span;
 
-  static constexpr hal::byte success_filler{ 0xF5 };
-  static constexpr hal::byte failure_filler{ 0x33 };
-  static constexpr hal::byte filler_byte{ 0xA5 };
+namespace mem {
+/* Prints the logical element sequence of a scatter_span, e.g. `[1, 2, 3]`.
+ * Lets boost::ut print the operands of a failed `expect` involving a
+ * scatter_span.
+ */
+template<typename T>
+std::ostream& operator<<(std::ostream& p_os, scatter_span<T> const& p_ssp)
+{
+  p_os << "[";
+  for (auto const& chunk : p_ssp) {
+    auto const* addr = static_cast<void const*>(chunk.data());
+    p_os << "(" << addr << " : " << chunk.size() << "), ";
+  }
+  p_os << "]";
+  return p_os;
+}
 
-  class test_spi : public hal::spi
+/* A helper function to compare two scatter_spans. This is only useful for
+ * testing
+ */
+template<typename T>
+bool operator==(scatter_span<T> const& lhs, scatter_span<T> const& rhs)
+{
+
+  if (lhs.length() != rhs.length()) {
+    return false;
+  }
+
+  if (lhs.length() == 0) {
+    return true;
+  }
+
+  auto r_iter = rhs.begin();
+  auto l_iter = lhs.begin();
+
+  for (; r_iter != rhs.end() and l_iter != lhs.end(); r_iter++, l_iter++) {
+    if (r_iter->data() != l_iter->data() and r_iter->size() != l_iter->size()) {
+      return false;
+    }
+  }
+
+  return true;
+}
+}  // namespace mem
+
+namespace {
+
+constexpr hal::byte failure_filler{ 0x33 };
+constexpr hal::byte filler_byte{ 'C' };
+
+class test_spi : public hal::spi_channel
+{
+public:
+  ~test_spi() override = default;
+
+  mem::scatter_span<hal::byte const> m_out{};
+  mem::scatter_span<hal::byte> m_in{};
+  hal::byte m_filler = hal::byte{ 0xFF };
+
+private:
+  async::future<void> driver_configure(async::context&,
+                                       settings const&) override
   {
-  public:
-    void driver_configure(settings const&) override
-    {
+    return {};
+  }
+
+  async::future<hal::hertz> driver_clock_rate(async::context&) override
+  {
+    return hal::hertz{};
+  }
+
+  async::future<void> driver_chip_select(async::context&, bool) override
+  {
+    return {};
+  }
+
+  async::future<void> driver_transfer(
+    async::context&,
+    mem::scatter_span<hal::byte const> p_data_out,
+    mem::scatter_span<hal::byte> p_data_in,
+    hal::byte p_filler) override
+  {
+
+    m_out = p_data_out;
+    m_in = p_data_in;
+    m_filler = p_filler;
+
+    for (auto chunk : p_data_in) {
+      for (auto& elem : chunk) {
+        elem = p_filler;  // we re-used filler byte to fill the input param even
+                          // though the filler byte is meant for the output line
+                          // when performing a read operation.
+      }
     }
-    void driver_transfer(std::span<hal::byte const> p_out,
-                         std::span<hal::byte> p_in,
-                         hal::byte p_filler) override
-    {
-      if (!p_out.empty()) {
-        m_out = p_out;
-      }
 
-      if (!p_in.empty()) {
-        m_in = p_in;
-        std::ranges::fill(m_in, filler_byte);
-      }
-
-      m_filler = p_filler;
-
-      if (p_filler == failure_filler) {
-        safe_throw(hal::io_error(this));
-      }
+    if (p_filler == failure_filler) {
+      throw hal::io_error(this);
     }
 
-    ~test_spi() override = default;
+    return {};
+  }
+};
 
-    std::span<hal::byte const> m_out = std::span<hal::byte const>{};
-    std::span<hal::byte> m_in = std::span<hal::byte>{};
-    hal::byte m_filler = hal::byte{ 0xFF };
-  };
+template<typename T>
+void finish(async::future<T>& p_future)
+{
+  while (not p_future.done()) {
+    p_future.resume();
+  }
+}
+
+async::inplace_context<1024> ctx;
+
+constexpr auto empty_scatter_span = mem::scatter_span<hal::byte>{};
+constexpr auto empty_const_scatter_span = mem::scatter_span<hal::byte const>{};
+
+void write_test()
+{
+  using namespace boost::ut;
 
   "[success] write"_test = []() {
     // Setup
     test_spi spi;
-    std::array<hal::byte, 4> const expected_payload{};
+    std::array<hal::byte, 4> buffer1{};
+    std::array<hal::byte, 8> buffer2{};
+    std::array<hal::byte, 2> buffer3{};
+
+    mem::scatter_array<hal::byte const, 3> payload{ buffer1, buffer2, buffer3 };
+    mem::scatter_span s_payload = payload;
 
     // Exercise
-    write(spi, expected_payload);
+    auto future = hal::write(ctx, spi, s_payload);
+    finish(future);
 
     // Verify
-    expect(that % expected_payload.data() == spi.m_out.data());
-    expect(that % expected_payload.size() == spi.m_out.size());
-    expect(that % nullptr == spi.m_in.data());
-    expect(that % 0 == spi.m_in.size());
+    expect(that % s_payload == spi.m_out);
+    expect(that % empty_scatter_span == spi.m_in);
   };
+}
+
+void read_test()
+{
+  using namespace boost::ut;
 
   "[success] read"_test = []() {
     // Setup
     test_spi spi;
     std::array<hal::byte, 4> expected_buffer;
+    mem::scatter_array<hal::byte, 1> payload{ expected_buffer };
 
     // Exercise
-    read(spi, expected_buffer, success_filler);
+    auto future = hal::read(ctx, spi, payload, filler_byte);
+    finish(future);
 
     // Verify
-    expect(success_filler == spi.m_filler);
-    expect(that % expected_buffer.data() == spi.m_in.data());
-    expect(that % expected_buffer.size() == spi.m_in.size());
-    expect(that % nullptr == spi.m_out.data());
-    expect(that % 0 == spi.m_out.size());
+    expect(filler_byte == spi.m_filler);
+    expect(that % payload == spi.m_in);
+    expect(that % empty_const_scatter_span == spi.m_out);
   };
 
   "[failure] read"_test = []() {
     // Setup
     test_spi spi;
     std::array<hal::byte, 4> expected_buffer;
+    mem::scatter_array<hal::byte, 1> payload{ expected_buffer };
 
     // Exercise
-    expect(throws<hal::io_error>([&spi, &expected_buffer]() {
-      read(spi, expected_buffer, failure_filler);
+    expect(throws<hal::io_error>([&spi, &payload]() {
+      auto future = hal::read(ctx, spi, payload, failure_filler);
+      finish(future);
     }))
       << "Exception not thrown!";
 
     // Verify
     expect(failure_filler == spi.m_filler);
-    expect(that % expected_buffer.data() == spi.m_in.data());
-    expect(that % expected_buffer.size() == spi.m_in.size());
-    expect(that % nullptr == spi.m_out.data());
-    expect(that % 0 == spi.m_out.size());
+    expect(that % payload == spi.m_in);
+    expect(that % empty_const_scatter_span == spi.m_out);
   };
 
   "[success] read<Length>"_test = []() {
@@ -116,109 +208,21 @@ boost::ut::suite<"spi_test"> spi_test = [] {
     expected_buffer.fill(filler_byte);
 
     // Exercise
-    auto actual_buffer = read<expected_buffer.size()>(spi, success_filler);
+    auto future = hal::read<expected_buffer.size()>(ctx, spi, filler_byte);
+    finish(future);
+    auto actual_buffer = future.value();
 
     // Verify
-    expect(success_filler == spi.m_filler);
-    expect(std::equal(
-      expected_buffer.begin(), expected_buffer.end(), actual_buffer.begin()));
-    expect(that % nullptr == spi.m_out.data());
-    expect(that % 0 == spi.m_out.size());
+    expect(filler_byte == spi.m_filler);
+    expect(expected_buffer == actual_buffer);
+    expect(that % empty_const_scatter_span == spi.m_out);
   };
+}
 
-#if 0
-  "[failure] read<Length>"_test = []() {
-    // Setup
-    test_spi spi;
+}  // namespace
 
-    // Exercise
-    auto result = read<5>(spi, failure_filler);
-    bool successful = static_cast<bool>(result);
-
-    // Verify
-    expect(!successful);
-    expect(failure_filler == spi.m_filler);
-    expect(that % nullptr == spi.m_out.data());
-    expect(that % 0 == spi.m_out.size());
-  };
-
-  "[success] write_then_read"_test = []() {
-    // Setup
-    test_spi spi;
-    const std::array<hal::byte, 4> expected_payload{};
-    std::array<hal::byte, 4> expected_buffer;
-
-    // Exercise
-    auto result =
-      write_then_read(spi, expected_payload, expected_buffer, success_filler);
-    bool successful = static_cast<bool>(result);
-
-    // Verify
-    expect(successful);
-    expect(success_filler == spi.m_filler);
-    expect(that % expected_payload.data() == spi.m_out.data());
-    expect(that % expected_payload.size() == spi.m_out.size());
-    expect(that % expected_buffer.data() == spi.m_in.data());
-    expect(that % expected_buffer.size() == spi.m_in.size());
-  };
-
-  "[failure] write_then_read"_test = []() {
-    // Setup
-    test_spi spi;
-    const std::array<hal::byte, 4> expected_payload{};
-    std::array<hal::byte, 4> expected_buffer;
-    expected_buffer.fill(filler_byte);
-
-    // Exercise
-    auto result =
-      write_then_read(spi, expected_payload, expected_buffer, failure_filler);
-    bool successful = static_cast<bool>(result);
-
-    // Verify
-    expect(!successful);
-    expect(failure_filler == spi.m_filler);
-    expect(that % expected_payload.data() == spi.m_out.data());
-    expect(that % expected_payload.size() == spi.m_out.size());
-    expect(that % expected_buffer.data() == spi.m_in.data());
-    expect(that % expected_buffer.size() == spi.m_in.size());
-  };
-
-  "[success] write_then_read<Length>"_test = []() {
-    // Setup
-    test_spi spi;
-    const std::array<hal::byte, 4> expected_payload{};
-    std::array<hal::byte, 4> expected_buffer{};
-    expected_buffer.fill(filler_byte);
-
-    // Exercise
-    auto result = write_then_read<5>(spi, expected_payload, success_filler);
-    bool successful = static_cast<bool>(result);
-    auto actual_array = result.value();
-
-    // Verify
-    expect(successful);
-    expect(success_filler == spi.m_filler);
-    expect(that % expected_payload.data() == spi.m_out.data());
-    expect(that % expected_payload.size() == spi.m_out.size());
-    expect(std::equal(
-      expected_buffer.begin(), expected_buffer.end(), actual_array.begin()));
-  };
-
-  "[failure] write_then_read<Length>"_test = []() {
-    // Setup
-    test_spi spi;
-    const std::array<hal::byte, 4> expected_payload{};
-
-    // Exercise
-    auto result = write_then_read<5>(spi, expected_payload, failure_filler);
-    bool successful = static_cast<bool>(result);
-
-    // Verify
-    expect(!successful);
-    expect(failure_filler == spi.m_filler);
-    expect(that % expected_payload.data() == spi.m_out.data());
-    expect(that % expected_payload.size() == spi.m_out.size());
-  };
-#endif
-};
-}  // namespace hal
+int main()
+{
+  write_test();
+  read_test();
+}

@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+module;
 
 #include <algorithm>
 #include <array>
 #include <span>
+
+export module hal.util:comparison;
 
 /**
  * @defgroup Comparison Comparisons
@@ -33,7 +35,7 @@
  * @return true - if the two are equal in length and contents
  * @return false - if the two are not equal to length or by contents
  */
-template<typename T, size_t size>
+export template<typename T, size_t size>
 constexpr bool operator==(std::array<T, size> const& p_array,
                           std::span<T> const& p_span)
 {
@@ -54,7 +56,7 @@ constexpr bool operator==(std::array<T, size> const& p_array,
  * @return true - if the two are equal in length and contents
  * @return false - if the two are not equal to length or by contents
  */
-template<typename T, size_t size>
+export template<typename T, size_t size>
 constexpr bool operator==(std::span<T> const& p_span,
                           std::array<T, size> const& p_array)
 {
@@ -71,7 +73,7 @@ constexpr bool operator==(std::span<T> const& p_span,
  * @return true - if the two are equal in length and contents
  * @return false - if the two are not equal to length or by contents
  */
-template<typename T, size_t size>
+export template<typename T, size_t size>
 constexpr bool operator!=(std::array<T, size> const& p_array,
                           std::span<T> const& p_span)
 {
@@ -88,7 +90,7 @@ constexpr bool operator!=(std::array<T, size> const& p_array,
  * @return true - if the two are equal in length and contents
  * @return false - if the two are not equal to length or by contents
  */
-template<typename T, size_t size>
+export template<typename T, size_t size>
 constexpr bool operator!=(std::span<T> const& p_span,
                           std::array<T, size> const& p_array)
 {

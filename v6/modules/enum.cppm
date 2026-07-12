@@ -12,25 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+module;
 
 #include <type_traits>
 
-#include <libhal/units.hpp>
+export module hal.util:enumeration;
+
+import hal;
 
 /**
  * @defgroup Enum Enums
  *
  */
 
-namespace hal {
+namespace hal::inline v6 {
 /**
  * @ingroup Enum
  * @brief concept for enumeration types
  *
  * @tparam T - enum type
  */
-template<typename T>
+export template<typename T>
 concept enumeration = std::is_enum_v<T>;
 
 /**
@@ -42,9 +44,9 @@ concept enumeration = std::is_enum_v<T>;
  * @return constexpr auto - return the integral value of the enum with the same
  * type as the enumeration.
  */
-[[nodiscard]] constexpr auto value(enumeration auto p_enum_value)
+export [[nodiscard]] constexpr auto value(enumeration auto p_enum_value)
 {
   return static_cast<std::underlying_type_t<decltype(p_enum_value)>>(
     p_enum_value);
 }
-}  // namespace hal
+}  // namespace hal::inline v6

@@ -12,36 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+module;
 
+#include <array>
+#include <coroutine>
 #include <span>
 
-#include <libhal/error.hpp>
-#include <libhal/spi.hpp>
-#include <libhal/units.hpp>
+export module hal.util:spi;
+
+import hal;
+import scatter_span;
 
 /**
  * @defgroup SPI SPI
  *
  */
 
-namespace hal {
-/**
- * @ingroup SPI
- * @brief Compares two SPI objects via their settings.
- *
- * @param p_lhs A SPI object
- * @param p_rhs A SPI object
- * @return A boolean if they are the same or not.
- */
-[[nodiscard]] constexpr auto operator==(spi::settings const& p_lhs,
-                                        spi::settings const& p_rhs)
-{
-  return p_lhs.clock_idles_high == p_rhs.clock_idles_high &&
-         p_lhs.clock_rate == p_rhs.clock_rate &&
-         p_lhs.data_valid_on_trailing_edge == p_rhs.data_valid_on_trailing_edge;
-}
-
+namespace hal::inline v6 {
 /**
  * @ingroup SPI
  * @brief Write data to the spi bus, ignore data on the peripherals receive line
@@ -50,12 +37,15 @@ namespace hal {
  * must be sent to a device and the device does not respond with anything or the
  * response is not necessary.
  *
+ * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_spi - spi driver
  * @param p_data_out - data to be written to the spi bus
  */
-inline void write(spi& p_spi, std::span<hal::byte const> p_data_out)
+export async::future<void> write(async::context& p_ctx,
+                                 spi_channel& p_spi,
+                                 mem::scatter_span<hal::byte const> p_data_out)
 {
-  p_spi.transfer(p_data_out, std::span<hal::byte>{}, spi::default_filler);
+  co_await p_spi.transfer(p_ctx, p_data_out);
 }
 
 /**
@@ -64,15 +54,18 @@ inline void write(spi& p_spi, std::span<hal::byte const> p_data_out)
  *
  * Filler bytes will be placed on the write/transmit line.
  *
+ * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_spi - spi driver
  * @param p_data_in - buffer to receive bytes back from the spi bus
  * @param p_filler - filler data placed on the bus in place of actual data.
  */
-inline void read(spi& p_spi,
-                 std::span<hal::byte> p_data_in,
-                 hal::byte p_filler = spi::default_filler)
+export async::future<void> read(
+  async::context& p_ctx,
+  spi_channel& p_spi,
+  mem::scatter_span<hal::byte> p_data_in,
+  hal::byte p_filler = spi_channel::default_filler)
 {
-  p_spi.transfer(std::span<hal::byte>{}, p_data_in, p_filler);
+  co_await p_spi.transfer(p_ctx, {}, p_data_in, p_filler);
 }
 /**
  * @ingroup SPI
@@ -81,20 +74,22 @@ inline void read(spi& p_spi,
  * Filler bytes will be placed on the write line.
  *
  * @tparam bytes_to_read - Number of bytes to read
+ * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_spi - spi driver
  * @param p_filler - filler data placed on the bus in place of actual write
  * data.
  * @return std::array<hal::byte, bytes_to_read> - array containing bytes read
  * from the spi bus
  */
-template<size_t bytes_to_read>
-[[nodiscard]] std::array<hal::byte, bytes_to_read> read(
-  spi& p_spi,
-  hal::byte p_filler = spi::default_filler)
+export template<size_t bytes_to_read>
+[[nodiscard]] async::future<std::array<hal::byte, bytes_to_read>> read(
+  async::context& p_ctx,
+  spi_channel& p_spi,
+  hal::byte p_filler = spi_channel::default_filler)
 {
   std::array<hal::byte, bytes_to_read> buffer;
-  p_spi.transfer(std::span<hal::byte>{}, buffer, p_filler);
-  return buffer;
+  co_await read(p_ctx, p_spi, { buffer }, p_filler);
+  co_return buffer;
 }
 
 /**
@@ -111,19 +106,22 @@ template<size_t bytes_to_read>
  *    1. Write data to the bus, ignore the receive line
  *    2. Read from spi bus, filling the write line with filler
  *
+ * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_spi - spi driver
  * @param p_data_out - bytes to write to the bus
  * @param p_data_in - buffer to receive bytes back from the spi bus
  * @param p_filler - filler data placed on the bus when the read operation
  * begins.
  */
-inline void write_then_read(spi& p_spi,
-                            std::span<hal::byte const> p_data_out,
-                            std::span<hal::byte> p_data_in,
-                            hal::byte p_filler = spi::default_filler)
+export async::future<void> write_then_read(
+  async::context& p_ctx,
+  spi_channel& p_spi,
+  mem::scatter_span<hal::byte const> p_data_out,
+  mem::scatter_span<hal::byte> p_data_in,
+  hal::byte p_filler = spi_channel::default_filler)
 {
-  write(p_spi, p_data_out);
-  read(p_spi, p_data_in, p_filler);
+  co_await write(p_ctx, p_spi, p_data_out);
+  co_await read(p_ctx, p_spi, p_data_in, p_filler);
 }
 
 /**
@@ -135,6 +133,7 @@ inline void write_then_read(spi& p_spi,
  * See write_then_read() for details about this function.
  *
  * @tparam bytes_to_read - Number of bytes to read from the bus
+ * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_spi - spi driver
  * @param p_data_out - bytes to write to the bus
  * @param p_filler - filler data placed on the bus when the read operation
@@ -142,13 +141,14 @@ inline void write_then_read(spi& p_spi,
  * @return std::array<hal::byte, bytes_to_read> - array containing the bytes
  * read from the spi bus.
  */
-template<size_t bytes_to_read>
-[[nodiscard]] std::array<hal::byte, bytes_to_read> write_then_read(
-  spi& p_spi,
-  std::span<hal::byte const> p_data_out,
-  hal::byte p_filler = spi::default_filler)
+export template<size_t bytes_to_read>
+[[nodiscard]] async::future<std::array<hal::byte, bytes_to_read>>
+write_then_read(async::context& p_ctx,
+                spi_channel& p_spi,
+                mem::scatter_span<hal::byte const> p_data_out,
+                hal::byte p_filler = spi_channel::default_filler)
 {
-  write(p_spi, p_data_out);
-  return read<bytes_to_read>(p_spi, p_filler);
+  co_await write(p_ctx, p_spi, p_data_out);
+  co_return co_await read<bytes_to_read>(p_ctx, p_spi, p_filler);
 }
-}  // namespace hal
+}  // namespace hal::inline v6
