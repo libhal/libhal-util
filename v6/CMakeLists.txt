@@ -43,7 +43,6 @@ libhal_add_library(util
         modules/steady_clock.cppm
         modules/to_array.cppm
         modules/units.cppm
-    SOURCES
 )
 
 target_link_libraries(util
@@ -52,7 +51,7 @@ target_link_libraries(util
 )
 
 libhal_apply_compile_options(util)
-libhal_install_library(util NAMESPACE libhal)
+libhal_install_library(util NAMESPACE libhal PACKAGE_NAME libhal-util)
 libhal_add_tests(util
     TEST_NAMES
         main

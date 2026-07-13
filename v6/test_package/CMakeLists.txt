@@ -23,7 +23,7 @@ if(NOT CMAKE_GENERATOR MATCHES "Ninja|Visual Studio")
     message(FATAL_ERROR "C++20 modules require Ninja or Visual Studio generator")
 endif()
 
-find_package(util REQUIRED CONFIG)
+find_package(libhal-util REQUIRED CONFIG)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
     string(APPEND CMAKE_CXX_FLAGS " -Qunused-arguments")
