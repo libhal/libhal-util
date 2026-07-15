@@ -58,3 +58,5 @@ conanbuildinfo.txt
 # CMake
 CMakeUserPresets.json
 
+# Claude
+.claude/

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 namespace hal {
-// TODO(#45): Replace these with boost.ut named global test suites
 }  // namespace hal
 
 int main()

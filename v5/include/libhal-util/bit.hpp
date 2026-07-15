@@ -433,6 +433,7 @@ public:
   constexpr bit_value& operator=(T p_initial_value)
   {
     m_value = p_initial_value;
+    return *this;
   }
 
   /**
@@ -621,7 +622,7 @@ public:
    * @return The represented value as type U.
    */
   template<std::integral U>
-  [[nodiscard]] constexpr auto to()
+  [[nodiscard]] constexpr auto to() const
   {
     return static_cast<U>(m_value);
   }
@@ -631,10 +632,12 @@ public:
    *
    * @return The represented value.
    */
-  [[nodiscard]] constexpr T get()
+  [[nodiscard]] constexpr T get() const
   {
     return m_value;
   }
+
+  constexpr bool operator==(bit_value const&) const = default;
 
 protected:
   T m_value;

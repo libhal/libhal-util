@@ -12,12 +12,78 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <array>
+#include <iterator>
+#include <memory_resource>
+#include <span>
+#include <string_view>
+#include <vector>
+
+#include <libhal-util/mock/usb.hpp>
 #include <libhal-util/usb.hpp>
+#include <libhal-util/usb/constants.hpp>
+#include <libhal-util/usb/enumerator.hpp>
+#include <libhal/error.hpp>
+#include <libhal/pointers.hpp>
+#include <libhal/scatter_span.hpp>
+#include <libhal/units.hpp>
+#include <libhal/usb.hpp>
 
 #include <boost/ut.hpp>
 
-namespace hal {
+namespace hal::v5::usb {
+
 boost::ut::suite<"usb_test"> usb_test = [] {
   // TODO(#78): Add usb utility tests
 };
-}  // namespace hal
+
+struct mock_usb_interface : public hal::usb::interface
+{
+  descriptor_count driver_write_descriptors(descriptor_start,
+                                            endpoint_io&) override
+  {
+    return {};
+  }
+  bool driver_write_string_descriptor(u8, endpoint_io&) override
+  {
+    return false;
+  }
+  bool driver_handle_request(setup_packet const&, endpoint_io&) override
+  {
+    return false;
+  }
+  void driver_handle_host_event(host_event) override
+  {
+  }
+};
+
+boost::ut::suite<"enumeration_test"> enumeration_test = [] {
+  using namespace boost::ut;
+  using namespace hal::literals;
+  namespace pmr = std::pmr;
+
+  std::array<byte, 4096> iface_buf{};
+  pmr::monotonic_buffer_resource pool(iface_buf.data(), std::size(iface_buf));
+
+  auto ctrl_ep = make_strong_ptr<mock_usb_control_endpoint>(&pool);
+  ctrl_ep->m_endpoint.m_info = { .size = 8, .number = 0, .stalled = false };
+
+  auto mock = make_strong_ptr<mock_usb_interface>(&pool);
+
+  "basic usb enumeration test"_test = [&ctrl_ep, &mock] {
+    // Start enumeration process and verify connection
+    [[maybe_unused]] inplace_enumerator en(
+      ctrl_ep,
+      {
+        .manufacturer = u"libhal",
+        .product = u"HALbORD",
+        .serial_number = u"001",
+        .vendor_id = 0xDEAD,
+        .product_id = 0xBEEF,
+        // everything else takes its default
+      },
+      mock);
+  };
+};
+
+}  // namespace hal::v5::usb
