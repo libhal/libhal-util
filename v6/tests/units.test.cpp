@@ -46,9 +46,7 @@ void units_test()
     expect(that % 192'000 == hal::cycles_per(12'000'000 * si::hertz, 16ms));
     expect(that % 960'000'000 == hal::cycles_per(8'000'000 * si::hertz, 2min));
     expect(that % 57'600'000 == hal::cycles_per(32'000 * si::hertz, 30min));
-    // Should be 600'000'000'000 but due to floating point precision loss it
-    // cannot be represented
-    expect(that % 599'999'971'328 ==
+    expect(that % 18'446'744'064'966'997'184ULL ==
            hal::cycles_per(1'000'000'000 * si::hertz, 10min));
 
     // Result of zero means that the time period is smaller than the

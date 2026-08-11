@@ -35,11 +35,6 @@ target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 target_compile_options(${PROJECT_NAME} PRIVATE -fno-rtti)
 target_link_libraries(${PROJECT_NAME} PRIVATE libhal::util)
 
-if(NOT CMAKE_CROSSCOMPILING)
-    target_compile_options(${PROJECT_NAME} PRIVATE -fsanitize=address)
-    target_link_options(${PROJECT_NAME} PRIVATE -g -fsanitize=address)
-endif()
-
 add_custom_target(copy_compile_commands ALL
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CMAKE_BINARY_DIR}/compile_commands.json

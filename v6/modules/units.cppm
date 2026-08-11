@@ -52,12 +52,10 @@ export [[nodiscard]] constexpr hal::u64 cycles_per(
   // hal::time_duration::period::num == 1
   // hal::time_duration::period::den == 1,000,000
 
-  auto const denominator =
-    static_cast<float>(decltype(p_duration)::period::den);
-  auto const float_count = static_cast<float>(p_duration.count());
-  auto const source_hz =
-    static_cast<float>(p_source.numerical_value_in(hertz::unit));
-  auto const cycle_count = (float_count * source_hz) / denominator;
+  auto const denominator = decltype(p_duration)::period::den;
+  auto const count = p_duration.count();
+  auto const source_hz = p_source.numerical_value_in(hertz::unit);
+  auto const cycle_count = (count * source_hz) / denominator;
 
   return static_cast<hal::u64>(cycle_count);
 }
