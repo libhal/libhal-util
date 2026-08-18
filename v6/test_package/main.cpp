@@ -32,8 +32,6 @@ void finish(async::future<T>& p_future)
 class stub_spi_channel : public hal::spi_channel
 {
 public:
-  ~stub_spi_channel() override = default;
-
   mem::scatter_span<hal::byte const> m_last_out{};
   mem::scatter_span<hal::byte> m_last_in{};
 
@@ -74,8 +72,6 @@ private:
 class stub_i2c : public hal::i2c
 {
 public:
-  ~stub_i2c() override = default;
-
   hal::byte m_last_address{};
 
 private:
