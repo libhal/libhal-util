@@ -30,7 +30,7 @@ constexpr hal::byte filler_byte{ 'C' };
 class test_spi : public hal::spi_channel
 {
 public:
-  ~test_spi() override = default;
+  ~test_spi() = default;
 
   mem::scatter_span<hal::byte const> m_out{};
   mem::scatter_span<hal::byte> m_in{};

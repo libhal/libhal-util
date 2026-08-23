@@ -18,6 +18,7 @@ module;
 
 #include <array>
 #include <coroutine>
+#include <span>
 #include <string_view>
 
 export module hal.util:serial;
@@ -45,7 +46,7 @@ export async::future<void> write(async::context& p_ctx,
                                  hal::serial& p_serial,
                                  mem::scatter_span<hal::byte const> p_data_out)
 {
-  co_await p_serial.write(p_ctx, p_data_out);
+  return p_serial.write(p_ctx, p_data_out);
 }
 
 /**
@@ -60,7 +61,46 @@ export async::future<void> write(async::context& p_ctx,
                                  hal::serial& p_serial,
                                  std::string_view p_data_out)
 {
-  co_await write(p_ctx, p_serial, { as_bytes(p_data_out) });
+  return write(
+    p_ctx, p_serial, mem::scatter_span<hal::byte const>{ as_bytes(p_data_out) });
+}
+
+/**
+ * @brief Shared implementation behind every print<buffer_size, ...>()
+ * instantiation.
+ *
+ * Not exported: this exists purely so that print<N, Parameters...>() and
+ * print<M, Parameters...>() (same Parameters, different buffer_size) share
+ * one function body instead of each generating its own copy of the
+ * snprintf-and-write logic. Only the caller-owned buffer and the thin
+ * templated wrapper below differ per buffer_size.
+ *
+ * @param p_ctx - async context for coroutine suspension and resumption.
+ * @param p_serial - serial port to write data to
+ * @param p_buffer - working buffer the formatted message is written into;
+ * its lifetime is owned by the caller and must outlive this call.
+ * @param p_format - printf style null terminated format string
+ * @param p_parameters - printf arguments
+ */
+template<typename... Parameters>
+async::future<void> print(async::context& p_ctx,
+                          hal::serial& p_serial,
+                          std::span<char> p_buffer,
+                          char const* p_format,
+                          Parameters... p_parameters)
+{
+  int const unterminated_max_string_size =
+    static_cast<int>(p_buffer.size()) - 1;
+
+  int length = std::snprintf(
+    p_buffer.data(), p_buffer.size(), p_format, p_parameters...);
+
+  if (length > unterminated_max_string_size) {
+    // Print out what was able to be written to the buffer
+    length = unterminated_max_string_size;
+  }
+
+  return write(p_ctx, p_serial, std::string_view(p_buffer.data(), length));
 }
 
 /**
@@ -89,18 +129,13 @@ async::future<void> print(async::context& p_ctx,
                           Parameters... p_parameters)
 {
   static_assert(buffer_size > 2);
-  constexpr int unterminated_max_string_size =
-    static_cast<int>(buffer_size) - 1;
 
+  // buffer must be owned by this coroutine's own frame (not a plain
+  // function's stack frame) since the span handed to the non-exported
+  // print() above is retained across suspension points all the way down to
+  // the underlying serial driver's write().
   std::array<char, buffer_size> buffer{};
-  int length =
-    std::snprintf(buffer.data(), buffer.size(), p_format, p_parameters...);
-
-  if (length > unterminated_max_string_size) {
-    // Print out what was able to be written to the buffer
-    length = unterminated_max_string_size;
-  }
-
-  co_await write(p_ctx, p_serial, std::string_view(buffer.data(), length));
+  co_await print(
+    p_ctx, p_serial, std::span<char>(buffer), p_format, p_parameters...);
 }
 }  // namespace hal::inline v6

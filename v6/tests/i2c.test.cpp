@@ -31,7 +31,7 @@ constexpr hal::byte filler_byte{ 0xA5 };
 class test_i2c : public hal::i2c
 {
 public:
-  ~test_i2c() override = default;
+  ~test_i2c() = default;
 
   hal::byte m_address = hal::byte{ 0 };
   mem::scatter_span<hal::byte const> m_out{};

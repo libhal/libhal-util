@@ -62,7 +62,7 @@ void check_validity(hal::hertz p_operating_frequency,
 class test_can_transceiver : public hal::can_transceiver
 {
 public:
-  ~test_can_transceiver() override = default;
+  ~test_can_transceiver() = default;
 
   void add_to_received_messages(hal::can_message const& p_message)
   {
