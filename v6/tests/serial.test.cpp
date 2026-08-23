@@ -29,7 +29,7 @@ constexpr hal::byte write_failure_byte{ 'C' };
 class test_serial : public hal::serial
 {
 public:
-  ~test_serial() override = default;
+  ~test_serial() = default;
 
   mem::scatter_span<hal::byte const> m_out{};
 
