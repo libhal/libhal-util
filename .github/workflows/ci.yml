@@ -21,3 +21,13 @@ jobs:
     with:
       dir: v5
     secrets: inherit
+
+  deployment_check_v6:
+    uses: libhal/ci/.github/workflows/package_and_upload_all.yml@5.x.y
+    with:
+      modules_support_needed: true
+      coroutine_support_needed: false
+      dir: v6
+      llvm_profile: hal/tc/llvm-23
+      conan_version: 2.33.0  # first release that knows clang 23
+    secrets: inherit

@@ -19,7 +19,6 @@ module;
 export module test_util;
 
 import hal.util;
-import async_context;
 import scatter_span;
 
 namespace mem {
@@ -66,11 +65,3 @@ bool operator==(scatter_span<T> const& lhs, scatter_span<T> const& rhs)
   return true;
 }
 }  // namespace mem
-
-export template<typename T>
-void finish(async::future<T>& p_future)
-{
-  while (not p_future.done()) {
-    p_future.resume();
-  }
-}
