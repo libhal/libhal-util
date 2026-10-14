@@ -47,3 +47,28 @@ struct counter final : hal::edge_triggered_callback
   {
   }
 };
+
+struct fake_can_interrupt final : hal::can_interrupt
+{
+  hal::can_receive_callback* callback = nullptr;
+
+private:
+  void driver_on_receive(hal::can_receive_callback& p_callback) override
+  {
+    if (callback) {
+      throw hal::subscription_busy(this);
+    }
+    callback = &p_callback;
+  }
+  void driver_clear_receive() noexcept override
+  {
+    callback = nullptr;
+  }
+};
+
+struct message_counter final : hal::can_receive_callback
+{
+  void callback(hal::can_message const&) noexcept override
+  {
+  }
+};
