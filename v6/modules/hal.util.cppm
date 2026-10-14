@@ -20,6 +20,7 @@ export import :can;
 export import :comparison;
 export import :enumeration;
 export import :i2c;
+export import :interrupts;
 export import :map;
 export import :math;
 export import :overflow_counter;

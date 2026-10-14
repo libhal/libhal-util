@@ -88,7 +88,7 @@ class libhal_util_conan(ConanFile):
         self.tool_requires("cmake/[^4.0.0]")
         self.tool_requires("ninja/[^1.3.0]")
         self.test_requires("boost-ext-ut/2.3.1")
-        self.tool_requires("libhal-cmake-util/[^5.0.9]")
+        self.tool_requires("libhal-cmake-util/[^5.0.15]")
 
     def requirements(self):
         # libhal v5 is only released as pre-releases (5.0.0-alpha.N) so far.
