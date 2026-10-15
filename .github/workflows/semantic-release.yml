@@ -17,30 +17,18 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
+# Versions are computed from the tags present when a run starts. Don't let two
+# pushes compute the same version.
+concurrency:
+  group: semantic-release
+  cancel-in-progress: false
 
 jobs:
+  # Releases v5/ and v6/ independently from (minor) and (patch) in commit
+  # subjects. See https://github.com/libhal/ci#semantic_releaseyml
   release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Version
-        id: version
-        uses: paulhatch/semantic-version@v5.4.0
-        with:
-          bump_each_commit: true
-          major_pattern: "(major)"
-          minor_pattern: "(minor)"
-          bump_each_commit_patch_pattern: "(patch)"
-          tag_prefix: ""
-          debug: true
-      - name: Release
-        if: steps.version.outputs.version_type != 'none'
-        run: |
-          gh release create ${{ steps.version.outputs.version_tag }} \
-            --generate-notes
-        env:
-          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE }}
+    uses: libhal/ci/.github/workflows/semantic_release.yml@5.x.y
+    with:
+      lines: '[{"major": 5, "dir": "v5"}, {"major": 6, "dir": "v6"}]'
+    secrets:
+      release_token: ${{ secrets.SEMANTIC_RELEASE }}

@@ -5,12 +5,29 @@ on:
   release:
     types: [published]
 
+# The tag's major version picks the directory: 5.x.y deploys v5/, 6.x.y
+# (including pre-releases such as 6.0.0-alpha.1) deploys v6/.
 jobs:
   deploy_v5:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/5.')
     uses: libhal/ci/.github/workflows/package_and_upload_all.yml@5.x.y
     with:
       dir: v5
       version: ${{ github.ref_name }}
       remote_url: https://libhal.jfrog.io/artifactory/api/conan/trunk-conan
     secrets: inherit
+
+  deploy_v6:
+    if: startsWith(github.ref, 'refs/tags/6.')
+    uses: libhal/ci/.github/workflows/package_and_upload_all.yml@5.x.y
+    with:
+      version: ${{ github.ref_name }}
+      remote_url: https://libhal.jfrog.io/artifactory/api/conan/trunk-conan
+      modules_support_needed: true
+      coroutine_support_needed: false
+      dir: v6
+      llvm_profile: hal/tc/llvm-23
+      conan_version: 2.33.0  # first release that knows clang 23
+    secrets:
+      conan_remote_password: ${{ secrets.JFROG_LIBHAL_TRUNK_ID_TOKEN }}
+      conan_remote_user: ${{ secrets.JFROG_LIBHAL_TRUNK_ID_TOKEN_USER }}
