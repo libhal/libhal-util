@@ -71,6 +71,12 @@ set(SOURCES_LIST
   # src/inverter.cpp
 )
 
+# libhal-cmake-util v4 builds the unit tests with AddressSanitizer whenever the
+# compiler supports it. LLVM 20's ASan runtime deadlocks before main() on
+# macOS 26+, which hangs CI, so skip ASan for this old-generation package:
+# defining the result of its compiler check disables it.
+set(ADDRESS_SANITIZER_SUPPORT FALSE CACHE BOOL "Build tests with ASan" FORCE)
+
 if(NOT CMAKE_CROSSCOMPILING)
   libhal_unit_test(
     SOURCES
