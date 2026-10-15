@@ -14,7 +14,6 @@
 
 module;
 
-#include <coroutine>
 #include <type_traits>
 
 export module hal.util:steady_clock;
@@ -49,14 +48,12 @@ namespace hal::inline v6 {
  * less than or equal to 1, it will be set to 1 to ensure at least one tick is
  * waited.
  */
-export async::future<hal::u64> future_deadline(
-  async::context& p_ctx,
-  hal::steady_clock& p_steady_clock,
-  hal::time_duration p_duration)
+export hal::u64 future_deadline(hal::steady_clock& p_steady_clock,
+                                hal::time_duration p_duration)
 {
 
   using period = decltype(p_duration)::period;
-  auto const frequency = co_await p_steady_clock.frequency(p_ctx);
+  auto const frequency = p_steady_clock.frequency();
   auto const tick_period = wavelength<period>(frequency);
   auto ticks_required = p_duration.count() / tick_period.count();
   using unsigned_ticks = std::make_unsigned_t<decltype(ticks_required)>;
@@ -66,8 +63,8 @@ export async::future<hal::u64> future_deadline(
   }
 
   auto const ticks = static_cast<unsigned_ticks>(ticks_required);
-  auto const future_timestamp = ticks + co_await p_steady_clock.uptime(p_ctx);
+  auto const future_timestamp = ticks + p_steady_clock.uptime();
 
-  co_return future_timestamp;
+  return future_timestamp;
 }
 }  // namespace hal::inline v6

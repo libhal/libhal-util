@@ -31,18 +31,16 @@ public:
   std::uint64_t m_uptime = 0;
 
 private:
-  async::future<hal::hertz> driver_frequency(async::context&) override
+  hal::hertz driver_frequency() override
   {
     return expected_frequency;
   }
 
-  async::future<hal::u64> driver_uptime(async::context&) override
+  hal::u64 driver_uptime() override
   {
     return m_uptime++;
   }
 };
-
-async::inplace_context<1024> ctx;
 
 void future_deadline_test()
 {
@@ -57,14 +55,10 @@ void future_deadline_test()
     test_steady_clock.m_uptime = 0;
 
     // Exercise
-    auto deadline = hal::future_deadline(ctx, test_steady_clock, 1ms);
-
-    while (not deadline.done()) {
-      deadline.resume();  // should finish
-    }
+    auto const deadline = hal::future_deadline(test_steady_clock, 1ms);
 
     // Verify
-    expect(that % expected == deadline.value());
+    expect(that % expected == deadline);
   };
 }
 

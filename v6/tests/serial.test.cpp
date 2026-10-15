@@ -34,15 +34,11 @@ public:
   mem::scatter_span<hal::byte const> m_out{};
 
 private:
-  async::future<void> driver_configure(async::context&,
-                                       settings const&) override
+  void driver_configure(settings const&) override
   {
-    return {};
   }
 
-  async::future<void> driver_write(
-    async::context&,
-    mem::scatter_span<hal::byte const> p_data) override
+  void driver_write(mem::scatter_span<hal::byte const> p_data) override
   {
     m_out = p_data;
 
@@ -51,8 +47,6 @@ private:
         throw hal::io_error(this);
       }
     }
-
-    return {};
   }
 
   hal::circular_span<hal::byte const> driver_receive_buffer() override
@@ -68,8 +62,6 @@ private:
   std::array<hal::byte, 1> m_receive_buffer{};
 };
 
-async::inplace_context<1024> ctx;
-
 void write_test()
 {
   using namespace boost::ut;
@@ -81,8 +73,7 @@ void write_test()
     mem::scatter_array<hal::byte const, 1> payload{ expected_payload };
 
     // Exercise
-    auto future = hal::write(ctx, serial, payload);
-    finish(future);
+    hal::write(serial, payload);
 
     // Verify
     expect(that % payload == serial.m_out);
@@ -95,10 +86,8 @@ void write_test()
     mem::scatter_array<hal::byte const, 1> payload{ expected_payload };
 
     // Exercise
-    expect(throws<hal::io_error>([&serial, &payload]() {
-      auto future = hal::write(ctx, serial, payload);
-      finish(future);
-    }));
+    expect(throws<hal::io_error>(
+      [&serial, &payload]() { hal::write(serial, payload); }));
   };
 
   "[success] write(std::string_view)"_test = []() {
@@ -107,8 +96,7 @@ void write_test()
     std::string_view expected = "abcd";
 
     // Exercise
-    auto future = hal::write(ctx, serial, expected);
-    finish(future);
+    hal::write(serial, expected);
 
     // Verify
     expect(that % 4 == serial.m_out.length());
@@ -124,8 +112,7 @@ void print_test()
     test_serial serial;
 
     // Exercise
-    auto future = hal::print<128>(ctx, serial, "hello %d", 5);
-    finish(future);
+    hal::print<128>(serial, "hello %d", 5);
 
     // Verify
     expect(that % 7 == serial.m_out.length());

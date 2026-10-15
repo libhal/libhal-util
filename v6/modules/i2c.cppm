@@ -15,7 +15,7 @@
 module;
 
 #include <array>
-#include <coroutine>
+#include <cstddef>
 
 export module hal.util:i2c;
 
@@ -34,17 +34,15 @@ namespace hal::inline v6 {
  *
  * Shorthand for writing i2c.transaction(...) for write only operations.
  *
- * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_i2c - i2c driver
  * @param p_address - target address
  * @param p_data_out - buffer of bytes to write to the target device
  */
-export async::future<void> write(async::context& p_ctx,
-                                 hal::i2c& p_i2c,
-                                 hal::byte p_address,
-                                 mem::scatter_span<hal::byte const> p_data_out)
+export void write(hal::i2c& p_i2c,
+                  hal::byte p_address,
+                  mem::scatter_span<hal::byte const> p_data_out)
 {
-  co_await p_i2c.transaction(p_ctx, p_address, p_data_out, {});
+  p_i2c.transaction(p_address, p_data_out, {});
 }
 
 /**
@@ -53,17 +51,15 @@ export async::future<void> write(async::context& p_ctx,
  *
  * Shorthand for writing i2c.transaction(...) for read only operations.
  *
- * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_i2c - i2c driver
  * @param p_address - target address
  * @param p_data_in - buffer to read bytes into from target device
  */
-export async::future<void> read(async::context& p_ctx,
-                                hal::i2c& p_i2c,
-                                hal::byte p_address,
-                                mem::scatter_span<hal::byte> p_data_in)
+export void read(hal::i2c& p_i2c,
+                 hal::byte p_address,
+                 mem::scatter_span<hal::byte> p_data_in)
 {
-  co_await p_i2c.transaction(p_ctx, p_address, {}, p_data_in);
+  p_i2c.transaction(p_address, {}, p_data_in);
 }
 
 /**
@@ -73,19 +69,18 @@ export async::future<void> read(async::context& p_ctx,
  * Eliminates the need to create a buffer and pass it into the read function.
  *
  * @tparam bytes_to_read - number of bytes to read
- * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_i2c - i2c driver
  * @param p_address - target address
  * @return std::array<hal::byte, bytes_to_read> - array of bytes from target
  * device
  */
 export template<size_t bytes_to_read>
-[[nodiscard]] async::future<std::array<hal::byte, bytes_to_read>>
-read(async::context& p_ctx, hal::i2c& p_i2c, hal::byte p_address)
+[[nodiscard]] std::array<hal::byte, bytes_to_read> read(hal::i2c& p_i2c,
+                                                        hal::byte p_address)
 {
   std::array<hal::byte, bytes_to_read> buffer;
-  co_await read(p_ctx, p_i2c, p_address, { buffer });
-  co_return buffer;
+  read(p_i2c, p_address, { buffer });
+  return buffer;
 }
 
 /**
@@ -95,20 +90,17 @@ read(async::context& p_ctx, hal::i2c& p_i2c, hal::byte p_address)
  * This API simply calls transaction. This API is here for consistency across
  * the other other communication protocols such as SPI and serial.
  *
- * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_i2c - i2c driver
  * @param p_address - target address
  * @param p_data_out - buffer of bytes to write to the target device
  * @param p_data_in - buffer to read bytes into from target device
  */
-export async::future<void> write_then_read(
-  async::context& p_ctx,
-  hal::i2c& p_i2c,
-  hal::byte p_address,
-  mem::scatter_span<hal::byte const> p_data_out,
-  mem::scatter_span<hal::byte> p_data_in)
+export void write_then_read(hal::i2c& p_i2c,
+                            hal::byte p_address,
+                            mem::scatter_span<hal::byte const> p_data_out,
+                            mem::scatter_span<hal::byte> p_data_in)
 {
-  co_await p_i2c.transaction(p_ctx, p_address, p_data_out, p_data_in);
+  p_i2c.transaction(p_address, p_data_out, p_data_in);
 }
 
 /**
@@ -119,22 +111,20 @@ export async::future<void> write_then_read(
  * Eliminates the need to create a buffer and pass it into the read function.
  *
  * @tparam bytes_to_read - number of bytes to read after write
- * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_i2c - i2c driver
  * @param p_address - target address
  * @param p_data_out - buffer of bytes to write to the target device
  * @return std::array<hal::byte, bytes_to_read> -
  */
 export template<size_t bytes_to_read>
-[[nodiscard]] async::future<std::array<hal::byte, bytes_to_read>>
-write_then_read(async::context& p_ctx,
-                hal::i2c& p_i2c,
-                hal::byte p_address,
-                mem::scatter_span<hal::byte const> p_data_out)
+[[nodiscard]] std::array<hal::byte, bytes_to_read> write_then_read(
+  hal::i2c& p_i2c,
+  hal::byte p_address,
+  mem::scatter_span<hal::byte const> p_data_out)
 {
   std::array<hal::byte, bytes_to_read> buffer;
-  co_await write_then_read(p_ctx, p_i2c, p_address, p_data_out, { buffer });
-  co_return buffer;
+  write_then_read(p_i2c, p_address, p_data_out, { buffer });
+  return buffer;
 }
 
 /**
@@ -146,27 +136,24 @@ write_then_read(async::context& p_ctx,
  * address is used on the bus and the device does not respond with an
  * acknowledge.
  *
- * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_i2c - i2c driver for the i2c bus that the device may exist on
  * @param p_address - device to check
  * @return true - if the device appears on the bus
  * @return false - if the devices does not appear on the i2c bus
  */
-export [[nodiscard]] async::future<bool> probe(async::context& p_ctx,
-                                               hal::i2c& p_i2c,
-                                               hal::byte p_address)
+export [[nodiscard]] bool probe(hal::i2c& p_i2c, hal::byte p_address)
 {
   // p_data_in: empty placeholder for transaction's data_in
   std::array<hal::byte, 1> data_in{};
   bool device_acknowledged = true;
 
   try {
-    co_await p_i2c.transaction(p_ctx, p_address, {}, { data_in });
+    p_i2c.transaction(p_address, {}, { data_in });
   } catch (hal::no_such_device const&) {
     device_acknowledged = false;
   }
 
-  co_return device_acknowledged;
+  return device_acknowledged;
 }
 
 /**

@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <tuple>
 
 #include <boost/ut.hpp>
 
@@ -38,17 +39,13 @@ public:
   mem::scatter_span<hal::byte> m_in{};
 
 private:
-  async::future<void> driver_configure(async::context&,
-                                       settings const&) override
+  void driver_configure(settings const&) override
   {
-    return {};
   }
 
-  async::future<void> driver_transaction(
-    async::context&,
-    hal::byte p_address,
-    mem::scatter_span<hal::byte const> p_data_out,
-    mem::scatter_span<hal::byte> p_data_in) override
+  void driver_transaction(hal::byte p_address,
+                          mem::scatter_span<hal::byte const> p_data_out,
+                          mem::scatter_span<hal::byte> p_data_in) override
   {
     m_address = p_address;
     m_out = p_data_out;
@@ -63,12 +60,8 @@ private:
     if (m_address == failure_address) {
       throw hal::no_such_device(m_address, this);
     }
-
-    return {};
   }
 };
-
-async::inplace_context<1024> ctx;
 
 constexpr auto empty_scatter_span = mem::scatter_span<hal::byte>{};
 constexpr auto empty_const_scatter_span = mem::scatter_span<hal::byte const>{};
@@ -84,8 +77,7 @@ void write_test()
     mem::scatter_array<hal::byte const, 1> payload{ expected_payload };
 
     // Exercise
-    auto future = hal::write(ctx, i2c, successful_address, payload);
-    finish(future);
+    hal::write(i2c, successful_address, payload);
 
     // Verify
     expect(successful_address == i2c.m_address);
@@ -100,10 +92,8 @@ void write_test()
     mem::scatter_array<hal::byte const, 1> payload{ expected_payload };
 
     // Exercise
-    expect(throws<hal::no_such_device>([&i2c, &payload]() {
-      auto future = hal::write(ctx, i2c, failure_address, payload);
-      finish(future);
-    }));
+    expect(throws<hal::no_such_device>(
+      [&i2c, &payload]() { hal::write(i2c, failure_address, payload); }));
 
     // Verify
     expect(failure_address == i2c.m_address);
@@ -123,8 +113,7 @@ void read_test()
     mem::scatter_array<hal::byte, 1> payload{ expected_buffer };
 
     // Exercise
-    auto future = hal::read(ctx, i2c, successful_address, payload);
-    finish(future);
+    hal::read(i2c, successful_address, payload);
 
     // Verify
     expect(successful_address == i2c.m_address);
@@ -139,10 +128,8 @@ void read_test()
     mem::scatter_array<hal::byte, 1> payload{ expected_buffer };
 
     // Exercise
-    expect(throws<hal::no_such_device>([&i2c, &payload]() {
-      auto future = hal::read(ctx, i2c, failure_address, payload);
-      finish(future);
-    }));
+    expect(throws<hal::no_such_device>(
+      [&i2c, &payload]() { hal::read(i2c, failure_address, payload); }));
 
     // Verify
     expect(failure_address == i2c.m_address);
@@ -157,9 +144,7 @@ void read_test()
     expected.fill(filler_byte);
 
     // Exercise
-    auto future = hal::read<expected.size()>(ctx, i2c, successful_address);
-    finish(future);
-    auto actual = future.value();
+    auto actual = hal::read<expected.size()>(i2c, successful_address);
 
     // Verify
     expect(successful_address == i2c.m_address);
@@ -172,10 +157,8 @@ void read_test()
     test_i2c i2c;
 
     // Exercise
-    expect(throws<hal::no_such_device>([&i2c]() {
-      auto future = hal::read<5>(ctx, i2c, failure_address);
-      finish(future);
-    }));
+    expect(throws<hal::no_such_device>(
+      [&i2c]() { std::ignore = hal::read<5>(i2c, failure_address); }));
 
     // Verify
     expect(failure_address == i2c.m_address);
@@ -196,9 +179,7 @@ void write_then_read_test()
     mem::scatter_array<hal::byte, 1> in_payload{ expected_buffer };
 
     // Exercise
-    auto future = hal::write_then_read(
-      ctx, i2c, successful_address, out_payload, in_payload);
-    finish(future);
+    hal::write_then_read(i2c, successful_address, out_payload, in_payload);
 
     // Verify
     expect(successful_address == i2c.m_address);
@@ -217,9 +198,7 @@ void write_then_read_test()
 
     // Exercise
     expect(throws<hal::no_such_device>([&i2c, &out_payload, &in_payload]() {
-      auto future = hal::write_then_read(
-        ctx, i2c, failure_address, out_payload, in_payload);
-      finish(future);
+      hal::write_then_read(i2c, failure_address, out_payload, in_payload);
     }));
 
     // Verify
@@ -237,10 +216,8 @@ void write_then_read_test()
     mem::scatter_array<hal::byte const, 1> out_payload{ expected_payload };
 
     // Exercise
-    auto future = hal::write_then_read<expected.size()>(
-      ctx, i2c, successful_address, out_payload);
-    finish(future);
-    auto actual = future.value();
+    auto actual = hal::write_then_read<expected.size()>(
+      i2c, successful_address, out_payload);
 
     // Verify
     expect(successful_address == i2c.m_address);
@@ -256,9 +233,7 @@ void write_then_read_test()
 
     // Exercise
     expect(throws<hal::no_such_device>([&i2c, &out_payload]() {
-      auto future =
-        hal::write_then_read<5>(ctx, i2c, failure_address, out_payload);
-      finish(future);
+      std::ignore = hal::write_then_read<5>(i2c, failure_address, out_payload);
     }));
 
     // Verify
@@ -276,9 +251,7 @@ void probe_test()
     test_i2c i2c;
 
     // Exercise
-    auto future = hal::probe(ctx, i2c, successful_address);
-    finish(future);
-    auto exists = future.value();
+    auto exists = hal::probe(i2c, successful_address);
 
     // Verify
     expect(exists);
@@ -292,9 +265,7 @@ void probe_test()
     test_i2c i2c;
 
     // Exercise
-    auto future = hal::probe(ctx, i2c, failure_address);
-    finish(future);
-    auto exists = future.value();
+    auto exists = hal::probe(i2c, failure_address);
 
     // Verify
     expect(!exists);

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include <array>
-#include <coroutine>
 #include <cstdint>
 #include <optional>
 
@@ -74,16 +73,14 @@ public:
   std::size_t m_cursor = 0;
 
 private:
-  async::future<hal::hertz> driver_baud_rate(async::context&) override
+  hal::hertz driver_baud_rate() override
   {
-    co_return 100'000 * Hz;
+    return 100'000 * Hz;
   }
 
-  async::future<void> driver_send(async::context&,
-                                  hal::can_message const& p_message) override
+  void driver_send(hal::can_message const& p_message) override
   {
     m_last_sent_message = p_message;
-    return {};
   }
 
   hal::circular_span<hal::can_message const> driver_receive_buffer() override
@@ -96,8 +93,6 @@ private:
     return m_cursor % m_buffer.size();
   }
 };
-
-async::inplace_context<1024> ctx;
 
 void divider_test()
 {
@@ -291,8 +286,7 @@ void message_finder_test()
     };
 
     // Exercise
-    auto future = reader.transceiver().send(ctx, expected_message);
-    finish(future);
+    reader.transceiver().send(expected_message);
 
     // Verify
     expect(expected_message == test_transceiver.m_last_sent_message);

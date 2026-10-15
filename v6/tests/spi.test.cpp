@@ -14,7 +14,6 @@
 
 #include <algorithm>
 #include <array>
-#include <coroutine>
 
 #include <boost/ut.hpp>
 
@@ -37,27 +36,22 @@ public:
   hal::byte m_filler = hal::byte{ 0xFF };
 
 private:
-  async::future<void> driver_configure(async::context&,
-                                       settings const&) override
+  void driver_configure(settings const&) override
   {
-    return {};
   }
 
-  async::future<hal::hertz> driver_clock_rate(async::context&) override
+  hal::hertz driver_clock_rate() override
   {
     return hal::hertz{};
   }
 
-  async::future<void> driver_chip_select(async::context&, bool) override
+  void driver_chip_select(bool) override
   {
-    return {};
   }
 
-  async::future<void> driver_transfer(
-    async::context&,
-    mem::scatter_span<hal::byte const> p_data_out,
-    mem::scatter_span<hal::byte> p_data_in,
-    hal::byte p_filler) override
+  void driver_transfer(mem::scatter_span<hal::byte const> p_data_out,
+                       mem::scatter_span<hal::byte> p_data_in,
+                       hal::byte p_filler) override
   {
 
     m_out = p_data_out;
@@ -75,12 +69,8 @@ private:
     if (p_filler == failure_filler) {
       throw hal::io_error(this);
     }
-
-    return {};
   }
 };
-
-async::inplace_context<1024> ctx;
 
 constexpr auto empty_scatter_span = mem::scatter_span<hal::byte>{};
 constexpr auto empty_const_scatter_span = mem::scatter_span<hal::byte const>{};
@@ -98,8 +88,7 @@ void write_test()
 
     mem::scatter_array<hal::byte const, 3> payload{ buffer1, buffer2, buffer3 };
     // Exercise
-    auto future = hal::write(ctx, spi, payload);
-    finish(future);
+    hal::write(spi, payload);
 
     // Verify
     expect(that %
@@ -120,8 +109,7 @@ void read_test()
     mem::scatter_array<hal::byte, 1> payload{ expected_buffer };
 
     // Exercise
-    auto future = hal::read(ctx, spi, payload, filler_byte);
-    finish(future);
+    hal::read(spi, payload, filler_byte);
 
     // Verify
     expect(filler_byte == spi.m_filler);
@@ -136,10 +124,8 @@ void read_test()
     mem::scatter_array<hal::byte, 1> payload{ expected_buffer };
 
     // Exercise
-    expect(throws<hal::io_error>([&spi, &payload]() {
-      auto future = hal::read(ctx, spi, payload, failure_filler);
-      finish(future);
-    }))
+    expect(throws<hal::io_error>(
+      [&spi, &payload]() { hal::read(spi, payload, failure_filler); }))
       << "Exception not thrown!";
 
     // Verify
@@ -155,9 +141,7 @@ void read_test()
     expected_buffer.fill(filler_byte);
 
     // Exercise
-    auto future = hal::read<expected_buffer.size()>(ctx, spi, filler_byte);
-    finish(future);
-    auto actual_buffer = future.value();
+    auto actual_buffer = hal::read<expected_buffer.size()>(spi, filler_byte);
 
     // Verify
     expect(filler_byte == spi.m_filler);

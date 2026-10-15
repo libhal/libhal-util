@@ -15,7 +15,7 @@
 module;
 
 #include <array>
-#include <coroutine>
+#include <cstddef>
 #include <span>
 
 export module hal.util:spi;
@@ -37,15 +37,13 @@ namespace hal::inline v6 {
  * must be sent to a device and the device does not respond with anything or the
  * response is not necessary.
  *
- * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_spi - spi driver
  * @param p_data_out - data to be written to the spi bus
  */
-export async::future<void> write(async::context& p_ctx,
-                                 spi_channel& p_spi,
-                                 mem::scatter_span<hal::byte const> p_data_out)
+export void write(spi_channel& p_spi,
+                  mem::scatter_span<hal::byte const> p_data_out)
 {
-  co_await p_spi.transfer(p_ctx, p_data_out);
+  p_spi.transfer(p_data_out);
 }
 
 /**
@@ -54,18 +52,15 @@ export async::future<void> write(async::context& p_ctx,
  *
  * Filler bytes will be placed on the write/transmit line.
  *
- * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_spi - spi driver
  * @param p_data_in - buffer to receive bytes back from the spi bus
  * @param p_filler - filler data placed on the bus in place of actual data.
  */
-export async::future<void> read(
-  async::context& p_ctx,
-  spi_channel& p_spi,
-  mem::scatter_span<hal::byte> p_data_in,
-  hal::byte p_filler = spi_channel::default_filler)
+export void read(spi_channel& p_spi,
+                 mem::scatter_span<hal::byte> p_data_in,
+                 hal::byte p_filler = spi_channel::default_filler)
 {
-  co_await p_spi.transfer(p_ctx, {}, p_data_in, p_filler);
+  p_spi.transfer({}, p_data_in, p_filler);
 }
 /**
  * @ingroup SPI
@@ -74,7 +69,6 @@ export async::future<void> read(
  * Filler bytes will be placed on the write line.
  *
  * @tparam bytes_to_read - Number of bytes to read
- * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_spi - spi driver
  * @param p_filler - filler data placed on the bus in place of actual write
  * data.
@@ -82,14 +76,13 @@ export async::future<void> read(
  * from the spi bus
  */
 export template<size_t bytes_to_read>
-[[nodiscard]] async::future<std::array<hal::byte, bytes_to_read>> read(
-  async::context& p_ctx,
+[[nodiscard]] std::array<hal::byte, bytes_to_read> read(
   spi_channel& p_spi,
   hal::byte p_filler = spi_channel::default_filler)
 {
   std::array<hal::byte, bytes_to_read> buffer;
-  co_await read(p_ctx, p_spi, { buffer }, p_filler);
-  co_return buffer;
+  read(p_spi, { buffer }, p_filler);
+  return buffer;
 }
 
 /**
@@ -106,22 +99,19 @@ export template<size_t bytes_to_read>
  *    1. Write data to the bus, ignore the receive line
  *    2. Read from spi bus, filling the write line with filler
  *
- * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_spi - spi driver
  * @param p_data_out - bytes to write to the bus
  * @param p_data_in - buffer to receive bytes back from the spi bus
  * @param p_filler - filler data placed on the bus when the read operation
  * begins.
  */
-export async::future<void> write_then_read(
-  async::context& p_ctx,
-  spi_channel& p_spi,
-  mem::scatter_span<hal::byte const> p_data_out,
-  mem::scatter_span<hal::byte> p_data_in,
-  hal::byte p_filler = spi_channel::default_filler)
+export void write_then_read(spi_channel& p_spi,
+                            mem::scatter_span<hal::byte const> p_data_out,
+                            mem::scatter_span<hal::byte> p_data_in,
+                            hal::byte p_filler = spi_channel::default_filler)
 {
-  co_await write(p_ctx, p_spi, p_data_out);
-  co_await read(p_ctx, p_spi, p_data_in, p_filler);
+  write(p_spi, p_data_out);
+  read(p_spi, p_data_in, p_filler);
 }
 
 /**
@@ -133,7 +123,6 @@ export async::future<void> write_then_read(
  * See write_then_read() for details about this function.
  *
  * @tparam bytes_to_read - Number of bytes to read from the bus
- * @param p_ctx - async context for coroutine suspension and resumption.
  * @param p_spi - spi driver
  * @param p_data_out - bytes to write to the bus
  * @param p_filler - filler data placed on the bus when the read operation
@@ -142,13 +131,12 @@ export async::future<void> write_then_read(
  * read from the spi bus.
  */
 export template<size_t bytes_to_read>
-[[nodiscard]] async::future<std::array<hal::byte, bytes_to_read>>
-write_then_read(async::context& p_ctx,
-                spi_channel& p_spi,
-                mem::scatter_span<hal::byte const> p_data_out,
-                hal::byte p_filler = spi_channel::default_filler)
+[[nodiscard]] std::array<hal::byte, bytes_to_read> write_then_read(
+  spi_channel& p_spi,
+  mem::scatter_span<hal::byte const> p_data_out,
+  hal::byte p_filler = spi_channel::default_filler)
 {
-  co_await write(p_ctx, p_spi, p_data_out);
-  co_return co_await read<bytes_to_read>(p_ctx, p_spi, p_filler);
+  write(p_spi, p_data_out);
+  return read<bytes_to_read>(p_spi, p_filler);
 }
 }  // namespace hal::inline v6
