@@ -28,6 +28,10 @@ permissions:
 
 jobs:
   deploy_api_docs:
+    # Releases of other major versions (e.g. 6.0.0-alpha.1) are not v5 docs.
+    if: >-
+      github.event_name != 'release' ||
+      startsWith(github.ref_name, '5.')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
