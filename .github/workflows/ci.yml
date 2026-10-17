@@ -9,20 +9,64 @@ on:
   schedule:
     - cron: "0 12 * * 0"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Path filtering is done here rather than with `on.<event>.paths` because a
+  # workflow skipped by a path filter never reports its checks, leaving
+  # required status checks stuck in "pending".
+  changes:
+    name: 🔍 Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      v5: ${{ steps.filter.outputs.v5 }}
+      v6: ${{ steps.filter.outputs.v6 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            v5:
+              - "v5/**"
+              - ".github/workflows/ci.yml"
+            v6:
+              - "v6/**"
+              - ".github/workflows/ci.yml"
+
   library_check_v5:
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      needs.changes.outputs.v5 == 'true'
     uses: libhal/ci/.github/workflows/library_check.yml@5.x.y
     with:
       dir: v5
     secrets: inherit
 
   deployment_check_v5:
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      needs.changes.outputs.v5 == 'true'
     uses: libhal/ci/.github/workflows/package_and_upload_all.yml@5.x.y
     with:
       dir: v5
     secrets: inherit
 
   deployment_check_v6:
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      needs.changes.outputs.v6 == 'true'
     uses: libhal/ci/.github/workflows/package_and_upload_all.yml@5.x.y
     with:
       modules_support_needed: true
@@ -31,3 +75,18 @@ jobs:
       llvm_profile: hal/tc/llvm-23
       conan_version: 2.33.0  # first release that knows clang 23
     secrets: inherit
+
+  # Single required status check for branch protection. Passes when every
+  # needed job either succeeded or was skipped because its directory was
+  # untouched.
+  ci_status:
+    name: ✅ CI Status
+    if: always()
+    needs: [changes, library_check_v5, deployment_check_v5, deployment_check_v6]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check job results
+        if: >-
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled')
+        run: exit 1
