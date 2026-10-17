@@ -35,6 +35,7 @@ libhal_add_library(util
         modules/comparison.cppm
         modules/enum.cppm
         modules/i2c.cppm
+        modules/interrupts.cppm
         modules/map.cppm
         modules/math.cppm
         modules/overflow_counter.cppm
@@ -61,6 +62,7 @@ libhal_add_tests(util
         can
         enum
         i2c
+        interrupts
         map
         math
         overflow_counter
@@ -75,4 +77,10 @@ libhal_add_tests(util
         libhal::libhal
     PACKAGES
         libhal
+)
+
+libhal_add_compile_checks(util
+    FILES
+        tests/compile_checks/dispatcher_rejects.cpp
+        tests/compile_checks/dispatcher_analysis.cpp
 )
