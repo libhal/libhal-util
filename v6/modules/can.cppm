@@ -15,6 +15,8 @@
 module;
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <optional>
@@ -146,9 +148,9 @@ export [[nodiscard]] constexpr std::uint16_t bit_width(
  * can bus peripheral. Returns std::nullopt if the target baud rate is not
  * achievable with the provided operating frequency.
  */
-export [[nodiscard]] std::optional<can_bus_divider_t>
-calculate_can_bus_divider(hertz p_operating_frequency,
-                          hertz p_target_baud_rate)
+export [[nodiscard]] std::optional<can_bus_divider_t> calculate_can_bus_divider(
+  hertz p_operating_frequency,
+  hertz p_target_baud_rate)
 {
   can_bus_divider_t timing{};
 
@@ -300,5 +302,209 @@ private:
   hal::can_transceiver* m_transceiver;
   hal::u32 m_id;
   std::size_t m_receive_cursor = 0;
+};
+
+/**
+ * @brief Which messages a `hal::can_interrupt_dispatcher` slot receives
+ * @ingroup CAN_Utilities
+ *
+ * A message matches when it uses the same ID format (standard or extended)
+ * and `(message.id & mask) == (id & mask)`. A mask with every ID bit set
+ * matches one ID; a partial mask matches a block of IDs.
+ *
+ * ```cpp
+ * // Standard IDs 0x100 to 0x10F
+ * hal::can_dispatch_filter{ .id = 0x100, .mask = 0x7F0 };
+ * // Only extended ID 0x18FF'0001
+ * hal::can_dispatch_filter{
+ *   .id = 0x18FF'0001, .mask = 0x1FFF'FFFF, .extended = true
+ * };
+ * ```
+ */
+export struct can_dispatch_filter
+{
+  /// ID to compare against, after masking
+  hal::u32 id = 0;
+  /// ID bits that must match; zero matches every ID of the format
+  hal::u32 mask = 0;
+  /// True to match extended (29-bit) IDs, false for standard (11-bit) IDs
+  bool extended = false;
+
+  /**
+   * @param p_message - a received message
+   * @return true - if the message passes this filter
+   */
+  [[nodiscard]] constexpr bool matches(
+    can_message const& p_message) const noexcept
+  {
+    return p_message.extended == extended &&
+           (p_message.id & mask) == (id & mask);
+  }
+
+  constexpr bool operator==(can_dispatch_filter const&) const = default;
+};
+
+/**
+ * @brief Shares one CAN receive interrupt among several subscribers
+ * @ingroup CAN_Utilities
+ *
+ * `hal::can_interrupt` accepts one subscriber at a time. The dispatcher
+ * subscribes once to a real `hal::can_interrupt` and provides `SlotCount`
+ * slots. Each slot is a `hal::can_interrupt` with its own subscriber and an
+ * optional `hal::can_dispatch_filter`.
+ *
+ * Each received message is passed, in slot order and in interrupt context, to
+ * the subscriber of every slot whose filter accepts it. A slot without a
+ * filter receives every message. This filters in software after any hardware
+ * filter, so it only sees messages the hardware already accepted.
+ *
+ * Neither the dispatcher nor its slots may outlive the real interrupt, and
+ * the slots may not outlive the dispatcher.
+ *
+ * Usage:
+ *
+ * ```cpp
+ * hal::can_interrupt_dispatcher<2> dispatcher(can_interrupt);
+ * dispatcher[0].allow(hal::can_dispatch_filter{ .id = 0x120, .mask = 0x7FF });
+ * motor_controller motor(dispatcher[0]);
+ * bus_logger logger(dispatcher[1]);
+ * ```
+ *
+ * @tparam SlotCount - number of slots
+ */
+export template<std::size_t SlotCount>
+class can_interrupt_dispatcher final : private can_receive_callback
+{
+public:
+  /**
+   * @brief One subscriber's view of the shared CAN receive interrupt
+   */
+  class slot final : public can_interrupt
+  {
+  public:
+    slot() = default;
+    slot(slot const&) = delete;
+    slot& operator=(slot const&) = delete;
+    slot(slot&&) = delete;
+    slot& operator=(slot&&) = delete;
+    ~slot() = default;
+
+    /**
+     * @brief Choose which messages this slot receives
+     *
+     * The filter can only change while the slot has no subscriber, so the
+     * interrupt never sees a half-written filter. To change it, destroy the
+     * subscription, call allow(), and subscribe again.
+     *
+     * @param p_filter - the messages to receive; std::nullopt for every
+     * message (the default)
+     * @throws hal::subscription_busy - if the slot has a subscriber
+     */
+    void allow(std::optional<can_dispatch_filter> p_filter)
+    {
+      if (m_callback != nullptr) {
+        throw subscription_busy(this);
+      }
+      m_filter = p_filter;
+    }
+
+    /// @return std::optional<can_dispatch_filter> - the slot's filter
+    [[nodiscard]] std::optional<can_dispatch_filter> filter() const noexcept
+    {
+      return m_filter;
+    }
+
+  private:
+    friend class can_interrupt_dispatcher;
+
+    void dispatch(can_message const& p_message) noexcept
+    {
+      // Read the callback once: a subscriber can be removed between messages.
+      auto* const callback = m_callback;
+      if (callback == nullptr) {
+        return;
+      }
+      if (m_filter && not m_filter->matches(p_message)) {
+        return;
+      }
+      callback->callback(p_message);
+    }
+
+    void driver_on_receive(can_receive_callback& p_callback) override
+    {
+      if (m_callback != nullptr) {
+        throw subscription_busy(this);
+      }
+      m_callback = &p_callback;
+    }
+
+    void driver_clear_receive() noexcept override
+    {
+      m_callback = nullptr;
+    }
+
+    can_receive_callback* m_callback = nullptr;
+    std::optional<can_dispatch_filter> m_filter;
+  };
+
+  /**
+   * @brief Subscribe to a CAN receive interrupt and provide its slots
+   *
+   * @warning Never construct the dispatcher from an interrupt service
+   * routine. It subscribes to the interrupt, which throws
+   * `hal::subscription_busy` if the interrupt already has a subscriber.
+   *
+   * @param p_interrupt - the CAN receive interrupt to share
+   * @throws hal::subscription_busy - if the interrupt already has a subscriber
+   */
+  explicit can_interrupt_dispatcher(can_interrupt& p_interrupt
+                                    [[clang::lifetimebound]])
+    : m_subscription(p_interrupt.on_receive(*this))
+  {
+  }
+
+  can_interrupt_dispatcher(can_interrupt_dispatcher const&) = delete;
+  can_interrupt_dispatcher& operator=(can_interrupt_dispatcher const&) = delete;
+  can_interrupt_dispatcher(can_interrupt_dispatcher&&) = delete;
+  can_interrupt_dispatcher& operator=(can_interrupt_dispatcher&&) = delete;
+  ~can_interrupt_dispatcher() = default;
+
+  /**
+   * @brief Access a slot
+   *
+   * @param p_index - index of the slot
+   * @return slot& - the slot, which must not outlive the dispatcher
+   * @throws hal::out_of_range - if p_index is not less than SlotCount
+   */
+  [[nodiscard]] slot& operator[](std::size_t p_index) & [[clang::lifetimebound]]
+  {
+    if (p_index >= SlotCount) {
+      throw hal::out_of_range(this,
+                              { .m_index = p_index, .m_capacity = SlotCount });
+    }
+    return m_slots[p_index];
+  }
+
+  /// A slot of a temporary dispatcher would dangle immediately.
+  slot& operator[](std::size_t p_index) && = delete;
+
+  /// @return std::size_t - number of slots
+  [[nodiscard]] static constexpr std::size_t size() noexcept
+  {
+    return SlotCount;
+  }
+
+private:
+  void callback(can_message const& p_message) noexcept override
+  {
+    for (auto& slot : m_slots) {
+      slot.dispatch(p_message);
+    }
+  }
+
+  std::array<slot, SlotCount> m_slots{};
+  // Last, so the real interrupt stops calling the dispatcher before the slots
+  // are destroyed.
+  subscription m_subscription;
 };
 }  // namespace hal::inline v6

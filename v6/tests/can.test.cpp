@@ -15,6 +15,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 #include <boost/ut.hpp>
 
@@ -306,10 +307,209 @@ void message_finder_test()
   };
 }
 
+struct fake_can_interrupt final : hal::can_interrupt
+{
+  void receive(hal::can_message const& p_message)
+  {
+    if (callback != nullptr) {
+      callback->callback(p_message);
+    }
+  }
+
+  hal::can_receive_callback* callback = nullptr;
+
+private:
+  void driver_on_receive(hal::can_receive_callback& p_callback) override
+  {
+    if (callback != nullptr) {
+      throw hal::subscription_busy(this);
+    }
+    callback = &p_callback;
+  }
+  void driver_clear_receive() noexcept override
+  {
+    callback = nullptr;
+  }
+};
+
+struct message_recorder final : hal::can_receive_callback
+{
+  void callback(hal::can_message const& p_message) noexcept override
+  {
+    ids.push_back(p_message.id);
+  }
+  std::vector<hal::u32> ids;
+};
+
+void can_interrupt_dispatcher_test()
+{
+  using namespace boost::ut;
+
+  "subscribes to the interrupt for its lifetime"_test = []() {
+    // Setup
+    fake_can_interrupt interrupt;
+
+    // Exercise
+    {
+      hal::can_interrupt_dispatcher<2> dispatcher(interrupt);
+
+      // Verify
+      expect(interrupt.callback != nullptr);
+    }
+
+    // Verify
+    expect(interrupt.callback == nullptr) << "destroying it unsubscribes";
+  };
+
+  "throws when the interrupt already has a subscriber"_test = []() {
+    // Setup
+    fake_can_interrupt interrupt;
+    message_recorder other;
+    auto subscription = interrupt.on_receive(other);
+
+    // Exercise + Verify
+    expect(throws<hal::subscription_busy>(
+      [&]() { hal::can_interrupt_dispatcher<2> dispatcher(interrupt); }));
+  };
+
+  "forwards every message to every subscribed slot"_test = []() {
+    // Setup
+    fake_can_interrupt interrupt;
+    hal::can_interrupt_dispatcher<3> dispatcher(interrupt);
+    message_recorder first;
+    message_recorder third;
+    auto first_subscription = dispatcher[0].on_receive(first);
+    auto third_subscription = dispatcher[2].on_receive(third);
+
+    // Exercise
+    interrupt.receive({ .id = 0x111 });
+    interrupt.receive({ .id = 0x222 });
+
+    // Verify
+    expect(that % first.ids == std::vector<hal::u32>{ 0x111, 0x222 });
+    expect(that % third.ids == std::vector<hal::u32>{ 0x111, 0x222 });
+  };
+
+  "a slot accepts one subscriber at a time"_test = []() {
+    // Setup
+    fake_can_interrupt interrupt;
+    hal::can_interrupt_dispatcher<1> dispatcher(interrupt);
+    message_recorder first;
+    message_recorder second;
+
+    // Exercise + Verify
+    {
+      auto subscription = dispatcher[0].on_receive(first);
+      expect(throws<hal::subscription_busy>(
+        [&]() { auto busy = dispatcher[0].on_receive(second); }));
+    }
+    auto subscription = dispatcher[0].on_receive(second);
+    interrupt.receive({ .id = 0x333 });
+    expect(that % first.ids.size() == 0);
+    expect(that % second.ids == std::vector<hal::u32>{ 0x333 });
+  };
+
+  "operator[] throws out_of_range past the last slot"_test = []() {
+    // Setup
+    fake_can_interrupt interrupt;
+    hal::can_interrupt_dispatcher<2> dispatcher(interrupt);
+
+    // Exercise + Verify
+    expect(throws<hal::out_of_range>([&]() { (void)dispatcher[2]; }));
+    expect(that % dispatcher.size() == 2);
+  };
+
+  "a slot only receives messages its filter accepts"_test = []() {
+    // Setup
+    fake_can_interrupt interrupt;
+    hal::can_interrupt_dispatcher<3> dispatcher(interrupt);
+    message_recorder block;
+    message_recorder exact;
+    message_recorder everything;
+    dispatcher[0].allow(hal::can_dispatch_filter{ .id = 0x100, .mask = 0x7F0 });
+    dispatcher[1].allow(hal::can_dispatch_filter{ .id = 0x123, .mask = 0x7FF });
+    auto block_subscription = dispatcher[0].on_receive(block);
+    auto exact_subscription = dispatcher[1].on_receive(exact);
+    auto everything_subscription = dispatcher[2].on_receive(everything);
+
+    // Exercise
+    interrupt.receive({ .id = 0x100 });
+    interrupt.receive({ .id = 0x10F });
+    interrupt.receive({ .id = 0x110 });
+    interrupt.receive({ .id = 0x123 });
+
+    // Verify
+    expect(that % block.ids == std::vector<hal::u32>{ 0x100, 0x10F });
+    expect(that % exact.ids == std::vector<hal::u32>{ 0x123 });
+    expect(that % everything.ids ==
+           std::vector<hal::u32>{ 0x100, 0x10F, 0x110, 0x123 });
+  };
+
+  "a filter only matches its own ID format"_test = []() {
+    // Setup
+    fake_can_interrupt interrupt;
+    hal::can_interrupt_dispatcher<2> dispatcher(interrupt);
+    message_recorder standard;
+    message_recorder extended;
+    dispatcher[0].allow(hal::can_dispatch_filter{ .id = 0x123, .mask = 0x7FF });
+    dispatcher[1].allow(hal::can_dispatch_filter{
+      .id = 0x123, .mask = 0x1FFF'FFFF, .extended = true });
+    auto standard_subscription = dispatcher[0].on_receive(standard);
+    auto extended_subscription = dispatcher[1].on_receive(extended);
+
+    // Exercise
+    interrupt.receive({ .id = 0x123, .extended = false });
+    interrupt.receive({ .id = 0x123, .extended = true });
+    interrupt.receive({ .id = 0x1000'0123, .extended = true });
+
+    // Verify
+    expect(that % standard.ids == std::vector<hal::u32>{ 0x123 });
+    expect(that % extended.ids == std::vector<hal::u32>{ 0x123 })
+      << "the extended filter rejects a different extended ID with the same "
+         "low bits";
+  };
+
+  "a zero mask matches every ID of its format"_test = []() {
+    // Setup
+    fake_can_interrupt interrupt;
+    hal::can_interrupt_dispatcher<1> dispatcher(interrupt);
+    message_recorder recorder;
+    dispatcher[0].allow(hal::can_dispatch_filter{ .extended = true });
+    auto subscription = dispatcher[0].on_receive(recorder);
+
+    // Exercise
+    interrupt.receive({ .id = 0x7FF, .extended = false });
+    interrupt.receive({ .id = 0x1ABC'DEF0, .extended = true });
+
+    // Verify
+    expect(that % recorder.ids == std::vector<hal::u32>{ 0x1ABC'DEF0 });
+  };
+
+  "the filter can only change without a subscriber"_test = []() {
+    // Setup
+    fake_can_interrupt interrupt;
+    hal::can_interrupt_dispatcher<1> dispatcher(interrupt);
+    message_recorder recorder;
+    auto const filter = hal::can_dispatch_filter{ .id = 0x10, .mask = 0x7FF };
+
+    // Exercise + Verify
+    expect(not dispatcher[0].filter().has_value()) << "no filter by default";
+    {
+      auto subscription = dispatcher[0].on_receive(recorder);
+      expect(
+        throws<hal::subscription_busy>([&]() { dispatcher[0].allow(filter); }));
+    }
+    dispatcher[0].allow(filter);
+    expect(dispatcher[0].filter() == filter);
+    dispatcher[0].allow(std::nullopt);
+    expect(not dispatcher[0].filter().has_value());
+  };
+}
 }  // namespace
 
 int main()
 {
   divider_test();
   message_finder_test();
+  can_interrupt_dispatcher_test();
 }
