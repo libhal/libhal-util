@@ -67,4 +67,25 @@ export hal::u64 future_deadline(hal::steady_clock& p_steady_clock,
 
   return future_timestamp;
 }
+
+/**
+ * @ingroup SteadyClock
+ * @brief Busy-wait for a duration of time using a steady clock
+ *
+ * Spins on `p_steady_clock.uptime()` without sleeping, so it works before a
+ * waiter is installed. Prefer `hal::sleep_for()` once one is, so the CPU can
+ * idle while it waits.
+ *
+ * @param p_steady_clock - steady clock to measure the delay with
+ * @param p_duration - the amount of time to delay for. A zero or negative
+ * duration delays for one tick of p_steady_clock.
+ */
+export void delay(hal::steady_clock& p_steady_clock,
+                  hal::time_duration p_duration)
+{
+  auto const deadline = future_deadline(p_steady_clock, p_duration);
+  while (p_steady_clock.uptime() < deadline) {
+    continue;
+  }
+}
 }  // namespace hal::inline v6

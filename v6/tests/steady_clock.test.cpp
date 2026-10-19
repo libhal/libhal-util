@@ -62,9 +62,47 @@ void future_deadline_test()
   };
 }
 
+void delay_test()
+{
+  using namespace boost::ut;
+
+  "hal::delay(hal::steady_clock, duration) waits until the deadline"_test =
+    []() {
+      // Setup
+      using namespace std::chrono_literals;
+      dummy_steady_clock test_steady_clock;
+      dummy_steady_clock reference_clock;
+      // Both clocks start at the same uptime, so this is the deadline delay()
+      // computes.
+      auto const deadline = hal::future_deadline(reference_clock, 1us);
+
+      // Exercise
+      hal::delay(test_steady_clock, 1us);
+
+      // Verify
+      // The last uptime() read returned the deadline, then incremented.
+      expect(that % test_steady_clock.m_uptime == deadline + 1);
+    };
+
+  "hal::delay(hal::steady_clock, duration) waits one tick for zero"_test =
+    []() {
+      // Setup
+      using namespace std::chrono_literals;
+      dummy_steady_clock test_steady_clock;
+      test_steady_clock.m_uptime = 0;
+
+      // Exercise
+      hal::delay(test_steady_clock, 0ns);
+
+      // Verify
+      // future_deadline() reads 0 and returns 1; then uptime() reads 1.
+      expect(that % test_steady_clock.m_uptime == 2);
+    };
+}
 }  // namespace
 
 int main()
 {
   future_deadline_test();
+  delay_test();
 }
