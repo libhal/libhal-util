@@ -35,8 +35,8 @@ class edge_triggered_interrupt_dispatcher;
  * `hal::edge_triggered_interrupt_dispatcher`
  * @ingroup Interrupt_Utilities
  *
- * Get slots from a dispatcher's `operator[]`. Every dispatcher, whatever its
- * slot count, uses this one type.
+ * Only a dispatcher can create slots; get them from its `operator[]`. Every
+ * dispatcher, whatever its slot count, uses this one type.
  *
  * A slot starts with the trigger setting `edge_trigger::rising`. Configuring
  * a slot changes only which edges reach its subscriber, not the real pin.
@@ -45,7 +45,6 @@ export class edge_triggered_interrupt_slot final
   : public edge_triggered_interrupt
 {
 public:
-  edge_triggered_interrupt_slot() = default;
   edge_triggered_interrupt_slot(edge_triggered_interrupt_slot const&) = delete;
   edge_triggered_interrupt_slot& operator=(
     edge_triggered_interrupt_slot const&) = delete;
@@ -57,6 +56,8 @@ public:
 private:
   template<std::size_t SlotCount>
   friend class edge_triggered_interrupt_dispatcher;
+
+  edge_triggered_interrupt_slot() = default;
 
   void dispatch(bool p_state) noexcept
   {
