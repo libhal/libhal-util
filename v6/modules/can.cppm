@@ -305,15 +305,80 @@ private:
   std::size_t m_receive_cursor = 0;
 };
 
+export template<std::size_t SlotCount>
+class can_interrupt_dispatcher;
+
+/**
+ * @brief One subscriber's view of a CAN receive interrupt shared by
+ * `hal::can_interrupt_dispatcher`
+ * @ingroup CAN_Utilities
+ *
+ * Get slots from a dispatcher's `operator[]`. Every dispatcher, whatever its
+ * slot count, uses this one type.
+ */
+export class can_interrupt_slot final : public can_interrupt
+{
+public:
+  can_interrupt_slot() = default;
+  can_interrupt_slot(can_interrupt_slot const&) = delete;
+  can_interrupt_slot& operator=(can_interrupt_slot const&) = delete;
+  can_interrupt_slot(can_interrupt_slot&&) = delete;
+  can_interrupt_slot& operator=(can_interrupt_slot&&) = delete;
+  ~can_interrupt_slot() = default;
+
+private:
+  template<std::size_t SlotCount>
+  friend class can_interrupt_dispatcher;
+
+  void dispatch(can_message const& p_message) noexcept
+  {
+    // Read the callback once: a subscriber can be removed between messages.
+    auto* const callback = m_callback;
+    if (callback == nullptr) {
+      return;
+    }
+    // Pairs with the fence in driver_on_receive(): the filter is read after
+    // the callback, so it is never one written for an earlier subscriber.
+    std::atomic_signal_fence(std::memory_order_acquire);
+    if (not m_filter.matches(p_message)) {
+      return;
+    }
+    callback->callback(p_message);
+  }
+
+  void driver_on_receive(can_receive_callback& p_callback,
+                         can_receive_filter p_filter) override
+  {
+    if (m_callback != nullptr) {
+      throw subscription_busy(this);
+    }
+    // The slot has no subscriber, so the interrupt ignores it while the
+    // filter is written. The fence keeps the compiler from moving that
+    // write after the callback store that makes the slot live.
+    m_filter = p_filter;
+    std::atomic_signal_fence(std::memory_order_release);
+    m_callback = &p_callback;
+  }
+
+  void driver_clear_receive() noexcept override
+  {
+    m_callback = nullptr;
+  }
+
+  can_receive_callback* m_callback = nullptr;
+  can_receive_filter m_filter{};
+};
+
 /**
  * @brief Shares one CAN receive interrupt among several subscribers
  * @ingroup CAN_Utilities
  *
  * `hal::can_interrupt` accepts one subscriber at a time. The dispatcher
  * subscribes once to a real `hal::can_interrupt`, for every message, and
- * provides `SlotCount` slots. Each slot is a `hal::can_interrupt` for one
- * subscriber, and each subscriber passes its own `hal::can_receive_filter`
- * when it subscribes, the same as with a real interrupt.
+ * provides `SlotCount` slots. Each slot is a `hal::can_interrupt_slot`, a
+ * `hal::can_interrupt` for one subscriber, and each subscriber passes its own
+ * `hal::can_receive_filter` when it subscribes, the same as with a real
+ * interrupt.
  *
  * Each received message is passed, in slot order and in interrupt context, to
  * the subscriber of every slot whose filter passes it. This filters in
@@ -338,61 +403,6 @@ export template<std::size_t SlotCount>
 class can_interrupt_dispatcher final : private can_receive_callback
 {
 public:
-  /**
-   * @brief One subscriber's view of the shared CAN receive interrupt
-   */
-  class slot final : public can_interrupt
-  {
-  public:
-    slot() = default;
-    slot(slot const&) = delete;
-    slot& operator=(slot const&) = delete;
-    slot(slot&&) = delete;
-    slot& operator=(slot&&) = delete;
-    ~slot() = default;
-
-  private:
-    friend class can_interrupt_dispatcher;
-
-    void dispatch(can_message const& p_message) noexcept
-    {
-      // Read the callback once: a subscriber can be removed between messages.
-      auto* const callback = m_callback;
-      if (callback == nullptr) {
-        return;
-      }
-      // Pairs with the fence in driver_on_receive(): the filter is read after
-      // the callback, so it is never one written for an earlier subscriber.
-      std::atomic_signal_fence(std::memory_order_acquire);
-      if (not m_filter.matches(p_message)) {
-        return;
-      }
-      callback->callback(p_message);
-    }
-
-    void driver_on_receive(can_receive_callback& p_callback,
-                           can_receive_filter p_filter) override
-    {
-      if (m_callback != nullptr) {
-        throw subscription_busy(this);
-      }
-      // The slot has no subscriber, so the interrupt ignores it while the
-      // filter is written. The fence keeps the compiler from moving that
-      // write after the callback store that makes the slot live.
-      m_filter = p_filter;
-      std::atomic_signal_fence(std::memory_order_release);
-      m_callback = &p_callback;
-    }
-
-    void driver_clear_receive() noexcept override
-    {
-      m_callback = nullptr;
-    }
-
-    can_receive_callback* m_callback = nullptr;
-    can_receive_filter m_filter{};
-  };
-
   /**
    * @brief Subscribe to a CAN receive interrupt and provide its slots
    *
@@ -419,10 +429,12 @@ public:
    * @brief Access a slot
    *
    * @param p_index - index of the slot
-   * @return slot& - the slot, which must not outlive the dispatcher
+   * @return can_interrupt_slot& - the slot, which must not outlive the
+   * dispatcher
    * @throws hal::out_of_range - if p_index is not less than SlotCount
    */
-  [[nodiscard]] slot& operator[](std::size_t p_index) & [[clang::lifetimebound]]
+  [[nodiscard]] can_interrupt_slot& operator[](
+    std::size_t p_index) & [[clang::lifetimebound]]
   {
     if (p_index >= SlotCount) {
       throw hal::out_of_range(this,
@@ -432,7 +444,7 @@ public:
   }
 
   /// A slot of a temporary dispatcher would dangle immediately.
-  slot& operator[](std::size_t p_index) && = delete;
+  can_interrupt_slot& operator[](std::size_t p_index) && = delete;
 
   /// @return std::size_t - number of slots
   [[nodiscard]] static constexpr std::size_t size() noexcept
@@ -448,7 +460,7 @@ private:
     }
   }
 
-  std::array<slot, SlotCount> m_slots{};
+  std::array<can_interrupt_slot, SlotCount> m_slots{};
   // Last, so the real interrupt stops calling the dispatcher before the slots
   // are destroyed.
   subscription m_subscription;

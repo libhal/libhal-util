@@ -47,7 +47,7 @@ void index_temporary_can_dispatcher(fake_can_interrupt& p_interrupt)
 {
   // expected-error@+1 {{overload resolution selected deleted operator '[]'}}
   auto& slot = can_dispatcher(p_interrupt)[0];
-  (void)slot;
+  static_cast<void>(slot);
 }
 
 void can_dispatcher_on_temporary_interrupt()

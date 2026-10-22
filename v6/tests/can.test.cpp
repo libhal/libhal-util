@@ -15,6 +15,8 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <boost/ut.hpp>
@@ -26,6 +28,13 @@ import test_util;
 using namespace mp_units::si::unit_symbols;
 
 namespace {
+
+// Every dispatcher hands out the same slot type, whatever its slot count.
+template<std::size_t SlotCount>
+using can_slot_of = std::remove_reference_t<
+  decltype(std::declval<hal::can_interrupt_dispatcher<SlotCount>&>()[0])>;
+static_assert(std::is_same_v<can_slot_of<2>, hal::can_interrupt_slot>);
+static_assert(std::is_same_v<can_slot_of<7>, hal::can_interrupt_slot>);
 
 void check_validity(hal::hertz p_operating_frequency,
                     hal::hertz p_target_baud_rate)
@@ -418,7 +427,8 @@ void can_interrupt_dispatcher_test()
     hal::can_interrupt_dispatcher<2> dispatcher(interrupt);
 
     // Exercise + Verify
-    expect(throws<hal::out_of_range>([&]() { (void)dispatcher[2]; }));
+    expect(
+      throws<hal::out_of_range>([&]() { static_cast<void>(dispatcher[2]); }));
     expect(that % dispatcher.size() == 2);
   };
 
