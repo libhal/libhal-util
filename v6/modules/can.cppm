@@ -313,13 +313,12 @@ class can_interrupt_dispatcher;
  * `hal::can_interrupt_dispatcher`
  * @ingroup CAN_Utilities
  *
- * Get slots from a dispatcher's `operator[]`. Every dispatcher, whatever its
- * slot count, uses this one type.
+ * Only a dispatcher can create slots; get them from its `operator[]`. Every
+ * dispatcher, whatever its slot count, uses this one type.
  */
 export class can_interrupt_slot final : public can_interrupt
 {
 public:
-  can_interrupt_slot() = default;
   can_interrupt_slot(can_interrupt_slot const&) = delete;
   can_interrupt_slot& operator=(can_interrupt_slot const&) = delete;
   can_interrupt_slot(can_interrupt_slot&&) = delete;
@@ -329,6 +328,8 @@ public:
 private:
   template<std::size_t SlotCount>
   friend class can_interrupt_dispatcher;
+
+  can_interrupt_slot() = default;
 
   void dispatch(can_message const& p_message) noexcept
   {

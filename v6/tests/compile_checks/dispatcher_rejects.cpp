@@ -62,3 +62,10 @@ void copy_can_dispatcher(fake_can_interrupt& p_interrupt)
   // expected-error@+1 {{call to deleted constructor}}
   can_dispatcher copy = shared;
 }
+
+// A slot only works inside a dispatcher, so only a dispatcher creates one.
+void construct_can_slot()
+{
+  // expected-error@+1 {{private constructor}}
+  hal::can_interrupt_slot slot;
+}
