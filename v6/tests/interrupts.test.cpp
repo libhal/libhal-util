@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstddef>
 #include <optional>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <boost/ut.hpp>
@@ -21,6 +24,14 @@ import hal;
 import hal.util;
 
 namespace {
+
+// Every dispatcher hands out the same slot type, whatever its slot count.
+template<std::size_t SlotCount>
+using slot_of = std::remove_reference_t<
+  decltype(std::declval<
+           hal::edge_triggered_interrupt_dispatcher<SlotCount>&>()[0])>;
+static_assert(std::is_same_v<slot_of<2>, hal::edge_triggered_interrupt_slot>);
+static_assert(std::is_same_v<slot_of<7>, hal::edge_triggered_interrupt_slot>);
 struct fake_pin final : hal::edge_triggered_interrupt
 {
   void trigger(bool p_state)
@@ -167,7 +178,8 @@ void edge_triggered_interrupt_dispatcher_test()
     hal::edge_triggered_interrupt_dispatcher<2> dispatcher(pin);
 
     // Exercise + Verify
-    expect(throws<hal::out_of_range>([&]() { (void)dispatcher[2]; }));
+    expect(
+      throws<hal::out_of_range>([&]() { static_cast<void>(dispatcher[2]); }));
     expect(that % dispatcher.size() == 2);
   };
 }
