@@ -16,6 +16,7 @@ module;
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -305,58 +306,19 @@ private:
 };
 
 /**
- * @brief Which messages a `hal::can_interrupt_dispatcher` slot receives
- * @ingroup CAN_Utilities
- *
- * A message matches when it uses the same ID format (standard or extended)
- * and `(message.id & mask) == (id & mask)`. A mask with every ID bit set
- * matches one ID; a partial mask matches a block of IDs.
- *
- * ```cpp
- * // Standard IDs 0x100 to 0x10F
- * hal::can_dispatch_filter{ .id = 0x100, .mask = 0x7F0 };
- * // Only extended ID 0x18FF'0001
- * hal::can_dispatch_filter{
- *   .id = 0x18FF'0001, .mask = 0x1FFF'FFFF, .extended = true
- * };
- * ```
- */
-export struct can_dispatch_filter
-{
-  /// ID to compare against, after masking
-  hal::u32 id = 0;
-  /// ID bits that must match; zero matches every ID of the format
-  hal::u32 mask = 0;
-  /// True to match extended (29-bit) IDs, false for standard (11-bit) IDs
-  bool extended = false;
-
-  /**
-   * @param p_message - a received message
-   * @return true - if the message passes this filter
-   */
-  [[nodiscard]] constexpr bool matches(
-    can_message const& p_message) const noexcept
-  {
-    return p_message.extended == extended &&
-           (p_message.id & mask) == (id & mask);
-  }
-
-  constexpr bool operator==(can_dispatch_filter const&) const = default;
-};
-
-/**
  * @brief Shares one CAN receive interrupt among several subscribers
  * @ingroup CAN_Utilities
  *
  * `hal::can_interrupt` accepts one subscriber at a time. The dispatcher
- * subscribes once to a real `hal::can_interrupt` and provides `SlotCount`
- * slots. Each slot is a `hal::can_interrupt` with its own subscriber and an
- * optional `hal::can_dispatch_filter`.
+ * subscribes once to a real `hal::can_interrupt`, for every message, and
+ * provides `SlotCount` slots. Each slot is a `hal::can_interrupt` for one
+ * subscriber, and each subscriber passes its own `hal::can_receive_filter`
+ * when it subscribes, the same as with a real interrupt.
  *
  * Each received message is passed, in slot order and in interrupt context, to
- * the subscriber of every slot whose filter accepts it. A slot without a
- * filter receives every message. This filters in software after any hardware
- * filter, so it only sees messages the hardware already accepted.
+ * the subscriber of every slot whose filter passes it. This filters in
+ * software after any hardware filter, so it only sees messages the hardware
+ * already accepted.
  *
  * Neither the dispatcher nor its slots may outlive the real interrupt, and
  * the slots may not outlive the dispatcher.
@@ -365,7 +327,7 @@ export struct can_dispatch_filter
  *
  * ```cpp
  * hal::can_interrupt_dispatcher<2> dispatcher(can_interrupt);
- * dispatcher[0].allow(hal::can_dispatch_filter{ .id = 0x120, .mask = 0x7FF });
+ * // Each driver subscribes with the filter for the IDs it handles.
  * motor_controller motor(dispatcher[0]);
  * bus_logger logger(dispatcher[1]);
  * ```
@@ -389,31 +351,6 @@ public:
     slot& operator=(slot&&) = delete;
     ~slot() = default;
 
-    /**
-     * @brief Choose which messages this slot receives
-     *
-     * The filter can only change while the slot has no subscriber, so the
-     * interrupt never sees a half-written filter. To change it, destroy the
-     * subscription, call allow(), and subscribe again.
-     *
-     * @param p_filter - the messages to receive; std::nullopt for every
-     * message (the default)
-     * @throws hal::subscription_busy - if the slot has a subscriber
-     */
-    void allow(std::optional<can_dispatch_filter> p_filter)
-    {
-      if (m_callback != nullptr) {
-        throw subscription_busy(this);
-      }
-      m_filter = p_filter;
-    }
-
-    /// @return std::optional<can_dispatch_filter> - the slot's filter
-    [[nodiscard]] std::optional<can_dispatch_filter> filter() const noexcept
-    {
-      return m_filter;
-    }
-
   private:
     friend class can_interrupt_dispatcher;
 
@@ -424,17 +361,26 @@ public:
       if (callback == nullptr) {
         return;
       }
-      if (m_filter && not m_filter->matches(p_message)) {
+      // Pairs with the fence in driver_on_receive(): the filter is read after
+      // the callback, so it is never one written for an earlier subscriber.
+      std::atomic_signal_fence(std::memory_order_acquire);
+      if (not m_filter.matches(p_message)) {
         return;
       }
       callback->callback(p_message);
     }
 
-    void driver_on_receive(can_receive_callback& p_callback) override
+    void driver_on_receive(can_receive_callback& p_callback,
+                           can_receive_filter p_filter) override
     {
       if (m_callback != nullptr) {
         throw subscription_busy(this);
       }
+      // The slot has no subscriber, so the interrupt ignores it while the
+      // filter is written. The fence keeps the compiler from moving that
+      // write after the callback store that makes the slot live.
+      m_filter = p_filter;
+      std::atomic_signal_fence(std::memory_order_release);
       m_callback = &p_callback;
     }
 
@@ -444,7 +390,7 @@ public:
     }
 
     can_receive_callback* m_callback = nullptr;
-    std::optional<can_dispatch_filter> m_filter;
+    can_receive_filter m_filter{};
   };
 
   /**

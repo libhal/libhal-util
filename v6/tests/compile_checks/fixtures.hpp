@@ -53,7 +53,8 @@ struct fake_can_interrupt final : hal::can_interrupt
   hal::can_receive_callback* callback = nullptr;
 
 private:
-  void driver_on_receive(hal::can_receive_callback& p_callback) override
+  void driver_on_receive(hal::can_receive_callback& p_callback,
+                         hal::can_receive_filter) override
   {
     if (callback) {
       throw hal::subscription_busy(this);
