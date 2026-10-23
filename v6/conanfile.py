@@ -93,7 +93,7 @@ class libhal_util_conan(ConanFile):
     def requirements(self):
         # libhal v5 is only released as pre-releases (5.0.0-alpha.N) so far.
         # Remove include_prerelease once 5.0.0 is published.
-        self.requires("libhal/[>=5.0.0-alpha.1 <6, include_prerelease]")
+        self.requires("libhal/[>=5.0.0-alpha.5 <6, include_prerelease]")
 
     def layout(self):
         build_path = Path("build") / (

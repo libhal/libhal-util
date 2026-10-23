@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// edge_triggered_interrupt_dispatcher misuse that the type system rejects.
+// Interrupt dispatcher misuse that the type system rejects.
 
 #include "fixtures.hpp"
 
@@ -46,4 +46,33 @@ void construct_edge_slot()
 {
   // expected-error@+1 {{private constructor}}
   hal::edge_triggered_interrupt_slot slot;
+}
+
+using can_dispatcher = hal::can_interrupt_dispatcher<2>;
+
+void index_temporary_can_dispatcher(fake_can_interrupt& p_interrupt)
+{
+  // expected-error@+1 {{overload resolution selected deleted operator '[]'}}
+  auto& slot = can_dispatcher(p_interrupt)[0];
+  static_cast<void>(slot);
+}
+
+void can_dispatcher_on_temporary_interrupt()
+{
+  // expected-error@+1 {{no matching constructor}}
+  can_dispatcher shared(fake_can_interrupt{});
+}
+
+void copy_can_dispatcher(fake_can_interrupt& p_interrupt)
+{
+  can_dispatcher shared(p_interrupt);
+  // expected-error@+1 {{call to deleted constructor}}
+  can_dispatcher copy = shared;
+}
+
+// A slot only works inside a dispatcher, so only a dispatcher creates one.
+void construct_can_slot()
+{
+  // expected-error@+1 {{private constructor}}
+  hal::can_interrupt_slot slot;
 }
