@@ -41,6 +41,13 @@ void copy_dispatcher(fake_pin& p_pin)
   dispatcher copy = shared;
 }
 
+// A slot only works inside a dispatcher, so only a dispatcher creates one.
+void construct_edge_slot()
+{
+  // expected-error@+1 {{private constructor}}
+  hal::edge_triggered_interrupt_slot slot;
+}
+
 using can_dispatcher = hal::can_interrupt_dispatcher<2>;
 
 void index_temporary_can_dispatcher(fake_can_interrupt& p_interrupt)

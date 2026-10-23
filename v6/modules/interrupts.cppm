@@ -27,14 +27,83 @@ import hal;
  */
 
 namespace hal::inline v6 {
+export template<std::size_t SlotCount>
+class edge_triggered_interrupt_dispatcher;
+
+/**
+ * @brief One subscriber's view of a pin shared by
+ * `hal::edge_triggered_interrupt_dispatcher`
+ * @ingroup Interrupt_Utilities
+ *
+ * Only a dispatcher can create slots; get them from its `operator[]`. Every
+ * dispatcher, whatever its slot count, uses this one type.
+ *
+ * A slot starts with the trigger setting `edge_trigger::rising`. Configuring
+ * a slot changes only which edges reach its subscriber, not the real pin.
+ */
+export class edge_triggered_interrupt_slot final
+  : public edge_triggered_interrupt
+{
+public:
+  edge_triggered_interrupt_slot(edge_triggered_interrupt_slot const&) = delete;
+  edge_triggered_interrupt_slot& operator=(
+    edge_triggered_interrupt_slot const&) = delete;
+  edge_triggered_interrupt_slot(edge_triggered_interrupt_slot&&) = delete;
+  edge_triggered_interrupt_slot& operator=(edge_triggered_interrupt_slot&&) =
+    delete;
+  ~edge_triggered_interrupt_slot() = default;
+
+private:
+  template<std::size_t SlotCount>
+  friend class edge_triggered_interrupt_dispatcher;
+
+  edge_triggered_interrupt_slot() = default;
+
+  void dispatch(bool p_state) noexcept
+  {
+    // Read the callback once: a subscriber can be removed between edges.
+    auto* const callback = m_callback;
+    if (callback == nullptr) {
+      return;
+    }
+    if (m_trigger == edge_trigger::both ||
+        (m_trigger == edge_trigger::rising && p_state) ||
+        (m_trigger == edge_trigger::falling && not p_state)) {
+      callback->callback(p_state);
+    }
+  }
+
+  void driver_configure(settings const& p_settings) override
+  {
+    m_trigger = p_settings.trigger;
+  }
+
+  void driver_on_trigger(edge_triggered_callback& p_callback) override
+  {
+    if (m_callback != nullptr) {
+      throw subscription_busy(this);
+    }
+    m_callback = &p_callback;
+  }
+
+  void driver_clear_trigger() noexcept override
+  {
+    m_callback = nullptr;
+  }
+
+  edge_triggered_callback* m_callback = nullptr;
+  edge_trigger m_trigger = edge_trigger::rising;
+};
+
 /**
  * @brief Shares one edge triggered interrupt among several subscribers
  * @ingroup Interrupt_Utilities
  *
  * `hal::edge_triggered_interrupt` accepts one subscriber at a time. The
  * dispatcher subscribes once to a real pin and provides `SlotCount` slots.
- * Each slot is a `hal::edge_triggered_interrupt` with its own subscriber and
- * its own trigger setting.
+ * Each slot is a `hal::edge_triggered_interrupt_slot`, a
+ * `hal::edge_triggered_interrupt` with its own subscriber and its own trigger
+ * setting.
  *
  * The dispatcher configures the real pin to trigger on both edges. When an
  * edge occurs, it calls, in slot order, each slot's subscriber whose trigger
@@ -59,61 +128,6 @@ class edge_triggered_interrupt_dispatcher final
   : private edge_triggered_callback
 {
 public:
-  /**
-   * @brief One subscriber's view of the shared pin
-   *
-   * A slot starts with the trigger setting `edge_trigger::rising`. Configuring
-   * a slot changes only which edges reach its subscriber, not the real pin.
-   */
-  class slot final : public edge_triggered_interrupt
-  {
-  public:
-    slot() = default;
-    slot(slot const&) = delete;
-    slot& operator=(slot const&) = delete;
-    slot(slot&&) = delete;
-    slot& operator=(slot&&) = delete;
-    ~slot() = default;
-
-  private:
-    friend class edge_triggered_interrupt_dispatcher;
-
-    void dispatch(bool p_state) noexcept
-    {
-      // Read the callback once: a subscriber can be removed between edges.
-      auto* const callback = m_callback;
-      if (callback == nullptr) {
-        return;
-      }
-      if (m_trigger == edge_trigger::both ||
-          (m_trigger == edge_trigger::rising && p_state) ||
-          (m_trigger == edge_trigger::falling && not p_state)) {
-        callback->callback(p_state);
-      }
-    }
-
-    void driver_configure(settings const& p_settings) override
-    {
-      m_trigger = p_settings.trigger;
-    }
-
-    void driver_on_trigger(edge_triggered_callback& p_callback) override
-    {
-      if (m_callback != nullptr) {
-        throw subscription_busy(this);
-      }
-      m_callback = &p_callback;
-    }
-
-    void driver_clear_trigger() noexcept override
-    {
-      m_callback = nullptr;
-    }
-
-    edge_triggered_callback* m_callback = nullptr;
-    edge_trigger m_trigger = edge_trigger::rising;
-  };
-
   /**
    * @brief Subscribe to a pin and provide its slots
    *
@@ -148,10 +162,12 @@ public:
    * @brief Access a slot
    *
    * @param p_index - index of the slot
-   * @return slot& - the slot, which must not outlive the dispatcher
+   * @return edge_triggered_interrupt_slot& - the slot, which must not outlive
+   * the dispatcher
    * @throws hal::out_of_range - if p_index is not less than SlotCount
    */
-  [[nodiscard]] slot& operator[](std::size_t p_index) & [[clang::lifetimebound]]
+  [[nodiscard]] edge_triggered_interrupt_slot& operator[](
+    std::size_t p_index) & [[clang::lifetimebound]]
   {
     if (p_index >= SlotCount) {
       throw hal::out_of_range(this,
@@ -161,7 +177,7 @@ public:
   }
 
   /// A slot of a temporary dispatcher would dangle immediately.
-  slot& operator[](std::size_t p_index) && = delete;
+  edge_triggered_interrupt_slot& operator[](std::size_t p_index) && = delete;
 
   /// @return std::size_t - number of slots
   [[nodiscard]] static constexpr std::size_t size() noexcept
@@ -183,7 +199,7 @@ private:
     }
   }
 
-  std::array<slot, SlotCount> m_slots{};
+  std::array<edge_triggered_interrupt_slot, SlotCount> m_slots{};
   // Last, so the real pin stops calling the dispatcher before the slots are
   // destroyed.
   subscription m_subscription;
