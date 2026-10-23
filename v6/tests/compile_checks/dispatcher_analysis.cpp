@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// edge_triggered_interrupt_dispatcher misuse that Clang's lifetime safety
-// analysis reports.
+// Interrupt dispatcher misuse that Clang's lifetime safety analysis reports.
 
 #include "fixtures.hpp"
 
@@ -41,5 +40,34 @@ dispatcher const* dispatcher_outlives_pin()
   fake_pin pin;  // forgot static
   // expected-error@+1 {{which will dangle}}
   static dispatcher shared(pin);
+  return &shared;
+}
+
+using can_dispatcher = hal::can_interrupt_dispatcher<2>;
+
+hal::can_interrupt& can_slot_outlives_dispatcher(
+  fake_can_interrupt& p_interrupt)
+{
+  can_dispatcher shared(p_interrupt);
+  // expected-error@+2 {{is returned}}
+  // expected-error@+1 {{reference to stack memory}}
+  return shared[0];
+}
+
+hal::subscription can_subscription_outlives_dispatcher(
+  fake_can_interrupt& p_interrupt)
+{
+  static message_counter c;
+  can_dispatcher shared(p_interrupt);
+  // expected-error@+2 {{is returned}}
+  // expected-error@+1 {{address of stack memory}}
+  return shared[0].on_receive(c);
+}
+
+can_dispatcher const* can_dispatcher_outlives_interrupt()
+{
+  fake_can_interrupt interrupt;  // forgot static
+  // expected-error@+1 {{which will dangle}}
+  static can_dispatcher shared(interrupt);
   return &shared;
 }
