@@ -252,8 +252,9 @@ class locked_i2c_storage<hal::i2c>
  * @brief Shares an i2c bus between contexts by locking around each
  * transaction
  *
- * Holds a `hal::basic_lock` for each `transaction()`, so device drivers in different contexts, such as RTOS threads, take turns on
- * the bus instead of starting a transaction while another is in progress.
+ * Holds a `hal::basic_lock` for each `transaction()`, so device drivers in
+ * different contexts, such as RTOS threads, take turns on the bus instead of
+ * starting a transaction while another is in progress.
  * It is a `hal::i2c` itself, so device drivers take it in place of the bus.
  * An owned bus gets its settings from the factory that builds it.
  *
