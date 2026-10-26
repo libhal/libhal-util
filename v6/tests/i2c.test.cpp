@@ -24,6 +24,8 @@ import hal.util;
 import scatter_span;
 import test_util;
 
+using namespace mp_units::si::unit_symbols;
+
 namespace {
 
 constexpr hal::byte successful_address{ 0x15 };
@@ -40,10 +42,6 @@ public:
   mem::scatter_span<hal::byte> m_in{};
 
 private:
-  void driver_configure(settings const&) override
-  {
-  }
-
   void driver_transaction(hal::byte p_address,
                           mem::scatter_span<hal::byte const> p_data_out,
                           mem::scatter_span<hal::byte> p_data_in) override
@@ -298,6 +296,52 @@ private:
   }
 };
 
+struct fast_device
+{
+  static constexpr hal::hertz max_clock_rate = 400 * kHz;
+};
+
+struct slow_device
+{
+  static constexpr hal::hertz max_clock_rate = 100 * kHz;
+};
+
+struct unrated_device
+{};
+
+static_assert(hal::i2c_rated_device<fast_device>);
+static_assert(not hal::i2c_rated_device<unrated_device>);
+
+void i2c_bus_rate_test()
+{
+  using namespace boost::ut;
+
+  "[success] i2c_bus_rate picks the slowest device"_test = []() {
+    // Exercise
+    constexpr auto rate =
+      hal::i2c_bus_rate<fast_device, slow_device>(1000 * kHz);
+
+    // Verify
+    expect(rate == 100 * kHz);
+  };
+
+  "[success] i2c_bus_rate is limited by the board"_test = []() {
+    // Exercise
+    constexpr auto rate = hal::i2c_bus_rate<fast_device>(200 * kHz);
+
+    // Verify
+    expect(rate == 200 * kHz);
+  };
+
+  "[success] i2c_bus_rate with no devices is the board limit"_test = []() {
+    // Exercise
+    constexpr auto rate = hal::i2c_bus_rate<>(400 * kHz);
+
+    // Verify
+    expect(rate == 400 * kHz);
+  };
+}
+
 /// Records whether the lock was held when each call reached the bus
 class lock_checking_i2c : public test_i2c
 {
@@ -314,17 +358,8 @@ public:
   ~lock_checking_i2c() = default;
 
   int calls_without_lock = 0;
-  int configures = 0;
 
 private:
-  void driver_configure(settings const&) override
-  {
-    configures++;
-    if (not m_lock->held) {
-      calls_without_lock++;
-    }
-  }
-
   void driver_transaction(hal::byte p_address,
                           mem::scatter_span<hal::byte const> p_data_out,
                           mem::scatter_span<hal::byte> p_data_in) override
@@ -367,22 +402,6 @@ void locked_i2c_test()
     expect(successful_address == bus.m_address);
     expect(that % out_buffer.size() == bus.m_out.length());
     expect(that % in_buffer.size() == bus.m_in.length());
-  };
-
-  "[success] locked_i2c holds the lock for configure"_test = []() {
-    // Setup
-    counting_lock lock;
-    lock_checking_i2c bus(lock);
-    hal::locked_i2c i2c(bus, lock);
-
-    // Exercise
-    i2c.configure({});
-
-    // Verify
-    expect(that % 1 == bus.configures);
-    expect(that % 0 == bus.calls_without_lock);
-    expect(that % 1 == lock.locks);
-    expect(that % 1 == lock.unlocks);
   };
 
   "[failure] locked_i2c releases the lock when the bus throws"_test = []() {
@@ -429,4 +448,5 @@ int main()
   write_then_read_test();
   probe_test();
   locked_i2c_test();
+  i2c_bus_rate_test();
 }

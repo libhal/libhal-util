@@ -14,6 +14,7 @@
 
 module;
 
+#include <algorithm>
 #include <array>
 #include <concepts>
 #include <cstddef>
@@ -193,14 +194,14 @@ export [[nodiscard]] inline hal::byte to_8_bit_address(
  * @brief The part of every `hal::locked_i2c` that doesn't depend on its bus
  * type
  *
- * Holds the lock around each call it forwards to the bus.
+ * Holds the lock around each transaction it forwards to the bus.
  */
 class locked_i2c_base : public hal::i2c
 {
 protected:
   /**
-   * @param p_bus - the bus calls are forwarded to
-   * @param p_lock - held around each call
+   * @param p_bus - the bus transactions are forwarded to
+   * @param p_lock - held around each transaction
    */
   locked_i2c_base(hal::i2c& p_bus, hal::basic_lock& p_lock)
     : m_bus(p_bus)
@@ -211,17 +212,11 @@ protected:
   ~locked_i2c_base() = default;
 
 private:
-  void driver_configure(settings const& p_settings) override
-  {
-    // Not std::scoped_lock, which libc++ built without threads doesn't provide.
-    std::lock_guard const hold(*m_lock);
-    m_bus->configure(p_settings);
-  }
-
   void driver_transaction(hal::byte p_address,
                           mem::scatter_span<hal::byte const> p_data_out,
                           mem::scatter_span<hal::byte> p_data_in) override
   {
+    // Not std::scoped_lock, which libc++ built without threads doesn't provide.
     std::lock_guard const hold(*m_lock);
     m_bus->transaction(p_address, p_data_out, p_data_in);
   }
@@ -254,12 +249,13 @@ class locked_i2c_storage<hal::i2c>
 
 /**
  * @ingroup I2CUtils
- * @brief Shares an i2c bus between contexts by locking around each call
+ * @brief Shares an i2c bus between contexts by locking around each
+ * transaction
  *
- * Holds a `hal::basic_lock` for each `configure()` and `transaction()`, so
- * device drivers in different contexts, such as RTOS threads, take turns on
+ * Holds a `hal::basic_lock` for each `transaction()`, so device drivers in different contexts, such as RTOS threads, take turns on
  * the bus instead of starting a transaction while another is in progress.
  * It is a `hal::i2c` itself, so device drivers take it in place of the bus.
+ * An owned bus gets its settings from the factory that builds it.
  *
  * Drivers that all run in one context don't need it and can share the bus
  * directly.
@@ -303,7 +299,7 @@ public:
    * @brief Lock a bus that lives elsewhere
    *
    * @param p_bus - the bus to share between contexts
-   * @param p_lock - held around each call to the bus
+   * @param p_lock - held around each transaction
    */
   locked_i2c(hal::ref<hal::i2c> p_bus [[clang::lifetimebound]],
              hal::ref<hal::basic_lock> p_lock [[clang::lifetimebound]])
@@ -317,7 +313,7 @@ public:
    *
    * @param p_factory - called once to build the bus in place. The bus can be
    * non-movable.
-   * @param p_lock - held around each call to the bus
+   * @param p_lock - held around each transaction
    */
   template<class Factory>
     requires(not std::same_as<Bus, hal::i2c> and
@@ -344,4 +340,45 @@ export template<class Factory>
   requires std::invocable<Factory&>
 locked_i2c(Factory, hal::basic_lock&)
   -> locked_i2c<std::invoke_result_t<Factory&>>;
+
+/**
+ * @ingroup I2CUtils
+ * @brief A device driver type that declares the fastest i2c clock rate its
+ * device supports
+ *
+ * Satisfied by a type with a `static constexpr hal::hertz max_clock_rate`.
+ */
+export template<class T>
+concept i2c_rated_device = requires {
+  { T::max_clock_rate } -> std::convertible_to<hal::hertz>;
+};
+
+/**
+ * @ingroup I2CUtils
+ * @brief The fastest clock rate an i2c bus can run at, computed at compile
+ * time from the devices on it
+ *
+ * Every device on a bus sees its clock, so the bus can run no faster than its
+ * slowest device. List every device wired to the bus, whether or not the
+ * program uses it: the compiler can't check that the list matches the board.
+ *
+ * ```cpp
+ * static hal::stm32f1::i2c i2c1(hal::stm32f1::peripheral::i2c1, clock, {
+ *   .clock_rate = hal::i2c_bus_rate<mpu6050, at24c02>(400 * kHz),
+ * });
+ * ```
+ *
+ * @tparam Devices - the driver type of each device on the bus. A type that
+ * doesn't declare `max_clock_rate` fails to compile.
+ * @param p_board_limit - the fastest rate the board's wiring supports, which
+ * depends on its pull-up resistors and the bus's capacitance
+ * @return hal::hertz - the lowest of `p_board_limit` and every device's
+ * `max_clock_rate`
+ */
+export template<i2c_rated_device... Devices>
+[[nodiscard]] consteval hal::hertz i2c_bus_rate(hal::hertz p_board_limit)
+{
+  return std::min({ p_board_limit,
+                    static_cast<hal::hertz>(Devices::max_clock_rate)... });
+}
 }  // namespace hal::inline v6

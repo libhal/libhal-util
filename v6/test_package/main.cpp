@@ -60,10 +60,6 @@ public:
   hal::byte m_last_address{};
 
 private:
-  void driver_configure(settings const&) override
-  {
-  }
-
   void driver_transaction(hal::byte p_address,
                           mem::scatter_span<hal::byte const>,
                           mem::scatter_span<hal::byte> p_data_in) override
