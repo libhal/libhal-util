@@ -379,7 +379,7 @@ concept i2c_rated_device = requires {
 export template<i2c_rated_device... Devices>
 [[nodiscard]] consteval hal::hertz i2c_bus_rate(hal::hertz p_board_limit)
 {
-  return std::min({ p_board_limit,
-                    static_cast<hal::hertz>(Devices::max_clock_rate)... });
+  return std::min(
+    { p_board_limit, static_cast<hal::hertz>(Devices::max_clock_rate)... });
 }
 }  // namespace hal::inline v6
