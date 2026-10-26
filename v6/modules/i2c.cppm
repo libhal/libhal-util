@@ -15,7 +15,10 @@
 module;
 
 #include <array>
+#include <concepts>
 #include <cstddef>
+#include <mutex>
+#include <type_traits>
 
 export module hal.util:i2c;
 
@@ -184,4 +187,161 @@ export [[nodiscard]] inline hal::byte to_8_bit_address(
   v8bit_address |= hal::value(p_operation);
   return v8bit_address;
 }
+
+/**
+ * @ingroup I2CUtils
+ * @brief The part of every `hal::locked_i2c` that doesn't depend on its bus
+ * type
+ *
+ * Holds the lock around each call it forwards to the bus.
+ */
+class locked_i2c_base : public hal::i2c
+{
+protected:
+  /**
+   * @param p_bus - the bus calls are forwarded to
+   * @param p_lock - held around each call
+   */
+  locked_i2c_base(hal::i2c& p_bus, hal::basic_lock& p_lock)
+    : m_bus(p_bus)
+    , m_lock(p_lock)
+  {
+  }
+
+  ~locked_i2c_base() = default;
+
+private:
+  void driver_configure(settings const& p_settings) override
+  {
+    // Not std::scoped_lock, which libc++ built without threads doesn't provide.
+    std::lock_guard const hold(*m_lock);
+    m_bus->configure(p_settings);
+  }
+
+  void driver_transaction(hal::byte p_address,
+                          mem::scatter_span<hal::byte const> p_data_out,
+                          mem::scatter_span<hal::byte> p_data_in) override
+  {
+    std::lock_guard const hold(*m_lock);
+    m_bus->transaction(p_address, p_data_out, p_data_in);
+  }
+
+  hal::ref<hal::i2c> m_bus;
+  hal::ref<hal::basic_lock> m_lock;
+};
+
+/// Holds the bus of a `hal::locked_i2c` that owns it. It is a separate base,
+/// listed first, so the bus is fully constructed before `locked_i2c_base`
+/// refers to it.
+template<class Bus>
+class locked_i2c_storage
+{
+protected:
+  template<class Factory>
+  explicit locked_i2c_storage(Factory& p_factory)
+    : m_bus(p_factory())
+  {
+  }
+
+  Bus m_bus;
+};
+
+/// A `hal::locked_i2c` that refers to a bus owned elsewhere stores nothing
+/// extra.
+template<>
+class locked_i2c_storage<hal::i2c>
+{};
+
+/**
+ * @ingroup I2CUtils
+ * @brief Shares an i2c bus between contexts by locking around each call
+ *
+ * Holds a `hal::basic_lock` for each `configure()` and `transaction()`, so
+ * device drivers in different contexts, such as RTOS threads, take turns on
+ * the bus instead of starting a transaction while another is in progress.
+ * It is a `hal::i2c` itself, so device drivers take it in place of the bus.
+ *
+ * Drivers that all run in one context don't need it and can share the bus
+ * directly.
+ *
+ * The lock must block, such as an RTOS mutex. If an interrupt uses the bus,
+ * the lock must also be safe to take from that interrupt, which most RTOS
+ * mutexes aren't.
+ *
+ * It either owns its bus or refers to one that lives elsewhere. Owning it is
+ * safer: built from a factory, the bus exists only inside it, so no context
+ * can use the bus without taking the lock.
+ *
+ * ```cpp
+ * // Owns the bus. The factory's return type is the bus type.
+ * static hal::locked_i2c i2c1(
+ *   [] { return hal::stm32f1::i2c(hal::stm32f1::peripheral::i2c1, clock); },
+ *   rtos_mutex);
+ *
+ * // Refers to a bus that lives elsewhere. Every user must go through i2c2.
+ * static hal::stm32f1::i2c bus2(hal::stm32f1::peripheral::i2c2, clock);
+ * static hal::locked_i2c i2c2(bus2, rtos_mutex);
+ *
+ * static hal::sensors::mpu6050 imu(i2c1);
+ * ```
+ *
+ * The lock and a bus it doesn't own must outlive it.
+ *
+ * @tparam Bus - the bus type it owns, or `hal::i2c` (the default) to refer to
+ * a bus that lives elsewhere
+ */
+export template<class Bus = hal::i2c>
+class locked_i2c final
+  : private locked_i2c_storage<Bus>
+  , public locked_i2c_base
+{
+public:
+  static_assert(std::derived_from<Bus, hal::i2c>,
+                "The bus type must implement hal::i2c");
+
+  /**
+   * @brief Lock a bus that lives elsewhere
+   *
+   * @param p_bus - the bus to share between contexts
+   * @param p_lock - held around each call to the bus
+   */
+  locked_i2c(hal::ref<hal::i2c> p_bus [[clang::lifetimebound]],
+             hal::ref<hal::basic_lock> p_lock [[clang::lifetimebound]])
+    requires std::same_as<Bus, hal::i2c>
+    : locked_i2c_base(*p_bus, *p_lock)
+  {
+  }
+
+  /**
+   * @brief Build the bus inside and lock it
+   *
+   * @param p_factory - called once to build the bus in place. The bus can be
+   * non-movable.
+   * @param p_lock - held around each call to the bus
+   */
+  template<class Factory>
+    requires(not std::same_as<Bus, hal::i2c> and
+             std::same_as<std::invoke_result_t<Factory&>, Bus>)
+  locked_i2c(Factory p_factory,
+             hal::ref<hal::basic_lock> p_lock [[clang::lifetimebound]])
+    : locked_i2c_storage<Bus>(p_factory)
+    , locked_i2c_base(locked_i2c_storage<Bus>::m_bus, *p_lock)
+  {
+  }
+
+  locked_i2c(locked_i2c const&) = delete;
+  locked_i2c& operator=(locked_i2c const&) = delete;
+  locked_i2c(locked_i2c&&) = delete;
+  locked_i2c& operator=(locked_i2c&&) = delete;
+  ~locked_i2c() = default;
+};
+
+/// A bus object and a lock: it refers to the bus.
+export locked_i2c(hal::i2c&, hal::basic_lock&) -> locked_i2c<hal::i2c>;
+
+/// A factory and a lock: it owns the bus the factory returns.
+export template<class Factory>
+  requires std::invocable<Factory&>
+locked_i2c(Factory, hal::basic_lock&)
+  -> locked_i2c<std::invoke_result_t<Factory&>>;
 }  // namespace hal::inline v6
