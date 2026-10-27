@@ -14,8 +14,12 @@
 
 module;
 
+#include <algorithm>
 #include <array>
+#include <concepts>
 #include <cstddef>
+#include <mutex>
+#include <type_traits>
 
 export module hal.util:i2c;
 
@@ -183,5 +187,199 @@ export [[nodiscard]] inline hal::byte to_8_bit_address(
   auto v8bit_address = static_cast<hal::byte>(p_address << 1);
   v8bit_address |= hal::value(p_operation);
   return v8bit_address;
+}
+
+/**
+ * @ingroup I2CUtils
+ * @brief The part of every `hal::thread_safe_i2c` that doesn't depend on its
+ * bus type
+ *
+ * Holds the lock around each transaction it forwards to the bus.
+ */
+class thread_safe_i2c_base : public hal::i2c
+{
+protected:
+  /**
+   * @param p_bus - the bus transactions are forwarded to
+   * @param p_lock - held around each transaction
+   */
+  thread_safe_i2c_base(hal::i2c& p_bus, hal::basic_lock& p_lock)
+    : m_bus(p_bus)
+    , m_lock(p_lock)
+  {
+  }
+
+  ~thread_safe_i2c_base() = default;
+
+private:
+  void driver_transaction(hal::byte p_address,
+                          mem::scatter_span<hal::byte const> p_data_out,
+                          mem::scatter_span<hal::byte> p_data_in) override
+  {
+    // Not std::scoped_lock, which libc++ built without threads doesn't provide.
+    std::lock_guard const hold(*m_lock);
+    m_bus->transaction(p_address, p_data_out, p_data_in);
+  }
+
+  hal::ref<hal::i2c> m_bus;
+  hal::ref<hal::basic_lock> m_lock;
+};
+
+/// Holds the bus of a `hal::thread_safe_i2c` that owns it. It is a separate
+/// base, listed first, so the bus is fully constructed before
+/// `thread_safe_i2c_base` refers to it.
+template<class Bus>
+class thread_safe_i2c_storage
+{
+protected:
+  template<class Factory>
+  explicit thread_safe_i2c_storage(Factory& p_factory)
+    : m_bus(p_factory())
+  {
+  }
+
+  Bus m_bus;
+};
+
+/// A `hal::thread_safe_i2c` that refers to a bus owned elsewhere stores nothing
+/// extra.
+template<>
+class thread_safe_i2c_storage<hal::i2c>
+{};
+
+/**
+ * @ingroup I2CUtils
+ * @brief Makes an i2c bus safe to use from more than one thread or context
+ *
+ * Holds a `hal::basic_lock` for the whole of each `transaction()`. A
+ * transaction started while another is still running waits for it to finish
+ * instead of failing with `hal::device_or_resource_busy`. It is a `hal::i2c`
+ * itself, so device drivers take it in place of the bus. An owned bus gets
+ * its settings from the factory that builds it.
+ *
+ * Drivers that all run in one context don't need it and can share the bus
+ * directly.
+ *
+ * It is only as safe as its lock. The lock must block, such as an RTOS
+ * mutex. If an interrupt uses the bus, the lock must also be safe to take
+ * from that interrupt, which most RTOS mutexes aren't.
+ *
+ * It either owns its bus or refers to one that lives elsewhere. Owning it is
+ * safer: built from a factory, the bus exists only inside it, so no context
+ * can use the bus without taking the lock.
+ *
+ * ```cpp
+ * // Owns the bus. The factory's return type is the bus type.
+ * static hal::thread_safe_i2c i2c1(
+ *   [] { return hal::stm32f1::i2c(hal::stm32f1::peripheral::i2c1, clock); },
+ *   rtos_mutex);
+ *
+ * // Refers to a bus that lives elsewhere. Every user must go through i2c2.
+ * static hal::stm32f1::i2c bus2(hal::stm32f1::peripheral::i2c2, clock);
+ * static hal::thread_safe_i2c i2c2(bus2, rtos_mutex);
+ *
+ * static hal::sensors::mpu6050 imu(i2c1);
+ * ```
+ *
+ * The lock and a bus it doesn't own must outlive it.
+ *
+ * @tparam Bus - the bus type it owns, or `hal::i2c` (the default) to refer to
+ * a bus that lives elsewhere
+ */
+export template<class Bus = hal::i2c>
+class thread_safe_i2c final
+  : private thread_safe_i2c_storage<Bus>
+  , public thread_safe_i2c_base
+{
+public:
+  static_assert(std::derived_from<Bus, hal::i2c>,
+                "The bus type must implement hal::i2c");
+
+  /**
+   * @brief Lock a bus that lives elsewhere
+   *
+   * @param p_bus - the bus to share between contexts
+   * @param p_lock - held around each transaction
+   */
+  thread_safe_i2c(hal::ref<hal::i2c> p_bus [[clang::lifetimebound]],
+                  hal::ref<hal::basic_lock> p_lock [[clang::lifetimebound]])
+    requires std::same_as<Bus, hal::i2c>
+    : thread_safe_i2c_base(*p_bus, *p_lock)
+  {
+  }
+
+  /**
+   * @brief Build the bus inside and lock it
+   *
+   * @param p_factory - called once to build the bus in place. The bus can be
+   * non-movable. Anything it captures by reference must outlive this object.
+   * @param p_lock - held around each transaction
+   */
+  template<class Factory>
+    requires(not std::same_as<Bus, hal::i2c> and
+             std::same_as<std::invoke_result_t<Factory&>, Bus>)
+  thread_safe_i2c(Factory p_factory [[clang::lifetimebound]],
+                  hal::ref<hal::basic_lock> p_lock [[clang::lifetimebound]])
+    : thread_safe_i2c_storage<Bus>(p_factory)
+    , thread_safe_i2c_base(thread_safe_i2c_storage<Bus>::m_bus, *p_lock)
+  {
+  }
+
+  thread_safe_i2c(thread_safe_i2c const&) = delete;
+  thread_safe_i2c& operator=(thread_safe_i2c const&) = delete;
+  thread_safe_i2c(thread_safe_i2c&&) = delete;
+  thread_safe_i2c& operator=(thread_safe_i2c&&) = delete;
+  ~thread_safe_i2c() = default;
+};
+
+/// A bus object and a lock: it refers to the bus.
+export thread_safe_i2c(hal::i2c&, hal::basic_lock&)
+  -> thread_safe_i2c<hal::i2c>;
+
+/// A factory and a lock: it owns the bus the factory returns.
+export template<class Factory>
+  requires std::invocable<Factory&>
+thread_safe_i2c(Factory, hal::basic_lock&)
+  -> thread_safe_i2c<std::invoke_result_t<Factory&>>;
+
+/**
+ * @ingroup I2CUtils
+ * @brief A device driver type that declares the fastest i2c clock rate its
+ * device supports
+ *
+ * Satisfied by a type with a `static constexpr hal::hertz max_clock_rate`.
+ */
+export template<class T>
+concept i2c_rated_device = requires {
+  { T::max_clock_rate } -> std::convertible_to<hal::hertz>;
+};
+
+/**
+ * @ingroup I2CUtils
+ * @brief The fastest clock rate an i2c bus can run at, computed at compile
+ * time from the devices on it
+ *
+ * Every device on a bus sees its clock, so the bus can run no faster than its
+ * slowest device. List every device wired to the bus, whether or not the
+ * program uses it: the compiler can't check that the list matches the board.
+ *
+ * ```cpp
+ * static hal::stm32f1::i2c i2c1(hal::stm32f1::peripheral::i2c1, clock, {
+ *   .clock_rate = hal::i2c_bus_rate<mpu6050, at24c02>(400 * kHz),
+ * });
+ * ```
+ *
+ * @tparam Devices - the driver type of each device on the bus. A type that
+ * doesn't declare `max_clock_rate` fails to compile.
+ * @param p_board_limit - the fastest rate the board's wiring supports, which
+ * depends on its pull-up resistors and the bus's capacitance
+ * @return hal::hertz - the lowest of `p_board_limit` and every device's
+ * `max_clock_rate`
+ */
+export template<i2c_rated_device... Devices>
+[[nodiscard]] consteval hal::hertz i2c_bus_rate(hal::hertz p_board_limit)
+{
+  return std::min(
+    { p_board_limit, static_cast<hal::hertz>(Devices::max_clock_rate)... });
 }
 }  // namespace hal::inline v6

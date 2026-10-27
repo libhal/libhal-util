@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <array>
 #include <tuple>
+#include <type_traits>
 
 #include <boost/ut.hpp>
 
@@ -22,6 +23,8 @@ import hal;
 import hal.util;
 import scatter_span;
 import test_util;
+
+using namespace mp_units::si::unit_symbols;
 
 namespace {
 
@@ -39,10 +42,6 @@ public:
   mem::scatter_span<hal::byte> m_in{};
 
 private:
-  void driver_configure(settings const&) override
-  {
-  }
-
   void driver_transaction(hal::byte p_address,
                           mem::scatter_span<hal::byte const> p_data_out,
                           mem::scatter_span<hal::byte> p_data_in) override
@@ -275,6 +274,174 @@ void probe_test()
   };
 }
 
+/// Counts lock() and unlock() calls and tracks whether the lock is held
+class counting_lock : public hal::basic_lock
+{
+public:
+  int locks = 0;
+  int unlocks = 0;
+  bool held = false;
+
+private:
+  void driver_lock() override
+  {
+    locks++;
+    held = true;
+  }
+
+  void driver_unlock() override
+  {
+    unlocks++;
+    held = false;
+  }
+};
+
+struct fast_device
+{
+  static constexpr hal::hertz max_clock_rate = 400 * kHz;
+};
+
+struct slow_device
+{
+  static constexpr hal::hertz max_clock_rate = 100 * kHz;
+};
+
+struct unrated_device
+{};
+
+static_assert(hal::i2c_rated_device<fast_device>);
+static_assert(not hal::i2c_rated_device<unrated_device>);
+
+void i2c_bus_rate_test()
+{
+  using namespace boost::ut;
+
+  "[success] i2c_bus_rate picks the slowest device"_test = []() {
+    // Exercise
+    constexpr auto rate =
+      hal::i2c_bus_rate<fast_device, slow_device>(1000 * kHz);
+
+    // Verify
+    expect(rate == 100 * kHz);
+  };
+
+  "[success] i2c_bus_rate is limited by the board"_test = []() {
+    // Exercise
+    constexpr auto rate = hal::i2c_bus_rate<fast_device>(200 * kHz);
+
+    // Verify
+    expect(rate == 200 * kHz);
+  };
+
+  "[success] i2c_bus_rate with no devices is the board limit"_test = []() {
+    // Exercise
+    constexpr auto rate = hal::i2c_bus_rate<>(400 * kHz);
+
+    // Verify
+    expect(rate == 400 * kHz);
+  };
+}
+
+/// Records whether the lock was held when each call reached the bus
+class lock_checking_i2c : public test_i2c
+{
+public:
+  explicit lock_checking_i2c(counting_lock& p_lock)
+    : m_lock(&p_lock)
+  {
+  }
+
+  lock_checking_i2c(lock_checking_i2c const&) = delete;
+  lock_checking_i2c& operator=(lock_checking_i2c const&) = delete;
+  lock_checking_i2c(lock_checking_i2c&&) = delete;
+  lock_checking_i2c& operator=(lock_checking_i2c&&) = delete;
+  ~lock_checking_i2c() = default;
+
+  int calls_without_lock = 0;
+
+private:
+  void driver_transaction(hal::byte p_address,
+                          mem::scatter_span<hal::byte const> p_data_out,
+                          mem::scatter_span<hal::byte> p_data_in) override
+  {
+    if (not m_lock->held) {
+      calls_without_lock++;
+    }
+    m_address = p_address;
+    m_out = p_data_out;
+    m_in = p_data_in;
+    if (p_address == failure_address) {
+      throw hal::no_such_device(p_address, this);
+    }
+  }
+
+  counting_lock* m_lock;
+};
+
+void thread_safe_i2c_test()
+{
+  using namespace boost::ut;
+
+  "[success] thread_safe_i2c holds the lock for a transaction"_test = []() {
+    // Setup
+    counting_lock lock;
+    lock_checking_i2c bus(lock);
+    hal::thread_safe_i2c i2c(bus, lock);
+    std::array<hal::byte, 2> const out_buffer{ 1, 2 };
+    std::array<hal::byte, 3> in_buffer{};
+    mem::scatter_array<hal::byte const, 1> out{ out_buffer };
+    mem::scatter_array<hal::byte, 1> in{ in_buffer };
+
+    // Exercise
+    hal::write_then_read(i2c, successful_address, out, in);
+
+    // Verify
+    expect(that % 0 == bus.calls_without_lock);
+    expect(that % 1 == lock.locks);
+    expect(that % 1 == lock.unlocks);
+    expect(successful_address == bus.m_address);
+    expect(that % out_buffer.size() == bus.m_out.length());
+    expect(that % in_buffer.size() == bus.m_in.length());
+  };
+
+  "[failure] thread_safe_i2c releases the lock when the bus throws"_test =
+    []() {
+      // Setup
+      counting_lock lock;
+      lock_checking_i2c bus(lock);
+      hal::thread_safe_i2c i2c(bus, lock);
+
+      // Exercise
+      expect(throws<hal::no_such_device>(
+        [&] { hal::write(i2c, failure_address, {}); }));
+
+      // Verify
+      expect(that % 1 == lock.locks);
+      expect(that % 1 == lock.unlocks);
+      expect(not lock.held);
+    };
+
+  "[success] thread_safe_i2c owns a non-movable bus built by a factory"_test =
+    []() {
+      // Setup
+      counting_lock lock;
+      hal::thread_safe_i2c i2c([&lock] { return lock_checking_i2c(lock); },
+                               lock);
+      static_assert(
+        std::is_same_v<decltype(i2c), hal::thread_safe_i2c<lock_checking_i2c>>);
+
+      // Exercise
+      auto const found = hal::probe(i2c, successful_address);
+      auto const missing = hal::probe(i2c, failure_address);
+
+      // Verify
+      expect(found);
+      expect(not missing);
+      expect(that % 2 == lock.locks);
+      expect(that % 2 == lock.unlocks);
+    };
+}
+
 }  // namespace
 
 int main()
@@ -283,4 +450,6 @@ int main()
   read_test();
   write_then_read_test();
   probe_test();
+  thread_safe_i2c_test();
+  i2c_bus_rate_test();
 }
