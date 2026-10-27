@@ -378,15 +378,15 @@ private:
   counting_lock* m_lock;
 };
 
-void locked_i2c_test()
+void thread_safe_i2c_test()
 {
   using namespace boost::ut;
 
-  "[success] locked_i2c holds the lock for a transaction"_test = []() {
+  "[success] thread_safe_i2c holds the lock for a transaction"_test = []() {
     // Setup
     counting_lock lock;
     lock_checking_i2c bus(lock);
-    hal::locked_i2c i2c(bus, lock);
+    hal::thread_safe_i2c i2c(bus, lock);
     std::array<hal::byte, 2> const out_buffer{ 1, 2 };
     std::array<hal::byte, 3> in_buffer{};
     mem::scatter_array<hal::byte const, 1> out{ out_buffer };
@@ -404,39 +404,42 @@ void locked_i2c_test()
     expect(that % in_buffer.size() == bus.m_in.length());
   };
 
-  "[failure] locked_i2c releases the lock when the bus throws"_test = []() {
-    // Setup
-    counting_lock lock;
-    lock_checking_i2c bus(lock);
-    hal::locked_i2c i2c(bus, lock);
+  "[failure] thread_safe_i2c releases the lock when the bus throws"_test =
+    []() {
+      // Setup
+      counting_lock lock;
+      lock_checking_i2c bus(lock);
+      hal::thread_safe_i2c i2c(bus, lock);
 
-    // Exercise
-    expect(throws<hal::no_such_device>(
-      [&] { hal::write(i2c, failure_address, {}); }));
+      // Exercise
+      expect(throws<hal::no_such_device>(
+        [&] { hal::write(i2c, failure_address, {}); }));
 
-    // Verify
-    expect(that % 1 == lock.locks);
-    expect(that % 1 == lock.unlocks);
-    expect(not lock.held);
-  };
+      // Verify
+      expect(that % 1 == lock.locks);
+      expect(that % 1 == lock.unlocks);
+      expect(not lock.held);
+    };
 
-  "[success] locked_i2c owns a non-movable bus built by a factory"_test = []() {
-    // Setup
-    counting_lock lock;
-    hal::locked_i2c i2c([&lock] { return lock_checking_i2c(lock); }, lock);
-    static_assert(
-      std::is_same_v<decltype(i2c), hal::locked_i2c<lock_checking_i2c>>);
+  "[success] thread_safe_i2c owns a non-movable bus built by a factory"_test =
+    []() {
+      // Setup
+      counting_lock lock;
+      hal::thread_safe_i2c i2c([&lock] { return lock_checking_i2c(lock); },
+                               lock);
+      static_assert(
+        std::is_same_v<decltype(i2c), hal::thread_safe_i2c<lock_checking_i2c>>);
 
-    // Exercise
-    auto const found = hal::probe(i2c, successful_address);
-    auto const missing = hal::probe(i2c, failure_address);
+      // Exercise
+      auto const found = hal::probe(i2c, successful_address);
+      auto const missing = hal::probe(i2c, failure_address);
 
-    // Verify
-    expect(found);
-    expect(not missing);
-    expect(that % 2 == lock.locks);
-    expect(that % 2 == lock.unlocks);
-  };
+      // Verify
+      expect(found);
+      expect(not missing);
+      expect(that % 2 == lock.locks);
+      expect(that % 2 == lock.unlocks);
+    };
 }
 
 }  // namespace
@@ -447,6 +450,6 @@ int main()
   read_test();
   write_then_read_test();
   probe_test();
-  locked_i2c_test();
+  thread_safe_i2c_test();
   i2c_bus_rate_test();
 }
