@@ -312,13 +312,13 @@ public:
    * @brief Build the bus inside and lock it
    *
    * @param p_factory - called once to build the bus in place. The bus can be
-   * non-movable.
+   * non-movable. Anything it captures by reference must outlive this object.
    * @param p_lock - held around each transaction
    */
   template<class Factory>
     requires(not std::same_as<Bus, hal::i2c> and
              std::same_as<std::invoke_result_t<Factory&>, Bus>)
-  thread_safe_i2c(Factory p_factory,
+  thread_safe_i2c(Factory p_factory [[clang::lifetimebound]],
                   hal::ref<hal::basic_lock> p_lock [[clang::lifetimebound]])
     : thread_safe_i2c_storage<Bus>(p_factory)
     , thread_safe_i2c_base(thread_safe_i2c_storage<Bus>::m_bus, *p_lock)
