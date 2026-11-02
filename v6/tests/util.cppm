@@ -30,7 +30,7 @@ export template<typename T>
 std::ostream& operator<<(std::ostream& p_os, scatter_span<T> const& p_ssp)
 {
   p_os << "[";
-  for (auto const& chunk : p_ssp) {
+  for (auto const& chunk : p_ssp.spans()) {
     auto const* addr = static_cast<void const*>(chunk.data());
     p_os << "(" << addr << " : " << chunk.size() << "), ";
   }
@@ -53,10 +53,11 @@ bool operator==(scatter_span<T> const& lhs, scatter_span<T> const& rhs)
     return true;
   }
 
-  auto r_iter = rhs.begin();
-  auto l_iter = lhs.begin();
+  auto r_iter = rhs.span_begin();
+  auto l_iter = lhs.span_begin();
 
-  for (; r_iter != rhs.end() and l_iter != lhs.end(); r_iter++, l_iter++) {
+  for (; r_iter != rhs.span_end() and l_iter != lhs.span_end();
+       r_iter++, l_iter++) {
     if (r_iter->data() != l_iter->data() and r_iter->size() != l_iter->size()) {
       return false;
     }

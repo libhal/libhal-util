@@ -46,10 +46,8 @@ private:
   {
     m_last_out = p_data_out;
     m_last_in = p_data_in;
-    for (auto chunk : p_data_in) {
-      for (auto& element : chunk) {
-        element = p_filler;
-      }
+    for (auto& element : p_data_in) {
+      element = p_filler;
     }
   }
 };
@@ -65,10 +63,8 @@ private:
                           mem::scatter_span<hal::byte> p_data_in) override
   {
     m_last_address = p_address;
-    for (auto chunk : p_data_in) {
-      for (auto& element : chunk) {
-        element = hal::byte{ 0xA5 };
-      }
+    for (auto& element : p_data_in) {
+      element = hal::byte{ 0xA5 };
     }
   }
 };
