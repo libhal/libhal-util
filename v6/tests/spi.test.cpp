@@ -58,12 +58,10 @@ private:
     m_in = p_data_in;
     m_filler = p_filler;
 
-    for (auto chunk : p_data_in) {
-      for (auto& elem : chunk) {
-        elem = p_filler;  // we re-used filler byte to fill the input param even
-                          // though the filler byte is meant for the output line
-                          // when performing a read operation.
-      }
+    for (auto& elem : p_data_in) {
+      elem = p_filler;  // we re-used filler byte to fill the input param even
+                        // though the filler byte is meant for the output line
+                        // when performing a read operation.
     }
 
     if (p_filler == failure_filler) {

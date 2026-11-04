@@ -42,7 +42,7 @@ private:
   {
     m_out = p_data;
 
-    for (auto chunk : p_data) {
+    for (auto chunk : p_data.spans()) {
       if (not chunk.empty() && chunk[0] == write_failure_byte) {
         throw hal::io_error(this);
       }

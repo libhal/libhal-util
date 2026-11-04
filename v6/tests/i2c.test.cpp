@@ -50,10 +50,8 @@ private:
     m_out = p_data_out;
     m_in = p_data_in;
 
-    for (auto chunk : p_data_in) {
-      for (auto& elem : chunk) {
-        elem = filler_byte;
-      }
+    for (auto& elem : p_data_in) {
+      elem = filler_byte;
     }
 
     if (m_address == failure_address) {
