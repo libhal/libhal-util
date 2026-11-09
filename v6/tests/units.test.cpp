@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <ios>
+#include <limits>
 
 // must be above <boost/ut.hpp> to print chrono duration objects
 template<typename Rep, typename Period>
@@ -54,6 +55,74 @@ void units_test()
     // frequency's period length
     expect(that % 0 == hal::cycles_per(100'000 * si::hertz, 1us));
     expect(that % 0 == hal::cycles_per(100 * si::hertz, 1ms));
+  };
+
+  "polls_for counts polls of at least the given cycles"_test = []() {
+    // Exercise
+    // 100 ms at 36 MHz is 3,600,000 cycles, and a poll takes at least two.
+    auto const polls = hal::polls_for(36'000'000 * si::hertz, 100ms, 2);
+    // 4 ms at 1 MHz is 4,000 cycles of one cycle each.
+    auto const single_cycle_polls =
+      hal::polls_for(1'000'000 * si::hertz, 4ms, 1);
+
+    // Verify
+    expect(that % 1'800'000 == polls.value());
+    expect(that % 4'000 == single_cycle_polls.value());
+  };
+
+  "polls_for rounds up, so the polls are never shorter"_test = []() {
+    // Exercise
+    // 1 ns at 8 MHz is 0.008 cycles: less than one poll.
+    auto const tiny_polls = hal::polls_for(8'000'000 * si::hertz, 1ns, 2);
+    // 1,001 ns at 8 MHz is 8.008 cycles: 4.004 polls.
+    auto const odd_polls = hal::polls_for(8'000'000 * si::hertz, 1'001ns, 2);
+    // 1.5 s at 3 Hz is 4.5 cycles, which counts the whole seconds and the
+    // rest of a second separately: 1.5 polls.
+    auto const split_polls = hal::polls_for(3 * si::hertz, 1'500ms, 3);
+
+    // Verify
+    expect(that % 1 == tiny_polls.value());
+    expect(that % 5 == odd_polls.value());
+    expect(that % 2 == split_polls.value());
+  };
+
+  "polls_for is zero for a duration that isn't positive"_test = []() {
+    // Exercise
+    auto const zero = hal::polls_for(36'000'000 * si::hertz, 0ms, 2);
+    auto const negative = hal::polls_for(36'000'000 * si::hertz, -1ms, 2);
+
+    // Verify
+    expect(that % 0 == zero.value());
+    expect(that % 0 == negative.value());
+  };
+
+  "polls_for has no answer when it can't count the polls"_test = []() {
+    // Exercise
+    auto const no_clock = hal::polls_for(0 * si::hertz, 100ms, 2);
+    auto const no_cycles = hal::polls_for(36'000'000 * si::hertz, 100ms, 0);
+    // 4,294,967,295 polls of two cycles at 50 MHz take about 171.8 seconds.
+    auto const longest = hal::polls_for(50'000'000 * si::hertz, 171s, 2);
+    auto const too_long = hal::polls_for(50'000'000 * si::hertz, 172s, 2);
+    // The largest clock and cycle count don't overflow.
+    constexpr auto max_u32 = std::numeric_limits<hal::u32>::max();
+    auto const largest =
+      hal::polls_for(max_u32 * si::hertz, hal::time_duration::max(), max_u32);
+    auto const largest_short = hal::polls_for(max_u32 * si::hertz, 1s, max_u32);
+    // 2^32 seconds is too long, even when the polls would fit.
+    auto const below_seconds_limit =
+      hal::polls_for(1 * si::hertz, std::chrono::seconds(max_u32), 2);
+    auto const seconds_limit = hal::polls_for(
+      1 * si::hertz, std::chrono::seconds(hal::u64{ max_u32 } + 1), 2);
+
+    // Verify
+    expect(not no_clock.has_value());
+    expect(not no_cycles.has_value());
+    expect(that % 4'275'000'000U == longest.value());
+    expect(not too_long.has_value());
+    expect(not largest.has_value());
+    expect(that % 2'147'483'648U == below_seconds_limit.value());
+    expect(not seconds_limit.has_value());
+    expect(that % 1 == largest_short.value());
   };
 
   "duration wavelength"_test = []() {

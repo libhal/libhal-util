@@ -18,6 +18,8 @@ module;
 #include <cmath>
 #include <cstdint>
 #include <ios>
+#include <limits>
+#include <optional>
 
 export module hal.util:units;
 
@@ -58,6 +60,63 @@ export [[nodiscard]] constexpr hal::u64 cycles_per(
   auto const cycle_count = (count * source_hz) / denominator;
 
   return static_cast<hal::u64>(cycle_count);
+}
+
+/**
+ * @ingroup UnitsUtils
+ * @brief Calculate the fewest polls that take at least a duration
+ *
+ * For a loop that gives up after a number of polls instead of reading a
+ * clock. Each poll must take at least `p_cycles_per_poll` cycles of
+ * `p_source`, for example the bus cycles that reading a register takes. The
+ * count rounds up, and polls that take longer only make the loop longer, so
+ * the polls never take less than `p_duration`.
+ *
+ * @param p_source - the clock that times each poll
+ * @param p_duration - how long the polls must take at least
+ * @param p_cycles_per_poll - the fewest cycles of `p_source` a poll takes
+ * @return std::optional<hal::u32> - the number of polls, 0 if `p_duration`
+ * isn't positive, or std::nullopt if `p_source` or `p_cycles_per_poll` is
+ * zero, the number doesn't fit in 32 bits, or `p_duration` is 2^32 seconds
+ * (about 136 years) or longer.
+ */
+export [[nodiscard]] constexpr std::optional<hal::u32> polls_for(
+  hertz p_source,
+  hal::time_duration p_duration,
+  hal::u32 p_cycles_per_poll)
+{
+  using period = hal::time_duration::period;
+  static_assert(period::num == 1, "The period ratio numerator must be 1");
+  constexpr hal::u64 ticks_per_second = period::den;
+  constexpr hal::u64 max_polls = std::numeric_limits<hal::u32>::max();
+
+  hal::u64 const frequency = p_source.numerical_value_in(hertz::unit);
+  hal::u64 const cycles_per_poll = p_cycles_per_poll;
+  if ((frequency == 0) or (cycles_per_poll == 0)) {
+    return std::nullopt;
+  }
+  if (p_duration <= hal::time_duration::zero()) {
+    return 0;
+  }
+
+  // The cycles the polls must take, rounded up: whole seconds times the
+  // frequency, plus the cycles in the rest of a second. Splitting the
+  // duration this way keeps every product within 64 bits, for fewer than
+  // 2^32 seconds.
+  auto const ticks = static_cast<hal::u64>(p_duration.count());
+  auto const seconds = ticks / ticks_per_second;
+  auto const rest = ticks % ticks_per_second;
+  if (seconds > max_polls) {
+    return std::nullopt;
+  }
+  auto const rest_cycles =
+    ((rest * frequency) + (ticks_per_second - 1)) / ticks_per_second;
+  auto const cycles = (seconds * frequency) + rest_cycles;
+  if (cycles > (max_polls * cycles_per_poll)) {
+    return std::nullopt;
+  }
+  return static_cast<hal::u32>((cycles + (cycles_per_poll - 1)) /
+                               cycles_per_poll);
 }
 
 /**
