@@ -14,12 +14,13 @@
 
 module;
 
-#include <chrono>
 #include <limits>
 
 export module hal.util:steady_clock;
 
 import hal;
+
+import :units;
 
 /**
  * @defgroup SteadyClock Steady Clock
@@ -34,9 +35,10 @@ namespace hal::inline v6 {
  *
  * For code that keeps a timeout as a number of ticks and adds it to
  * `uptime()` each time it starts waiting. The duration is converted to ticks
- * of `p_frequency`, rounded up, plus one more, since part of the tick in
- * progress has already passed when the deadline is set. So a deadline of
- * `uptime()` plus these ticks is never reached sooner than `p_duration` later.
+ * of `p_frequency` with `hal::cycles_per()`, which rounds up, plus one more,
+ * since part of the tick in progress has already passed when the deadline is
+ * set. So a deadline of `uptime()` plus these ticks is never reached sooner
+ * than `p_duration` later.
  *
  * @param p_frequency - the frequency of the steady clock
  * @param p_duration - the least time until the deadline
@@ -48,29 +50,9 @@ export [[nodiscard]] constexpr hal::u64 deadline_ticks(
   hertz p_frequency,
   hal::time_duration p_duration)
 {
-  using period = hal::time_duration::period;
-  static_assert(period::num == 1, "The period ratio numerator must be 1");
-  constexpr hal::u64 counts_per_second = period::den;
-  constexpr hal::u64 max_seconds = std::numeric_limits<hal::u32>::max();
   constexpr hal::u64 max_ticks = std::numeric_limits<hal::u64>::max();
-
-  if (p_duration <= hal::time_duration::zero()) {
-    return 1;
-  }
-
-  // Whole seconds times the frequency, plus the ticks in the rest of a second,
-  // rounded up. Both the seconds and the frequency fit in 32 bits, so every
-  // product and sum fits in 64 bits.
-  hal::u64 const frequency = p_frequency.numerical_value_in(hertz::unit);
-  auto const counts = static_cast<hal::u64>(p_duration.count());
-  auto const seconds = counts / counts_per_second;
-  auto const rest = counts % counts_per_second;
-  if (seconds > max_seconds) {
-    return max_ticks;
-  }
-  auto const rest_ticks =
-    ((rest * frequency) + (counts_per_second - 1)) / counts_per_second;
-  return (seconds * frequency) + rest_ticks + 1;
+  auto const ticks = hal::cycles_per(p_frequency, p_duration);
+  return (ticks == max_ticks) ? max_ticks : (ticks + 1);
 }
 
 /**
