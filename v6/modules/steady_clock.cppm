@@ -14,13 +14,12 @@
 
 module;
 
-#include <type_traits>
+#include <chrono>
+#include <limits>
 
 export module hal.util:steady_clock;
 
 import hal;
-
-import :units;
 
 /**
  * @defgroup SteadyClock Steady Clock
@@ -30,41 +29,74 @@ import :units;
 namespace hal::inline v6 {
 /**
  * @ingroup SteadyClock
- * @brief Function to compute a future timestamp in ticks
+ * @brief The ticks to add to a steady clock's uptime for a deadline at least a
+ * duration away
  *
- * This function calculates a future timestamp based on the current uptime of a
- * steady clock and a specified duration.
+ * For code that keeps a timeout as a number of ticks and adds it to
+ * `uptime()` each time it starts waiting. The duration is converted to ticks
+ * of `p_frequency`, rounded up, plus one more, since part of the tick in
+ * progress has already passed when the deadline is set. So a deadline of
+ * `uptime()` plus these ticks is never reached sooner than `p_duration` later.
  *
- * @param p_steady_clock - the steady_clock used to calculate the future
- * duration. Note that this future deadline will only work with this steady
- * clock.
- * @param p_duration The duration for which we need to compute a future
- * timestamp.
+ * @param p_frequency - the frequency of the steady clock
+ * @param p_duration - the least time until the deadline
+ * @return hal::u64 - the ticks to add to `uptime()`: 1, the next tick, if
+ * `p_duration` isn't positive, and the largest `hal::u64` if it is 2^32
+ * seconds (about 136 years) or more.
+ */
+export [[nodiscard]] constexpr hal::u64 deadline_ticks(
+  hertz p_frequency,
+  hal::time_duration p_duration)
+{
+  using period = hal::time_duration::period;
+  static_assert(period::num == 1, "The period ratio numerator must be 1");
+  constexpr hal::u64 counts_per_second = period::den;
+  constexpr hal::u64 max_seconds = std::numeric_limits<hal::u32>::max();
+  constexpr hal::u64 max_ticks = std::numeric_limits<hal::u64>::max();
+
+  if (p_duration <= hal::time_duration::zero()) {
+    return 1;
+  }
+
+  // Whole seconds times the frequency, plus the ticks in the rest of a second,
+  // rounded up. Both the seconds and the frequency fit in 32 bits, so every
+  // product and sum fits in 64 bits.
+  hal::u64 const frequency = p_frequency.numerical_value_in(hertz::unit);
+  auto const counts = static_cast<hal::u64>(p_duration.count());
+  auto const seconds = counts / counts_per_second;
+  auto const rest = counts % counts_per_second;
+  if (seconds > max_seconds) {
+    return max_ticks;
+  }
+  auto const rest_ticks =
+    ((rest * frequency) + (counts_per_second - 1)) / counts_per_second;
+  return (seconds * frequency) + rest_ticks + 1;
+}
+
+/**
+ * @ingroup SteadyClock
+ * @brief Compute a deadline at least a duration from now
  *
- * @return A 64-bit unsigned integer representing the future timestamp in steady
- * clock ticks. The future timestamp is calculated as the sum of the current
- * number of ticks of the clock and the number of ticks equivalent to the
- * specified duration. If the duration corresponds to a ticks_required value
- * less than or equal to 1, it will be set to 1 to ensure at least one tick is
- * waited.
+ * The deadline is in ticks of `p_steady_clock`: `uptime()` plus
+ * `deadline_ticks()` of the duration. Once `uptime()` reaches it, at least
+ * `p_duration` has passed.
+ *
+ * @param p_steady_clock - the steady clock to compute the deadline for. The
+ * deadline only works with this clock.
+ * @param p_duration - the least time until the deadline
+ * @return hal::u64 - the deadline in ticks of `p_steady_clock`. A duration
+ * that isn't positive gives the next tick. A deadline past what 64 bits can
+ * count gives the largest `hal::u64`, which the clock never reaches.
  */
 export hal::u64 future_deadline(hal::steady_clock& p_steady_clock,
                                 hal::time_duration p_duration)
 {
-
-  using period = decltype(p_duration)::period;
-  auto const frequency = p_steady_clock.frequency();
-  auto const tick_period = wavelength<period>(frequency);
-  auto ticks_required = p_duration.count() / tick_period.count();
-  using unsigned_ticks = std::make_unsigned_t<decltype(ticks_required)>;
-
-  if (ticks_required <= 1) {
-    ticks_required = 1;
+  constexpr hal::u64 max_deadline = std::numeric_limits<hal::u64>::max();
+  auto const ticks = deadline_ticks(p_steady_clock.frequency(), p_duration);
+  auto const now = p_steady_clock.uptime();
+  if (ticks > (max_deadline - now)) {
+    return max_deadline;
   }
-
-  auto const ticks = static_cast<unsigned_ticks>(ticks_required);
-  auto const future_timestamp = ticks + p_steady_clock.uptime();
-
-  return future_timestamp;
+  return now + ticks;
 }
 }  // namespace hal::inline v6
