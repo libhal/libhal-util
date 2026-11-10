@@ -47,13 +47,75 @@ void units_test()
     expect(that % 192'000 == hal::cycles_per(12'000'000 * si::hertz, 16ms));
     expect(that % 960'000'000 == hal::cycles_per(8'000'000 * si::hertz, 2min));
     expect(that % 57'600'000 == hal::cycles_per(32'000 * si::hertz, 30min));
-    expect(that % 18'446'744'064'966'997'184ULL ==
+    expect(that % 600'000'000'000ULL ==
            hal::cycles_per(1'000'000'000 * si::hertz, 10min));
 
     // Result of zero means that the time period is smaller than the
     // frequency's period length
     expect(that % 0 == hal::cycles_per(100'000 * si::hertz, 1us));
     expect(that % 0 == hal::cycles_per(100 * si::hertz, 1ms));
+  };
+
+  "cycles_per rounds down to whole cycles"_test = []() {
+    // Exercise
+    // 1.5 s at 3 Hz is 4.5 cycles, which counts the whole seconds and the
+    // rest of a second separately.
+    auto const split = hal::cycles_per(3 * si::hertz, 1'500ms);
+    // 1,001 ns at 8 MHz is 8.008 cycles.
+    auto const odd = hal::cycles_per(8'000'000 * si::hertz, 1'001ns);
+
+    // Verify
+    expect(that % 4 == split);
+    expect(that % 8 == odd);
+  };
+
+  "cycles_per doesn't overflow for long durations"_test = []() {
+    // Setup
+    constexpr auto max_u32 = std::numeric_limits<hal::u32>::max();
+    constexpr auto max_seconds = std::chrono::seconds(max_u32);
+
+    // Exercise
+    // 10 minutes at 72 MHz, past what the whole duration times the frequency
+    // fits in 64 bits
+    auto const minutes = hal::cycles_per(72'000'000 * si::hertz, 10min);
+    // The largest clock for the most whole seconds that are counted, with the
+    // rest of a second on top, is the largest count that doesn't saturate.
+    auto const largest_count =
+      hal::cycles_per(max_u32 * si::hertz, max_seconds + 999'999'999ns);
+
+    // Verify
+    expect(that % 43'200'000'000ULL == minutes);
+    // (2^32 - 1)^2 cycles for the seconds, 4,294,967,290 for the rest
+    expect(that % 18'446'744'069'414'584'315ULL == largest_count);
+  };
+
+  "cycles_per is 0 for a duration that isn't positive"_test = []() {
+    // Exercise
+    auto const zero = hal::cycles_per(1'000'000 * si::hertz, 0ms);
+    auto const negative = hal::cycles_per(1'000'000 * si::hertz, -1ms);
+
+    // Verify
+    expect(that % 0 == zero);
+    expect(that % 0 == negative);
+  };
+
+  "cycles_per saturates at 2^32 seconds"_test = []() {
+    // Setup
+    constexpr auto max_u32 = std::numeric_limits<hal::u32>::max();
+    constexpr auto max_u64 = std::numeric_limits<hal::u64>::max();
+
+    // Exercise
+    auto const below_limit =
+      hal::cycles_per(1 * si::hertz, std::chrono::seconds(max_u32));
+    auto const at_limit = hal::cycles_per(
+      1 * si::hertz, std::chrono::seconds(hal::u64{ max_u32 } + 1));
+    auto const largest =
+      hal::cycles_per(max_u32 * si::hertz, hal::time_duration::max());
+
+    // Verify
+    expect(that % max_u32 == below_limit);
+    expect(that % max_u64 == at_limit);
+    expect(that % max_u64 == largest);
   };
 
   "duration wavelength"_test = []() {
