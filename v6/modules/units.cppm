@@ -37,8 +37,8 @@ namespace hal::inline v6 {
  * duration. This function is meant for timers to determine how many count
  * cycles are needed to reach a particular time duration at this frequency.
  *
- * Only whole cycles count, so the result rounds down, and a duration shorter
- * than one cycle gives 0.
+ * The result rounds up, so the cycles never take less than the duration, as a
+ * timer's delay must not. A positive duration shorter than one cycle gives 1.
  *
  * @param p_source - source frequency
  * @param p_duration - the amount of time to convert to cycles
@@ -76,7 +76,9 @@ export [[nodiscard]] constexpr hal::u64 cycles_per(
   if (seconds > max_seconds) {
     return std::numeric_limits<hal::u64>::max();
   }
-  return (seconds * frequency) + ((rest * frequency) / counts_per_second);
+  auto const rest_cycles =
+    ((rest * frequency) + (counts_per_second - 1)) / counts_per_second;
+  return (seconds * frequency) + rest_cycles;
 }
 
 /**
