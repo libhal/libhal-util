@@ -50,23 +50,26 @@ void units_test()
     expect(that % 600'000'000'000ULL ==
            hal::cycles_per(1'000'000'000 * si::hertz, 10min));
 
-    // Result of zero means that the time period is smaller than the
-    // frequency's period length
-    expect(that % 0 == hal::cycles_per(100'000 * si::hertz, 1us));
-    expect(that % 0 == hal::cycles_per(100 * si::hertz, 1ms));
+    // A duration shorter than the frequency's period still takes a whole
+    // cycle.
+    expect(that % 1 == hal::cycles_per(100'000 * si::hertz, 1us));
+    expect(that % 1 == hal::cycles_per(100 * si::hertz, 1ms));
   };
 
-  "cycles_per rounds down to whole cycles"_test = []() {
+  "cycles_per rounds up, so the cycles are never shorter"_test = []() {
     // Exercise
     // 1.5 s at 3 Hz is 4.5 cycles, which counts the whole seconds and the
     // rest of a second separately.
     auto const split = hal::cycles_per(3 * si::hertz, 1'500ms);
     // 1,001 ns at 8 MHz is 8.008 cycles.
     auto const odd = hal::cycles_per(8'000'000 * si::hertz, 1'001ns);
+    // 1 ns at 8 MHz is 0.008 of a cycle.
+    auto const tiny = hal::cycles_per(8'000'000 * si::hertz, 1ns);
 
     // Verify
-    expect(that % 4 == split);
-    expect(that % 8 == odd);
+    expect(that % 5 == split);
+    expect(that % 9 == odd);
+    expect(that % 1 == tiny);
   };
 
   "cycles_per doesn't overflow for long durations"_test = []() {
@@ -85,8 +88,8 @@ void units_test()
 
     // Verify
     expect(that % 43'200'000'000ULL == minutes);
-    // (2^32 - 1)^2 cycles for the seconds, 4,294,967,290 for the rest
-    expect(that % 18'446'744'069'414'584'315ULL == largest_count);
+    // (2^32 - 1)^2 cycles for the seconds, 4,294,967,291 for the rest
+    expect(that % 18'446'744'069'414'584'316ULL == largest_count);
   };
 
   "cycles_per is 0 for a duration that isn't positive"_test = []() {
