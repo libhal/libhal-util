@@ -18,6 +18,7 @@ module;
 #include <cmath>
 #include <cstdint>
 #include <ios>
+#include <limits>
 
 export module hal.util:units;
 
@@ -36,9 +37,13 @@ namespace hal::inline v6 {
  * duration. This function is meant for timers to determine how many count
  * cycles are needed to reach a particular time duration at this frequency.
  *
+ * The result rounds up, so the cycles never take less than the duration, as a
+ * timer's delay must not. A positive duration shorter than one cycle gives 1.
+ *
  * @param p_source - source frequency
  * @param p_duration - the amount of time to convert to cycles
- * @return hal::u32 - number of cycles
+ * @return hal::u64 - number of cycles: 0 if `p_duration` isn't positive, and
+ * the largest `hal::u64` if it is 2^32 seconds (about 136 years) or more
  */
 export [[nodiscard]] constexpr hal::u64 cycles_per(
   hertz p_source,
@@ -50,14 +55,30 @@ export [[nodiscard]] constexpr hal::u64 cycles_per(
   //                              \ ratio_den /
   //
   // hal::time_duration::period::num == 1
-  // hal::time_duration::period::den == 1,000,000
+  // hal::time_duration::period::den == 1,000,000,000
+  using period = hal::time_duration::period;
+  static_assert(period::num == 1, "The period ratio numerator must be 1");
+  constexpr hal::u64 counts_per_second = period::den;
+  constexpr hal::u64 max_seconds = std::numeric_limits<hal::u32>::max();
 
-  auto const denominator = decltype(p_duration)::period::den;
-  auto const count = p_duration.count();
-  auto const source_hz = p_source.numerical_value_in(hertz::unit);
-  auto const cycle_count = (count * source_hz) / denominator;
+  if (p_duration <= hal::time_duration::zero()) {
+    return 0;
+  }
 
-  return static_cast<hal::u64>(cycle_count);
+  // Multiplying the whole duration by the frequency overflows 64 bits after
+  // about 9 seconds at 1 GHz. Whole seconds times the frequency, plus the
+  // cycles in the rest of a second, can't: both the seconds and the frequency
+  // fit in 32 bits.
+  hal::u64 const frequency = p_source.numerical_value_in(hertz::unit);
+  auto const counts = static_cast<hal::u64>(p_duration.count());
+  auto const seconds = counts / counts_per_second;
+  auto const rest = counts % counts_per_second;
+  if (seconds > max_seconds) {
+    return std::numeric_limits<hal::u64>::max();
+  }
+  auto const rest_cycles =
+    ((rest * frequency) + (counts_per_second - 1)) / counts_per_second;
+  return (seconds * frequency) + rest_cycles;
 }
 
 /**
