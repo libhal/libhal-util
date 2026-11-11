@@ -395,6 +395,14 @@ void i2c_bus_slack_test()
     // Verify
     expect(slack == 2ms);
   };
+
+  "[success] i2c_bus_slack allows 1 ms by default"_test = []() {
+    // Exercise
+    constexpr auto slack = hal::i2c_bus_slack<long_stretching_device>();
+
+    // Verify
+    expect(slack == 86ms);
+  };
 }
 
 void i2c_transaction_clocks_test()
@@ -427,6 +435,22 @@ void i2c_transaction_clocks_test()
       // Verify
       expect(that % 0 == empty);
     };
+
+  "[success] i2c_transaction_clocks counts in the type asked for"_test = []() {
+    // Exercise
+    constexpr auto write = hal::i2c_transaction_clocks<hal::u32>(2, 0);
+    constexpr auto write_then_read =
+      hal::i2c_transaction_clocks<hal::u32>(1, 2);
+    constexpr auto empty = hal::i2c_transaction_clocks<hal::u32>(0, 0);
+
+    // Verify
+    static_assert(std::is_same_v<decltype(write), hal::u32 const>);
+    static_assert(
+      std::is_same_v<decltype(hal::i2c_transaction_clocks(2, 0)), hal::u64>);
+    expect(that % 29 == write);
+    expect(that % 48 == write_then_read);
+    expect(that % 0 == empty);
+  };
 }
 
 /// Records whether the lock was held when each call reached the bus

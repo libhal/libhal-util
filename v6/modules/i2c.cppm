@@ -415,20 +415,21 @@ concept i2c_stretching_device = requires {
  * ```cpp
  * static hal::stm32f1::polled_i2c i2c1(hal::stm32f1::peripheral::i2c1, clock, {
  *   .clock_rate = hal::i2c_bus_rate<sht21, at24c02>(400 * kHz),
- *   .slack = hal::i2c_bus_slack<sht21, at24c02>(1ms),
+ *   .slack = hal::i2c_bus_slack<sht21, at24c02>(),
  * });
  * ```
  *
  * @tparam Devices - the driver type of each device on the bus. A type that
  * doesn't declare `max_clock_stretch` fails to compile.
  * @param p_allowance - how long a transaction may wait on the calling context.
- * The default slack, 1 ms, suits a context that isn't interrupted for long.
+ * The default, 1 ms, is the default slack, and suits a context that isn't
+ * interrupted for long.
  * @return hal::time_duration - `p_allowance` plus the longest
  * `max_clock_stretch` of the devices
  */
 export template<i2c_stretching_device... Devices>
 [[nodiscard]] consteval hal::time_duration i2c_bus_slack(
-  hal::time_duration p_allowance)
+  hal::time_duration p_allowance = std::chrono::milliseconds(1))
 {
   return p_allowance + std::max({ hal::time_duration::zero(),
                                   static_cast<hal::time_duration>(
@@ -446,24 +447,29 @@ export template<i2c_stretching_device... Devices>
  * start. An implementation gives a transaction twice this many cycles at its
  * clock rate, plus the slack, before throwing `hal::timed_out`.
  *
+ * @tparam Count - the unsigned type to count in. The default, `hal::u64`, holds
+ * the count for any transaction. `hal::u32` takes fewer instructions on a
+ * 32-bit processor and holds the count for transactions of up to 477 million
+ * bytes. The count isn't checked for overflow, so pick a type wide enough for
+ * the longest transaction.
  * @param p_bytes_out - the number of bytes written
  * @param p_bytes_in - the number of bytes read
- * @return hal::u64 - the clock cycles, or 0 for a transaction with nothing to
+ * @return Count - the clock cycles, or 0 for a transaction with nothing to
  * write or read, which doesn't touch the bus
  */
-export [[nodiscard]] constexpr hal::u64 i2c_transaction_clocks(
-  hal::usize p_bytes_out,
-  hal::usize p_bytes_in)
+export template<std::unsigned_integral Count = hal::u64>
+[[nodiscard]] constexpr Count i2c_transaction_clocks(hal::usize p_bytes_out,
+                                                     hal::usize p_bytes_in)
 {
-  constexpr hal::u64 clocks_per_byte = 9;
+  constexpr Count clocks_per_byte = 9;
   // Each direction has an address byte and a start condition.
-  hal::u64 const directions =
-    hal::u64{ p_bytes_out != 0 } + hal::u64{ p_bytes_in != 0 };
+  Count const directions = Count{ p_bytes_out != 0 } + Count{ p_bytes_in != 0 };
   if (directions == 0) {
     return 0;
   }
-  hal::u64 const bytes =
-    (hal::u64{ p_bytes_out } + hal::u64{ p_bytes_in }) + directions;
+  Count const bytes =
+    (static_cast<Count>(p_bytes_out) + static_cast<Count>(p_bytes_in)) +
+    directions;
   // The start conditions, plus the stop condition
   return (bytes * clocks_per_byte) + (directions + 1);
 }
