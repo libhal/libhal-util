@@ -16,6 +16,7 @@ export module hal.util;
 
 export import :as_bytes;
 export import :bit;
+export import :busy_scope;
 export import :can;
 export import :comparison;
 export import :enumeration;

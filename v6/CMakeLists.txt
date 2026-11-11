@@ -28,6 +28,7 @@ libhal_add_library(util
         modules/hal.util.cppm
         modules/as_bytes.cppm
         modules/bit.cppm
+        modules/busy_scope.cppm
         modules/can.cppm
         modules/comparison.cppm
         modules/enum.cppm
@@ -56,6 +57,7 @@ libhal_add_tests(util
         as_bytes
         bit
         bit_functions
+        busy_scope
         can
         enum
         i2c
