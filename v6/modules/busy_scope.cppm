@@ -58,7 +58,8 @@ public:
    * @throws hal::device_or_resource_busy - if `p_busy` is already set: another
    * operation on the driver is in progress
    */
-  inline busy_scope(std::atomic_flag& p_busy, void const* p_instance)
+  inline busy_scope(std::atomic_flag& p_busy [[clang::lifetimebound]],
+                    void const* p_instance)
     : m_busy(p_busy)
   {
     if (m_busy.test_and_set(std::memory_order_acquire)) {
