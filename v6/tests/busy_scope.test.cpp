@@ -67,17 +67,17 @@ void busy_scope_test()
     int const driver = 0;
 
     // Exercise
-    // NOLINTBEGIN(bugprone-empty-catch): the test checks the flag after the
-    // exception, not the exception itself.
+    bool clear_in_handler = false;
     try {
       hal::busy_scope const scope(busy, &driver);
       throw hal::io_error(&driver);
     } catch (hal::io_error const&) {
-      // The operation failed. The flag must be clear for the next one.
+      // Unwinding destroyed the scope before the handler runs.
+      clear_in_handler = not busy.test();
     }
-    // NOLINTEND(bugprone-empty-catch)
 
     // Verify
+    expect(clear_in_handler);
     expect(not busy.test());
   };
 }
