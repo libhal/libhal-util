@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <tuple>
 #include <type_traits>
 
@@ -340,6 +341,118 @@ void i2c_bus_rate_test()
   };
 }
 
+/// Holds SCL low while it measures, like the SHT21 in hold-master mode
+struct long_stretching_device
+{
+  static constexpr hal::time_duration max_clock_stretch =
+    std::chrono::milliseconds(85);
+};
+
+struct brief_stretching_device
+{
+  static constexpr hal::time_duration max_clock_stretch =
+    std::chrono::microseconds(500);
+};
+
+struct non_stretching_device
+{
+  static constexpr hal::time_duration max_clock_stretch =
+    hal::time_duration::zero();
+};
+
+static_assert(hal::i2c_stretching_device<long_stretching_device>);
+static_assert(not hal::i2c_stretching_device<unrated_device>);
+
+void i2c_bus_slack_test()
+{
+  using namespace boost::ut;
+  using namespace std::chrono_literals;
+
+  "[success] i2c_bus_slack adds the longest stretch to the allowance"_test =
+    []() {
+      // Exercise
+      constexpr auto slack = hal::i2c_bus_slack<brief_stretching_device,
+                                                long_stretching_device,
+                                                non_stretching_device>(1ms);
+
+      // Verify
+      expect(slack == 86ms);
+    };
+
+  "[success] i2c_bus_slack for devices that don't stretch is the allowance"_test =
+    []() {
+      // Exercise
+      constexpr auto slack = hal::i2c_bus_slack<non_stretching_device>(1ms);
+
+      // Verify
+      expect(slack == 1ms);
+    };
+
+  "[success] i2c_bus_slack with no devices is the allowance"_test = []() {
+    // Exercise
+    constexpr auto slack = hal::i2c_bus_slack<>(2ms);
+
+    // Verify
+    expect(slack == 2ms);
+  };
+
+  "[success] i2c_bus_slack allows 1 ms by default"_test = []() {
+    // Exercise
+    constexpr auto slack = hal::i2c_bus_slack<long_stretching_device>();
+
+    // Verify
+    expect(slack == 86ms);
+  };
+}
+
+void i2c_transaction_clocks_test()
+{
+  using namespace boost::ut;
+
+  "[success] i2c_transaction_clocks counts 9 per byte and the conditions"_test =
+    []() {
+      // Exercise
+      // The address and 2 bytes, a start and a stop
+      constexpr auto write = hal::i2c_transaction_clocks(2, 0);
+      constexpr auto read = hal::i2c_transaction_clocks(0, 2);
+      // Two addresses and 3 bytes, a start, a repeated start and a stop
+      constexpr auto write_then_read = hal::i2c_transaction_clocks(1, 2);
+      // A 4 KB write: the address and 4,096 bytes, a start and a stop
+      constexpr auto long_write = hal::i2c_transaction_clocks(4'096, 0);
+
+      // Verify
+      expect(that % 29 == write);
+      expect(that % 29 == read);
+      expect(that % 48 == write_then_read);
+      expect(that % 36'875 == long_write);
+    };
+
+  "[success] i2c_transaction_clocks is 0 with nothing to write or read"_test =
+    []() {
+      // Exercise
+      constexpr auto empty = hal::i2c_transaction_clocks(0, 0);
+
+      // Verify
+      expect(that % 0 == empty);
+    };
+
+  "[success] i2c_transaction_clocks counts in the type asked for"_test = []() {
+    // Exercise
+    constexpr auto write = hal::i2c_transaction_clocks<hal::u32>(2, 0);
+    constexpr auto write_then_read =
+      hal::i2c_transaction_clocks<hal::u32>(1, 2);
+    constexpr auto empty = hal::i2c_transaction_clocks<hal::u32>(0, 0);
+
+    // Verify
+    static_assert(std::is_same_v<decltype(write), hal::u32 const>);
+    static_assert(
+      std::is_same_v<decltype(hal::i2c_transaction_clocks(2, 0)), hal::u64>);
+    expect(that % 29 == write);
+    expect(that % 48 == write_then_read);
+    expect(that % 0 == empty);
+  };
+}
+
 /// Records whether the lock was held when each call reached the bus
 class lock_checking_i2c : public test_i2c
 {
@@ -450,4 +563,6 @@ int main()
   probe_test();
   thread_safe_i2c_test();
   i2c_bus_rate_test();
+  i2c_bus_slack_test();
+  i2c_transaction_clocks_test();
 }
