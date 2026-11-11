@@ -19,6 +19,8 @@ module;
 #include <cstdint>
 #include <ios>
 #include <limits>
+#include <ratio>
+#include <type_traits>
 
 export module hal.util:units;
 
@@ -49,17 +51,9 @@ export [[nodiscard]] constexpr hal::u64 cycles_per(
   hertz p_source,
   hal::time_duration p_duration)
 {
-  // Full Equation:
-  //                              / ratio_num \_
-  //   frequency_hz * |period| * | ----------- |  = cycles
-  //                              \ ratio_den /
-  //
-  // hal::time_duration::period::num == 1
-  // hal::time_duration::period::den == 1,000,000,000
-  using period = hal::time_duration::period;
-  static_assert(period::num == 1, "The period ratio numerator must be 1");
-  constexpr hal::u64 counts_per_second = period::den;
-  constexpr hal::u64 max_seconds = std::numeric_limits<hal::u32>::max();
+  using namespace mp_units;
+  static_assert(std::is_same_v<hal::time_duration::period, std::nano>,
+                "hal::time_duration must count nanoseconds");
 
   if (p_duration <= hal::time_duration::zero()) {
     return 0;
@@ -69,16 +63,16 @@ export [[nodiscard]] constexpr hal::u64 cycles_per(
   // about 9 seconds at 1 GHz. Whole seconds times the frequency, plus the
   // cycles in the rest of a second, can't: both the seconds and the frequency
   // fit in 32 bits.
-  hal::u64 const frequency = p_source.numerical_value_in(hertz::unit);
-  auto const counts = static_cast<hal::u64>(p_duration.count());
-  auto const seconds = counts / counts_per_second;
-  auto const rest = counts % counts_per_second;
-  if (seconds > max_seconds) {
+  quantity const time =
+    static_cast<hal::u64>(p_duration.count()) * si::nano<si::second>;
+  quantity const rest = time % (1U * si::second);
+  quantity const seconds = (time - rest).in(si::second, truncated);
+  if (seconds > std::numeric_limits<hal::u32>::max() * si::second) {
     return std::numeric_limits<hal::u64>::max();
   }
-  auto const rest_cycles =
-    ((rest * frequency) + (counts_per_second - 1)) / counts_per_second;
-  return (seconds * frequency) + rest_cycles;
+  quantity const frequency = value_cast<hal::u64>(p_source);
+  return (frequency * seconds).numerical_value_in(one) +
+         (frequency * rest).in(one, rounded_up).numerical_value_in(one);
 }
 
 /**
