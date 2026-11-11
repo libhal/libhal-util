@@ -27,7 +27,7 @@ void bit_modify_compile_time_test()
 
   "hal::bit_modify<template> compile time masks APIs"_test = []() {
     // Setup
-    std::uint32_t volatile control_register = 1 << 15 | 1 << 16;
+    std::uint32_t volatile control_register = (1U << 15U) | (1U << 16U);
     constexpr auto enable_bit = hal::bit_mask::from(1);
     constexpr auto high_power_mode = hal::bit_mask::from(15);
     constexpr auto clock_divider = hal::bit_mask::from(20, 23);
@@ -61,7 +61,7 @@ void bit_modify_runtime_test()
 
   "hal::bit_modify runtime APIs"_test = []() {
     // Setup
-    std::uint32_t volatile control_register = 1 << 15 | 1 << 16;
+    std::uint32_t volatile control_register = (1U << 15U) | (1U << 16U);
     constexpr auto enable_bit = hal::bit_mask::from(1);
     constexpr auto high_power_mode = hal::bit_mask::from(15);
     constexpr auto clock_divider = hal::bit_mask::from(20, 23);
@@ -107,6 +107,23 @@ void nibble_byte_mask_test()
   };
 }
 
+void generate_field_of_ones_test()
+{
+  using namespace boost::ut;
+
+  "hal::generate_field_of_ones fills the low bits"_test = []() {
+    // Exercise
+    constexpr auto byte = hal::generate_field_of_ones<8, std::uint32_t>();
+    constexpr auto full = hal::generate_field_of_ones<32, std::uint32_t>();
+    constexpr auto wide = hal::generate_field_of_ones<40, std::uint64_t>();
+
+    // Verify
+    expect(that % 0xFFU == byte);
+    expect(that % 0xFFFF'FFFFU == full);
+    expect(that % 0xFF'FFFF'FFFFULL == wide);
+  };
+}
+
 }  // namespace
 
 int main()
@@ -114,4 +131,5 @@ int main()
   bit_modify_compile_time_test();
   bit_modify_runtime_test();
   nibble_byte_mask_test();
+  generate_field_of_ones_test();
 }

@@ -265,7 +265,7 @@ export template<std::unsigned_integral int_t, usize bit_width>
   }
 
   // Create mask for the input bits
-  constexpr auto over_sized_mask = (1LL << bit_width) - 1LL;
+  constexpr auto over_sized_mask = (1ULL << bit_width) - 1ULL;
   constexpr auto mask = static_cast<int_t>(over_sized_mask);
 
   // Calculate number of iterations needed (ceiling(32/bit_width) - 1)

@@ -184,7 +184,7 @@ export [[nodiscard]] inline hal::byte to_8_bit_address(
   hal::byte p_address,
   i2c_operation p_operation) noexcept
 {
-  auto v8bit_address = static_cast<hal::byte>(p_address << 1);
+  auto v8bit_address = static_cast<hal::byte>(p_address << 1U);
   v8bit_address |= hal::value(p_operation);
   return v8bit_address;
 }
@@ -217,7 +217,7 @@ private:
                           mem::scatter_span<hal::byte> p_data_in) override
   {
     // Not std::scoped_lock, which libc++ built without threads doesn't provide.
-    std::lock_guard const hold(*m_lock);
+    std::lock_guard const hold(*m_lock);  // NOLINT(modernize-use-scoped-lock)
     m_bus->transaction(p_address, p_data_out, p_data_in);
   }
 

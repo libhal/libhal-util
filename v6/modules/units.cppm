@@ -108,8 +108,7 @@ export constexpr float wavelength(hertz p_source)
   if (equals(source_hz, 0.0f)) {
     return 0.0f;
   }
-  auto duration = (1.0f / source_hz);
-  return float(duration);
+  return 1.0f / source_hz;
 }
 
 /**
@@ -174,6 +173,6 @@ inline std::basic_ostream<CharT, Traits>& operator<<(
   std::basic_ostream<CharT, Traits>& p_ostream,
   hal::byte const& p_byte)
 {
-  return p_ostream << std::hex << "0x" << unsigned(p_byte);
+  return p_ostream << std::hex << "0x" << static_cast<unsigned>(p_byte);
 }
 }  // namespace hal::inline v6

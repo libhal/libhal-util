@@ -21,6 +21,7 @@ module;
 #include <algorithm>
 #include <concepts>
 #include <limits>
+#include <type_traits>
 
 export module hal.util:bit;
 
@@ -43,11 +44,13 @@ namespace hal::inline v6 {
 export template<size_t BitWidth, std::integral T>
 [[nodiscard]] consteval T generate_field_of_ones()
 {
-  T result = 0;
+  // Shift an unsigned type of T's width: shifting int fails past 31 bits.
+  using unsigned_t = std::make_unsigned_t<T>;
+  unsigned_t result = 0;
   for (size_t i = 0; i < BitWidth; i++) {
-    result |= 1 << i;
+    result |= unsigned_t{ 1 } << i;
   }
-  return result;
+  return static_cast<T>(result);
 }
 
 /**
