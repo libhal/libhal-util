@@ -59,7 +59,8 @@ void check_validity(hal::hertz p_operating_frequency,
     p_operating_frequency.numerical_value_in(hal::hertz::unit);
   auto const target_baud_rate_value =
     p_target_baud_rate.numerical_value_in(hal::hertz::unit);
-  auto const calculated_baud_rate = operating_frequency_value / denominator;
+  auto const calculated_baud_rate =
+    static_cast<float>(operating_frequency_value) / denominator;
 
   expect(that % 8 <= bit_width && bit_width <= 25);
   expect(that % 8 <= test_subject.total_tq && test_subject.total_tq <= 25);
