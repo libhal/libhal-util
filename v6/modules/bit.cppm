@@ -83,13 +83,14 @@ struct bit_limits
    */
   [[nodiscard]] static constexpr int_t max()
   {
-    if constexpr (std::is_signed_v<int_t>) {
-      int_t max = generate_field_of_ones<BitWidth, int_t>();
-      max = max >> 1;
-      return max;
+    using unsigned_t = std::make_unsigned_t<int_t>;
+    if constexpr (BitWidth == sizeof(int_t) * 8) {
+      return std::numeric_limits<int_t>::max();
+    } else if constexpr (std::is_signed_v<int_t>) {
+      // A signed field spends one of its bits on the sign.
+      return static_cast<int_t>((unsigned_t{ 1 } << (BitWidth - 1)) - 1U);
     } else {
-      int_t max = generate_field_of_ones<BitWidth, int_t>();
-      return max;
+      return static_cast<int_t>((unsigned_t{ 1 } << BitWidth) - 1U);
     }
   }
 
@@ -105,13 +106,11 @@ struct bit_limits
    */
   [[nodiscard]] static constexpr int_t min()
   {
-    if constexpr (BitWidth == 64) {
-      return std::numeric_limits<int_t>::min();
-    } else if constexpr (std::is_signed_v<int_t>) {
-      int_t min = (1ULL << BitWidth);
-      return min;
+    if constexpr (std::is_signed_v<int_t>) {
+      // Two's complement reaches one below the negated maximum.
+      return static_cast<int_t>(-max() - 1);
     } else {
-      return 0U;
+      return 0;
     }
   }
 };
