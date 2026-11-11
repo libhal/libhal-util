@@ -67,12 +67,15 @@ void busy_scope_test()
     int const driver = 0;
 
     // Exercise
+    // NOLINTBEGIN(bugprone-empty-catch): the test checks the flag after the
+    // exception, not the exception itself.
     try {
       hal::busy_scope const scope(busy, &driver);
       throw hal::io_error(&driver);
     } catch (hal::io_error const&) {
       // The operation failed. The flag must be clear for the next one.
     }
+    // NOLINTEND(bugprone-empty-catch)
 
     // Verify
     expect(not busy.test());
