@@ -134,45 +134,60 @@ export constexpr float wavelength(hertz p_source)
 
 /**
  * @ingroup UnitsUtils
- * @brief Calculate the amount of time it takes a frequency to oscillate a
- * number of cycles.
+ * @brief Calculate how long a number of cycles of a frequency takes
  *
- * @param p_source - the frequency to compute the cycles from
- * @param p_cycles - number of cycles within the time duration
- * @return std::optional<hal::time_duration> - time duration based on this
- * frequency and the number of cycles. Will return std::nullopt if the duration
- * exceeds
+ * The reverse of `hal::cycles_per()`. For code that counts in ticks of a
+ * clock, such as a deadline on a steady clock, and needs the time left as a
+ * duration, for example to sleep until the deadline.
+ *
+ * The result rounds up, so the duration is never shorter than the cycles
+ * take, as a sleep until a deadline must not be.
+ *
+ * @param p_source - the frequency of the cycles
+ * @param p_cycles - the number of cycles
+ * @return hal::time_duration - the time the cycles take: 0 for no cycles, and
+ * `hal::time_duration::max()` (about 292 years) if they take its last second
+ * or longer, or if `p_source` is 0 Hz, which never completes a cycle.
  */
-export [[nodiscard]] inline std::optional<hal::time_duration>
-duration_from_cycles(hertz p_source, uint32_t p_cycles)
+export [[nodiscard]] constexpr hal::time_duration duration_from_cycles(
+  hertz p_source,
+  hal::u64 p_cycles)
 {
-  // Full Equation (based on the equation in cycles_per()):
+  // Full Equation (the reverse of cycles_per()):
   //
+  //                    cycles * ratio_den
+  //   duration =  --------------------------
+  //                frequency_hz * ratio_num
   //
-  //                /    cycles * ratio_den    \_
-  //   |period| =  | ---------------------------|
-  //                \ frequency_hz * ratio_num /
-  //
-  constexpr auto ratio_den =
-    static_cast<float>(hal::time_duration::period::den);
-  constexpr auto ratio_num = hal::time_duration::period::num;
-  constexpr auto int_min = std::numeric_limits<hal::time_duration::rep>::min();
-  constexpr auto int_max = std::numeric_limits<hal::time_duration::rep>::max();
-  constexpr auto float_int_min = static_cast<float>(int_min);
-  constexpr auto float_int_max = static_cast<float>(int_max);
+  // hal::time_duration::period::num == 1
+  // hal::time_duration::period::den == 1,000,000,000
+  using period = hal::time_duration::period;
+  static_assert(period::num == 1, "The period ratio numerator must be 1");
+  constexpr hal::u64 counts_per_second = period::den;
+  constexpr auto max_counts =
+    static_cast<hal::u64>(hal::time_duration::max().count());
 
-  auto const source_hz =
-    static_cast<float>(p_source.numerical_value_in(hertz::unit));
-  auto const source = std::abs(source_hz);
-  auto const float_cycles = static_cast<float>(p_cycles);
-  auto const nanoseconds = (float_cycles * ratio_den) / (source * ratio_num);
-
-  if (float_int_min <= nanoseconds && nanoseconds <= float_int_max) {
-    return hal::time_duration(
-      static_cast<hal::time_duration::rep>(nanoseconds));
+  hal::u64 const frequency = p_source.numerical_value_in(hertz::unit);
+  if (frequency == 0) {
+    return (p_cycles == 0) ? hal::time_duration::zero()
+                           : hal::time_duration::max();
   }
 
-  return std::nullopt;
+  // Multiplying all the cycles by a billion overflows 64 bits past about 18
+  // billion cycles. Whole seconds, plus the counts in the cycles left over,
+  // can't: fewer cycles are left over than the frequency, which fits in 32
+  // bits.
+  auto const seconds = p_cycles / frequency;
+  auto const rest = p_cycles % frequency;
+  // From the last whole second that fits on, the duration could pass max().
+  // max() itself is never shorter than the cycles take.
+  if (seconds >= (max_counts / counts_per_second)) {
+    return hal::time_duration::max();
+  }
+  auto const rest_counts =
+    ((rest * counts_per_second) + (frequency - 1)) / frequency;
+  return hal::time_duration(static_cast<hal::time_duration::rep>(
+    (seconds * counts_per_second) + rest_counts));
 }
 
 /**

@@ -150,48 +150,86 @@ void units_test()
 
   "duration_from_cycles"_test = []() {
     expect(that % 1'400us ==
-           hal::duration_from_cycles(1'000'000 * si::hertz, 1400).value());
-    expect(that % 2'380'928ns ==
-           hal::duration_from_cycles(14'000'000 * si::hertz, 33333).value());
+           hal::duration_from_cycles(1'000'000 * si::hertz, 1400));
     expect(that % 10'250ms ==
-           std::chrono::duration_cast<std::chrono::milliseconds>(
-             hal::duration_from_cycles(1'000 * si::hertz, 10'250).value()));
-    expect(
-      that % 12'000us ==
-      hal::duration_from_cycles(1'000'000'000 * si::hertz, 12'000'000).value());
-    expect(that % 0us ==
-           hal::duration_from_cycles(1'000'000'000 * si::hertz, 0).value());
-
+           hal::duration_from_cycles(1'000 * si::hertz, 10'250));
+    expect(that % 12'000us ==
+           hal::duration_from_cycles(1'000'000'000 * si::hertz, 12'000'000));
     expect(that % 1ns ==
-           hal::duration_from_cycles(1'000'000'000 * si::hertz, 1).value());
-    expect(that % 1us ==
-           hal::duration_from_cycles(1'000'000 * si::hertz, 1).value());
-    expect(that % 1ms ==
-           hal::duration_from_cycles(1'000 * si::hertz, 1).value());
-    expect(that % 1s == hal::duration_from_cycles(1 * si::hertz, 1).value());
-
+           hal::duration_from_cycles(1'000'000'000 * si::hertz, 1));
+    expect(that % 1us == hal::duration_from_cycles(1'000'000 * si::hertz, 1));
+    expect(that % 1ms == hal::duration_from_cycles(1'000 * si::hertz, 1));
+    expect(that % 1s == hal::duration_from_cycles(1 * si::hertz, 1));
     expect(that % 2'000'000us ==
-           hal::duration_from_cycles(500'000 * si::hertz, 1'000'000).value());
-    expect(that % 1s ==
-           hal::duration_from_cycles(1'000'000'000 * si::hertz, 1'000'000'000)
-             .value());
-    expect(that % 200ms ==
-           hal::duration_from_cycles(1'000'000'000 * si::hertz, 200'000'000)
-             .value());
+           hal::duration_from_cycles(500'000 * si::hertz, 1'000'000));
+    expect(that % 25ms ==
+           hal::duration_from_cycles(2'000'000'000 * si::hertz, 50'000'000));
+    expect(that % 10min ==
+           hal::duration_from_cycles(72'000'000 * si::hertz, 43'200'000'000));
+  };
 
+  "duration_from_cycles rounds up, so the duration is never shorter"_test =
+    []() {
+      // 33,333 cycles at 14 MHz take 2,380,928.57 ns
+      expect(that % 2'380'929ns ==
+             hal::duration_from_cycles(14'000'000 * si::hertz, 33'333));
+      // One cycle at 3 Hz takes 333,333,333.3 ns
+      expect(that % 333'333'334ns ==
+             hal::duration_from_cycles(3 * si::hertz, 1));
+      // 4 cycles at 3 Hz: a whole second, plus the rest rounded up
+      expect(that % 1'333'333'334ns ==
+             hal::duration_from_cycles(3 * si::hertz, 4));
+    };
+
+  "duration_from_cycles and cycles_per are the reverse of each other"_test =
+    []() {
+      for (auto const frequency : { 3U, 1'000U, 14'000'000U, 72'000'000U }) {
+        for (hal::u64 const cycles : { 1ULL, 7ULL, 33'333ULL, 1'000'003ULL }) {
+          auto const duration =
+            hal::duration_from_cycles(frequency * si::hertz, cycles);
+          // Rounding up both ways can add at most one cycle.
+          auto const back = hal::cycles_per(frequency * si::hertz, duration);
+          expect(that % cycles <= back);
+          expect(that % back <= (cycles + 1));
+        }
+      }
+    };
+
+  "duration_from_cycles is 0 for no cycles"_test = []() {
+    expect(that % 0ns == hal::duration_from_cycles(1'000'000 * si::hertz, 0));
+    expect(that % 0ns == hal::duration_from_cycles(0 * si::hertz, 0));
+  };
+
+  "duration_from_cycles never ends at 0 Hz"_test = []() {
+    expect(hal::time_duration::max() ==
+           hal::duration_from_cycles(0 * si::hertz, 1));
+  };
+
+  "duration_from_cycles saturates without overflowing"_test = []() {
+    constexpr auto max_u64 = std::numeric_limits<hal::u64>::max();
+    constexpr auto max_u32 = std::numeric_limits<hal::u32>::max();
+    constexpr auto max_counts =
+      static_cast<hal::u64>(hal::time_duration::max().count());
+    constexpr hal::u64 max_seconds = max_counts / 1'000'000'000;
+
+    expect(hal::time_duration::max() ==
+           hal::duration_from_cycles(1 * si::hertz, max_u64));
+    expect(hal::time_duration::max() ==
+           hal::duration_from_cycles(1 * si::hertz, max_seconds + 1));
+    // From the last whole second that fits on, it saturates
+    expect(hal::time_duration::max() ==
+           hal::duration_from_cycles(1 * si::hertz, max_seconds));
+    expect(that % std::chrono::seconds(max_seconds - 1) ==
+           hal::duration_from_cycles(1 * si::hertz, max_seconds - 1));
+    // The second before it, plus most of a second, rounded up
     expect(
-      that % 25ms ==
-      hal::duration_from_cycles(2'000'000'000 * si::hertz, 50'000'000).value());
-
-    // 0 Hz cannot be represented exactly by hal::hertz's u32 rep at this
-    // magnitude either way; both branches below still exercise the nullopt
-    // (overflow) path since dividing by ~0 produces an out-of-range result.
-    expect(!hal::duration_from_cycles(
-      0 * si::hertz,
-      static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())));
-    expect(!hal::duration_from_cycles(
-      0 * si::hertz,
-      static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::min())));
+      that % (std::chrono::seconds(max_seconds - 1) + 900ms) ==
+      hal::duration_from_cycles(10 * si::hertz, ((max_seconds - 1) * 10) + 9));
+    // The largest frequency with the most cycles left over: 999,999,999.77 ns
+    // rounds up to a whole second.
+    expect(that % 1'001s == hal::duration_from_cycles(
+                              max_u32 * si::hertz,
+                              (hal::u64{ max_u32 } * 1000) + (max_u32 - 1)));
   };
 }
 
