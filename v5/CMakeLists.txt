@@ -36,6 +36,7 @@ set(TEST_SOURCES_LIST
   tests/can.test.cpp
   tests/bit.test.cpp
   tests/bit.functions.test.cpp
+  tests/bit_limits.test.cpp
   tests/enum.test.cpp
   tests/i2c.test.cpp
   tests/input_pin.test.cpp
