@@ -94,6 +94,74 @@ export template<typename T>
   }
 }
 
+/**
+ * @ingroup Math
+ * @brief Integer division that rounds the quotient up.
+ *
+ * Use it where a result must never fall short: a clock divider that keeps a
+ * bus from running faster than asked, or a tick count for a wait that must
+ * not end early. `/` truncates, and `(p_numerator + p_denominator - 1) /
+ * p_denominator` overflows when the numerator is near the largest value of the
+ * type. This function can't overflow.
+ *
+ * The denominator must not be 0, the same as for `/`.
+ *
+ * @tparam T - unsigned integral type of the two operands
+ * @param p_numerator - the value to divide
+ * @param p_denominator - the value to divide by, not 0
+ * @return T - the quotient, plus 1 if the division leaves a remainder
+ */
+export template<std::unsigned_integral T>
+[[nodiscard]] constexpr T divide_round_up(T p_numerator, T p_denominator)
+{
+  return (p_numerator / p_denominator) +
+         static_cast<T>((p_numerator % p_denominator) != 0);
+}
+
+/**
+ * @ingroup Math
+ * @brief Integer division that rounds the quotient to the nearest integer.
+ *
+ * A quotient exactly halfway between two integers rounds away from zero: 5 / 2
+ * is 3, and -5 / 2 is -3.
+ *
+ * The denominator must not be 0, the same as for `/`.
+ *
+ * @tparam T - integral type of the two operands
+ * @param p_numerator - the value to divide
+ * @param p_denominator - the value to divide by, not 0
+ * @return T - the nearest integer to the quotient
+ */
+export template<std::integral T>
+[[nodiscard]] constexpr T divide_round_nearest(T p_numerator, T p_denominator)
+{
+  using unsigned_t = std::make_unsigned_t<T>;
+
+  // Work with the magnitudes in the unsigned type, which holds the magnitude
+  // of the smallest signed value, and apply the sign at the end.
+  auto const magnitude = [](T p_value) {
+    auto const raw = static_cast<unsigned_t>(p_value);
+    return (p_value < 0) ? static_cast<unsigned_t>(unsigned_t{ 0 } - raw) : raw;
+  };
+
+  bool const negative = (p_numerator < 0) != (p_denominator < 0);
+  auto const numerator = magnitude(p_numerator);
+  auto const denominator = magnitude(p_denominator);
+
+  unsigned_t quotient = numerator / denominator;
+  unsigned_t const remainder = numerator % denominator;
+
+  // Round up when the remainder is at least half of the denominator. This
+  // compares against `denominator - remainder`, which can't overflow like
+  // `remainder * 2` can.
+  if (remainder >= (denominator - remainder)) {
+    quotient++;
+  }
+
+  return negative ? static_cast<T>(unsigned_t{ 0 } - quotient)
+                  : static_cast<T>(quotient);
+}
+
 export template<typename T>
 struct division
 {
@@ -103,40 +171,20 @@ struct division
 
 /**
  * @ingroup Math
- * @brief Perform integer division and round the value up if the next decimal
- * place is greater than or equal to 0.5.
+ * @brief Perform integer division and round the quotient to the nearest
+ * integer.
+ *
+ * Same as `hal::divide_round_nearest()`, taking the terms as a struct.
  *
  * @tparam T - integral type of the two operands
  * @param p_terms - numerator and denominator to be divided
- * @return T - rounded quotient between numerator and denominator.
- * Returns 0 if the denominator is greater than the numerator.
+ * @return T - the nearest integer to the quotient between numerator and
+ * denominator.
  */
-export template<typename T>
+export template<std::integral T>
 [[nodiscard]] constexpr T rounding_division(division<T> p_terms)
 {
-  bool const num_sign = p_terms.numerator >= 0;
-  bool const den_sign = p_terms.denominator >= 0;
-
-  auto const numerator = absolute_value(p_terms.numerator);
-  auto const denominator = absolute_value(p_terms.denominator);
-
-  if (denominator > numerator || denominator == 0) {
-    return T{ 0 };
-  }
-
-  T const remainder = numerator % denominator;
-  T const half_denominator = (denominator / 2);
-  T quotient = numerator / denominator;
-  // Round if remainder is greater than half of the denominator
-  if (half_denominator != 0 && remainder >= half_denominator) {
-    quotient++;
-  }
-
-  if (num_sign != den_sign) {
-    return -quotient;
-  }
-
-  return quotient;
+  return divide_round_nearest(p_terms.numerator, p_terms.denominator);
 }
 
 /**

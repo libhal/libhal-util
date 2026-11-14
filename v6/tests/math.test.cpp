@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cstdint>
 #include <limits>
 
 #include <boost/ut.hpp>
@@ -108,6 +109,92 @@ void equals_test()
   };
 }
 
+void divide_round_up_test()
+{
+  using namespace boost::ut;
+
+  "hal::divide_round_up()"_test = [] {
+    "Exact division doesn't round"_test = [] {
+      expect(that % 4U == hal::divide_round_up(12U, 3U));
+      expect(that % 0U == hal::divide_round_up(0U, 5U));
+    };
+    "Any remainder rounds up"_test = [] {
+      expect(that % 4U == hal::divide_round_up(10U, 3U));
+      expect(that % 4U == hal::divide_round_up(11U, 3U));
+      expect(that % 1U == hal::divide_round_up(1U, 7U));
+      expect(that % 1U == hal::divide_round_up(3U, 4U));
+    };
+    "Doesn't overflow near the largest value"_test = [] {
+      constexpr auto max32 = std::numeric_limits<std::uint32_t>::max();
+      constexpr auto max64 = std::numeric_limits<std::uint64_t>::max();
+      expect(that % 0x8000'0000U == hal::divide_round_up(max32, 2U));
+      expect(that % 1U == hal::divide_round_up(max32, max32));
+      expect(that % 0x8000'0000'0000'0000ULL ==
+             hal::divide_round_up(max64, 2ULL));
+    };
+    "Works for a narrow type"_test = [] {
+      expect(that % std::uint8_t{ 128 } ==
+             hal::divide_round_up(std::uint8_t{ 255 }, std::uint8_t{ 2 }));
+    };
+  };
+}
+
+void divide_round_nearest_test()
+{
+  using namespace boost::ut;
+
+  "hal::divide_round_nearest()"_test = [] {
+    "Rounds down below one half"_test = [] {
+      expect(that % 2 == hal::divide_round_nearest(7, 3));
+      expect(that % 1 == hal::divide_round_nearest(10, 7));
+      expect(that % 0 == hal::divide_round_nearest(1, 3));
+    };
+    "Rounds up above one half"_test = [] {
+      expect(that % 3 == hal::divide_round_nearest(8, 3));
+      expect(that % 1 == hal::divide_round_nearest(3, 4));
+    };
+    "Rounds a half away from zero"_test = [] {
+      expect(that % 1 == hal::divide_round_nearest(1, 2));
+      expect(that % 3 == hal::divide_round_nearest(5, 2));
+      expect(that % -3 == hal::divide_round_nearest(-5, 2));
+      expect(that % -3 == hal::divide_round_nearest(5, -2));
+      expect(that % 3 == hal::divide_round_nearest(-5, -2));
+    };
+    "Exact division doesn't round"_test = [] {
+      expect(that % 4 == hal::divide_round_nearest(12, 3));
+      expect(that % -4 == hal::divide_round_nearest(12, -3));
+      expect(that % 0 == hal::divide_round_nearest(0, 3));
+    };
+    "Signs"_test = [] {
+      expect(that % -2 == hal::divide_round_nearest(-7, 3));
+      expect(that % -2 == hal::divide_round_nearest(7, -3));
+      expect(that % 2 == hal::divide_round_nearest(-7, -3));
+    };
+    "Unsigned"_test = [] {
+      expect(that % 3U == hal::divide_round_nearest(8U, 3U));
+      expect(that % 2U == hal::divide_round_nearest(7U, 3U));
+    };
+    "Doesn't overflow at the limits"_test = [] {
+      constexpr auto max32 = std::numeric_limits<std::uint32_t>::max();
+      constexpr auto min32 = std::numeric_limits<std::int32_t>::min();
+      constexpr auto max_signed = std::numeric_limits<std::int32_t>::max();
+      expect(that % 0x8000'0000U == hal::divide_round_nearest(max32, 2U));
+      expect(that % 1 == hal::divide_round_nearest(min32, min32));
+      expect(that % min32 == hal::divide_round_nearest(min32, 1));
+      expect(that % -1 == hal::divide_round_nearest(max_signed, min32));
+    };
+  };
+
+  "hal::rounding_division()"_test = [] {
+    expect(that % 2 == hal::rounding_division(
+                         hal::division{ .numerator = 7, .denominator = 3 }));
+    expect(that % 1 == hal::rounding_division(
+                         hal::division{ .numerator = 3, .denominator = 4 }));
+    expect(that % -3 == hal::rounding_division(
+                          hal::division{ .numerator = -5, .denominator = 2 }));
+  };
+}
+
 }  // namespace
 
 int main()
@@ -115,4 +202,6 @@ int main()
   multiply_test();
   distance_test();
   equals_test();
+  divide_round_up_test();
+  divide_round_nearest_test();
 }
