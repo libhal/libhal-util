@@ -431,6 +431,35 @@ constexpr auto bit_extract(std::unsigned_integral auto p_value)
   // Leaving only the desired bits
   return static_cast<T>(masked);
 }
+
+/**
+ * @ingroup Bit
+ * @brief Whether the bit of an unsigned integral value that a single-bit,
+ * compile time (template) bit mask selects is 1.
+ *
+ * Reads as the question it asks, and returns a `bool`, where comparing
+ * `hal::bit_extract<field>()` with 0 or 1 doesn't.
+ *
+ * USAGE:
+ *
+ *     static constexpr auto busy = hal::bit_mask::from<7>();
+ *     while (hal::bit_is_set<busy>(reg->status)) {
+ *       continue;
+ *     }
+ *
+ * @tparam field - A bit mask one bit wide. A wider field is a compile error,
+ * since "set" would be ambiguous: use `hal::bit_extract()` for it.
+ * @param p_value The unsigned integral value that holds the bit.
+ * @return true if the bit is 1, false if it is 0.
+ */
+export template<bit_mask field>
+[[nodiscard]] constexpr bool bit_is_set(std::unsigned_integral auto p_value)
+{
+  static_assert(field.width == 1,
+                "bit_is_set() checks one bit; use bit_extract() for a field");
+  return bit_extract<field>(p_value) == 1;
+}
+
 /**
  * @ingroup Bit
  * @brief Extracts a specific field from an unsigned integral value using a bit

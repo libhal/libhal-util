@@ -181,6 +181,47 @@ void bit_limits_test()
   };
 }
 
+void bit_is_set_test()
+{
+  using namespace boost::ut;
+
+  "hal::bit_is_set"_test = []() {
+    // Setup
+    constexpr auto lowest = hal::bit_mask::from<0>();
+    constexpr auto middle = hal::bit_mask::from<15>();
+    constexpr auto highest = hal::bit_mask::from<31>();
+    std::uint32_t volatile status = (1U << 0U) | (1U << 31U);
+
+    // Exercise
+    bool const lowest_set = hal::bit_is_set<lowest>(status);
+    bool const middle_set = hal::bit_is_set<middle>(status);
+    bool const highest_set = hal::bit_is_set<highest>(status);
+
+    // Verify
+    expect(lowest_set);
+    expect(not middle_set);
+    expect(highest_set);
+  };
+
+  "hal::bit_is_set with other widths and at compile time"_test = []() {
+    // Setup
+    constexpr auto top_of_byte = hal::bit_mask::from<7>();
+    constexpr auto top_of_u64 = hal::bit_mask::from<63>();
+
+    // Exercise
+    constexpr bool byte_set =
+      hal::bit_is_set<top_of_byte>(std::uint8_t{ 0x80 });
+    constexpr bool byte_clear =
+      hal::bit_is_set<top_of_byte>(std::uint8_t{ 0x7F });
+    constexpr bool u64_set =
+      hal::bit_is_set<top_of_u64>(std::uint64_t{ 1 } << 63U);
+
+    // Verify
+    expect(byte_set);
+    expect(not byte_clear);
+    expect(u64_set);
+  };
+}
 }  // namespace
 
 int main()
@@ -190,4 +231,5 @@ int main()
   nibble_byte_mask_test();
   generate_field_of_ones_test();
   bit_limits_test();
+  bit_is_set_test();
 }

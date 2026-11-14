@@ -82,4 +82,5 @@ libhal_add_compile_checks(util
     FILES
         tests/compile_checks/dispatcher_rejects.cpp
         tests/compile_checks/dispatcher_analysis.cpp
+        tests/compile_checks/bit_rejects.cpp
 )
