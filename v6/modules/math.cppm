@@ -96,95 +96,121 @@ export template<typename T>
 
 /**
  * @ingroup Math
- * @brief Integer division that rounds the quotient up.
+ * @brief How `hal::divide()` rounds a quotient that isn't a whole number.
  *
- * Use it where a result must never fall short: a clock divider that keeps a
- * bus from running faster than asked, or a tick count for a wait that must
- * not end early. `/` truncates, and `(p_numerator + p_denominator - 1) /
- * p_denominator` overflows when the numerator is near the largest value of the
- * type. This function can't overflow.
- *
- * The denominator must not be 0, the same as for `/`.
- *
- * @tparam T - unsigned integral type of the two operands
- * @param p_numerator - the value to divide
- * @param p_denominator - the value to divide by, not 0
- * @return T - the quotient, plus 1 if the division leaves a remainder
+ * Each mode rounds the exact quotient the way the `<cmath>` function of the
+ * same name rounds a real number. Truncation, rounding toward zero, is plain
+ * `/`, so it isn't a mode. For unsigned types, `floor` is the same as `/`.
  */
-export template<std::unsigned_integral T>
-[[nodiscard]] constexpr T divide_round_up(T p_numerator, T p_denominator)
+export enum class rounding : u8 {
+  /// Toward negative infinity: 7 / 2 is 3, and -7 / 2 is -4
+  floor,
+  /// Toward positive infinity: 7 / 2 is 4, and -7 / 2 is -3
+  ceil,
+  /// To the nearest integer, a half away from zero: 7 / 2 is 4, -7 / 2 is -4,
+  /// and 7 / 3 is 2
+  round,
+};
+
+/**
+ * @ingroup Math
+ * @brief The two operands of a division, named so a call site can't swap them.
+ *
+ * @tparam T - integral type of the operands
+ */
+export template<std::integral T>
+struct division
 {
-  return (p_numerator / p_denominator) +
-         static_cast<T>((p_numerator % p_denominator) != 0);
+  /// The value to divide (the numerator)
+  T num;
+  /// The value to divide by (the denominator)
+  T den;
+};
+
+/// Not exported, and not constexpr, so a constant expression that divides by
+/// zero calls it and fails to compile.
+inline void denominator_is_zero()
+{
 }
 
 /**
  * @ingroup Math
- * @brief Integer division that rounds the quotient to the nearest integer.
+ * @brief Integer division that rounds the quotient as `Mode` says.
  *
- * A quotient exactly halfway between two integers rounds away from zero: 5 / 2
- * is 3, and -5 / 2 is -3.
+ * Use `rounding::ceil` where a result must never fall short: a clock divider
+ * that keeps a bus from running faster than asked, or a tick count for a wait
+ * that must not end early. Unlike `(num + den - 1) / den`, it can't overflow.
  *
- * The denominator must not be 0, the same as for `/`.
+ * Give the result type and name the operands:
  *
- * @tparam T - integral type of the two operands
- * @param p_numerator - the value to divide
- * @param p_denominator - the value to divide by, not 0
- * @return T - the nearest integer to the quotient
+ *     auto const counts = hal::divide<hal::rounding::ceil, hal::u64>(
+ *       { .num = cycles, .den = max_count });
+ *
+ * Inside the braces, an operand that would narrow into `T` is a compile error.
+ *
+ * A denominator of 0 divides by 1 instead, so the result is the numerator. In a
+ * constant expression, a denominator of 0 is a compile error.
+ *
+ * For a signed `T`, the smallest value divided by -1 doesn't fit in `T`, the
+ * same as for `/`.
+ *
+ * @tparam Mode - how to round a quotient that isn't a whole number
+ * @tparam T - integral type of the operands and the result
+ * @param p_terms - the numerator and denominator
+ * @return T - the rounded quotient
  */
-export template<std::integral T>
-[[nodiscard]] constexpr T divide_round_nearest(T p_numerator, T p_denominator)
+export template<rounding Mode, std::integral T>
+[[nodiscard]] constexpr T divide(division<T> p_terms)
 {
   using unsigned_t = std::make_unsigned_t<T>;
 
+  if (p_terms.den == 0) {
+    if consteval {
+      denominator_is_zero();
+    }
+    p_terms.den = 1;
+  }
+
   // Work with the magnitudes in the unsigned type, which holds the magnitude
   // of the smallest signed value, and apply the sign at the end.
-  auto const magnitude = [](T p_value) {
+  auto const magnitude = [](T p_value) -> unsigned_t {
     auto const raw = static_cast<unsigned_t>(p_value);
-    return (p_value < 0) ? static_cast<unsigned_t>(unsigned_t{ 0 } - raw) : raw;
+    if constexpr (std::is_signed_v<T>) {
+      if (p_value < 0) {
+        return static_cast<unsigned_t>(unsigned_t{ 0 } - raw);
+      }
+    }
+    return raw;
   };
 
-  bool const negative = (p_numerator < 0) != (p_denominator < 0);
-  auto const numerator = magnitude(p_numerator);
-  auto const denominator = magnitude(p_denominator);
+  bool negative = false;
+  if constexpr (std::is_signed_v<T>) {
+    negative = (p_terms.num < 0) != (p_terms.den < 0);
+  }
 
+  auto const numerator = magnitude(p_terms.num);
+  auto const denominator = magnitude(p_terms.den);
   unsigned_t quotient = numerator / denominator;
   unsigned_t const remainder = numerator % denominator;
 
-  // Round up when the remainder is at least half of the denominator. This
-  // compares against `denominator - remainder`, which can't overflow like
-  // `remainder * 2` can.
-  if (remainder >= (denominator - remainder)) {
+  // The magnitude is truncated, so each mode decides whether to step it away
+  // from zero.
+  bool step = false;
+  if constexpr (Mode == rounding::floor) {
+    step = negative and (remainder != 0);
+  } else if constexpr (Mode == rounding::ceil) {
+    step = (not negative) and (remainder != 0);
+  } else {
+    // At least half of the denominator. This compares against
+    // `denominator - remainder`, which can't overflow like `remainder * 2`.
+    step = remainder >= (denominator - remainder);
+  }
+  if (step) {
     quotient++;
   }
 
   return negative ? static_cast<T>(unsigned_t{ 0 } - quotient)
                   : static_cast<T>(quotient);
-}
-
-export template<typename T>
-struct division
-{
-  T numerator;
-  T denominator;
-};
-
-/**
- * @ingroup Math
- * @brief Perform integer division and round the quotient to the nearest
- * integer.
- *
- * Same as `hal::divide_round_nearest()`, taking the terms as a struct.
- *
- * @tparam T - integral type of the two operands
- * @param p_terms - numerator and denominator to be divided
- * @return T - the nearest integer to the quotient between numerator and
- * denominator.
- */
-export template<std::integral T>
-[[nodiscard]] constexpr T rounding_division(division<T> p_terms)
-{
-  return divide_round_nearest(p_terms.numerator, p_terms.denominator);
 }
 
 /**
