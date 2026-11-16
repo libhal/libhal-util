@@ -172,17 +172,27 @@ void divide_test()
              hal::divide<rounding::round, hal::i32>({ .num = 7, .den = -3 }));
     };
 
-    "round takes a half away from zero"_test = [] {
-      expect(that % 1 ==
+    "round takes a half to the even neighbor"_test = [] {
+      expect(that % 0 ==
              hal::divide<rounding::round, hal::i32>({ .num = 1, .den = 2 }));
-      expect(that % 3 ==
+      expect(that % 2 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 3, .den = 2 }));
+      expect(that % 2 ==
              hal::divide<rounding::round, hal::i32>({ .num = 5, .den = 2 }));
-      expect(that % -3 ==
+      expect(that % 4 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 7, .den = 2 }));
+      expect(that % -2 ==
              hal::divide<rounding::round, hal::i32>({ .num = -5, .den = 2 }));
-      expect(that % -3 ==
+      expect(that % -2 ==
              hal::divide<rounding::round, hal::i32>({ .num = 5, .den = -2 }));
-      expect(that % 3 ==
+      expect(that % 2 ==
              hal::divide<rounding::round, hal::i32>({ .num = -5, .den = -2 }));
+      expect(that % -4 ==
+             hal::divide<rounding::round, hal::i32>({ .num = -7, .den = 2 }));
+      expect(that % 2U ==
+             hal::divide<rounding::round, hal::u32>({ .num = 10U, .den = 4U }));
+      expect(that % 4U ==
+             hal::divide<rounding::round, hal::u32>({ .num = 14U, .den = 4U }));
     };
 
     "Doesn't overflow at the limits"_test = [] {
@@ -238,7 +248,7 @@ void divide_test()
       static_assert(
         hal::divide<rounding::floor, hal::i32>({ .num = -7, .den = 2 }) == -4);
       static_assert(
-        hal::divide<rounding::round, hal::i32>({ .num = -5, .den = 2 }) == -3);
+        hal::divide<rounding::round, hal::i32>({ .num = -5, .den = 2 }) == -2);
     };
   };
 }

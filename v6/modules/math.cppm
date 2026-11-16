@@ -98,17 +98,18 @@ export template<typename T>
  * @ingroup Math
  * @brief How `hal::divide()` rounds a quotient that isn't a whole number.
  *
- * Each mode rounds the exact quotient the way the `<cmath>` function of the
- * same name rounds a real number. Truncation, rounding toward zero, is plain
- * `/`, so it isn't a mode. For unsigned types, `floor` is the same as `/`.
+ * The modes round the way `std::chrono::floor`, `std::chrono::ceil` and
+ * `std::chrono::round` round a duration. Truncation, rounding toward zero, is
+ * plain `/`, as `std::chrono::duration_cast` truncates, so it isn't a mode. For
+ * unsigned types, `floor` is the same as `/`.
  */
 export enum class rounding : u8 {
   /// Toward negative infinity: 7 / 2 is 3, and -7 / 2 is -4
   floor,
   /// Toward positive infinity: 7 / 2 is 4, and -7 / 2 is -3
   ceil,
-  /// To the nearest integer, a half away from zero: 7 / 2 is 4, -7 / 2 is -4,
-  /// and 7 / 3 is 2
+  /// To the nearest integer, a half to the even neighbor: 7 / 3 is 2, 5 / 2
+  /// is 2, 7 / 2 is 4, and -5 / 2 is -2
   round,
 };
 
@@ -126,12 +127,6 @@ struct division
   /// The value to divide by (the denominator)
   T den;
 };
-
-/// Not exported, and not constexpr, so a constant expression that divides by
-/// zero calls it and fails to compile.
-inline void denominator_is_zero()
-{
-}
 
 /**
  * @ingroup Math
@@ -166,7 +161,8 @@ export template<rounding Mode, std::integral T>
 
   if (p_terms.den == 0) {
     if consteval {
-      denominator_is_zero();
+      // Divides by zero, so the compiler reports a division by zero.
+      [[maybe_unused]] auto const zero_denominator = p_terms.num / p_terms.den;
     }
     p_terms.den = 1;
   }
@@ -201,9 +197,12 @@ export template<rounding Mode, std::integral T>
   } else if constexpr (Mode == rounding::ceil) {
     step = (not negative) and (remainder != 0);
   } else {
-    // At least half of the denominator. This compares against
-    // `denominator - remainder`, which can't overflow like `remainder * 2`.
-    step = remainder >= (denominator - remainder);
+    // Compares the remainder with `denominator - remainder`, which can't
+    // overflow like `remainder * 2`. More than a half steps; exactly a half
+    // steps only to make the quotient even.
+    auto const rest = denominator - remainder;
+    bool const odd = (quotient & 1U) != 0;
+    step = (remainder > rest) or ((remainder == rest) and odd);
   }
   if (step) {
     quotient++;
