@@ -108,6 +108,151 @@ void equals_test()
   };
 }
 
+void divide_test()
+{
+  using namespace boost::ut;
+  using hal::rounding;
+
+  "hal::divide()"_test = [] {
+    "Exact division doesn't round"_test = [] {
+      expect(that % 4U ==
+             hal::divide<rounding::floor, hal::u32>({ .num = 12U, .den = 3U }));
+      expect(that % 4U ==
+             hal::divide<rounding::ceil, hal::u32>({ .num = 12U, .den = 3U }));
+      expect(that % 4U ==
+             hal::divide<rounding::round, hal::u32>({ .num = 12U, .den = 3U }));
+      expect(that % -4 ==
+             hal::divide<rounding::ceil, hal::i32>({ .num = 12, .den = -3 }));
+      expect(that % 0 ==
+             hal::divide<rounding::floor, hal::i32>({ .num = 0, .den = -3 }));
+    };
+
+    "floor rounds toward negative infinity"_test = [] {
+      expect(that % 3 ==
+             hal::divide<rounding::floor, hal::i32>({ .num = 7, .den = 2 }));
+      expect(that % -4 ==
+             hal::divide<rounding::floor, hal::i32>({ .num = -7, .den = 2 }));
+      expect(that % -4 ==
+             hal::divide<rounding::floor, hal::i32>({ .num = 7, .den = -2 }));
+      expect(that % 3 ==
+             hal::divide<rounding::floor, hal::i32>({ .num = -7, .den = -2 }));
+      expect(that % 0U ==
+             hal::divide<rounding::floor, hal::u32>({ .num = 3U, .den = 4U }));
+    };
+
+    "ceil rounds toward positive infinity"_test = [] {
+      expect(that % 4 ==
+             hal::divide<rounding::ceil, hal::i32>({ .num = 7, .den = 2 }));
+      expect(that % -3 ==
+             hal::divide<rounding::ceil, hal::i32>({ .num = -7, .den = 2 }));
+      expect(that % -3 ==
+             hal::divide<rounding::ceil, hal::i32>({ .num = 7, .den = -2 }));
+      expect(that % 4 ==
+             hal::divide<rounding::ceil, hal::i32>({ .num = -7, .den = -2 }));
+      expect(that % 4U ==
+             hal::divide<rounding::ceil, hal::u32>({ .num = 10U, .den = 3U }));
+      expect(that % 1U ==
+             hal::divide<rounding::ceil, hal::u32>({ .num = 1U, .den = 7U }));
+    };
+
+    "round goes to the nearest integer"_test = [] {
+      expect(that % 2 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 7, .den = 3 }));
+      expect(that % 3 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 8, .den = 3 }));
+      expect(that % 1 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 10, .den = 7 }));
+      expect(that % 1 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 3, .den = 4 }));
+      expect(that % 0 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 1, .den = 3 }));
+      expect(that % -2 ==
+             hal::divide<rounding::round, hal::i32>({ .num = -7, .den = 3 }));
+      expect(that % -2 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 7, .den = -3 }));
+    };
+
+    "round takes a half to the even neighbor"_test = [] {
+      expect(that % 0 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 1, .den = 2 }));
+      expect(that % 2 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 3, .den = 2 }));
+      expect(that % 2 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 5, .den = 2 }));
+      expect(that % 4 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 7, .den = 2 }));
+      expect(that % -2 ==
+             hal::divide<rounding::round, hal::i32>({ .num = -5, .den = 2 }));
+      expect(that % -2 ==
+             hal::divide<rounding::round, hal::i32>({ .num = 5, .den = -2 }));
+      expect(that % 2 ==
+             hal::divide<rounding::round, hal::i32>({ .num = -5, .den = -2 }));
+      expect(that % -4 ==
+             hal::divide<rounding::round, hal::i32>({ .num = -7, .den = 2 }));
+      expect(that % 2U ==
+             hal::divide<rounding::round, hal::u32>({ .num = 10U, .den = 4U }));
+      expect(that % 4U ==
+             hal::divide<rounding::round, hal::u32>({ .num = 14U, .den = 4U }));
+    };
+
+    "Doesn't overflow at the limits"_test = [] {
+      constexpr auto max32 = std::numeric_limits<hal::u32>::max();
+      constexpr auto max64 = std::numeric_limits<hal::u64>::max();
+      constexpr auto min32 = std::numeric_limits<hal::i32>::min();
+      constexpr auto max_signed = std::numeric_limits<hal::i32>::max();
+      expect(that % 0x8000'0000U == hal::divide<rounding::ceil, hal::u32>(
+                                      { .num = max32, .den = 2U }));
+      expect(that % 1U == hal::divide<rounding::ceil, hal::u32>(
+                            { .num = max32, .den = max32 }));
+      expect(that % 0x8000'0000U == hal::divide<rounding::round, hal::u32>(
+                                      { .num = max32, .den = 2U }));
+      expect(
+        that % 0x8000'0000'0000'0000ULL ==
+        hal::divide<rounding::ceil, hal::u64>({ .num = max64, .den = 2U }));
+      expect(that % 1 == hal::divide<rounding::round, hal::i32>(
+                           { .num = min32, .den = min32 }));
+      expect(that % min32 == hal::divide<rounding::floor, hal::i32>(
+                               { .num = min32, .den = 1 }));
+      expect(that % -1 == hal::divide<rounding::round, hal::i32>(
+                            { .num = max_signed, .den = min32 }));
+      expect(that % 0 == hal::divide<rounding::ceil, hal::i32>(
+                           { .num = max_signed, .den = min32 }));
+    };
+
+    "Works for a narrow type"_test = [] {
+      expect(that % hal::u8{ 128 } ==
+             hal::divide<rounding::ceil, hal::u8>({ .num = 255, .den = 2 }));
+    };
+
+    "Takes a narrower operand"_test = [] {
+      hal::u64 const cycles = 0x1'0000'0001;
+      hal::u32 const max_count = 0x0100'0000;
+      expect(that % 257ULL == hal::divide<rounding::ceil, hal::u64>(
+                                { .num = cycles, .den = max_count }));
+    };
+
+    "A denominator of 0 divides by 1"_test = [] {
+      // A variable, so the call isn't a constant expression, where a
+      // denominator of 0 is a compile error.
+      hal::u32 zero = 0;
+      expect(that % 7U ==
+             hal::divide<rounding::ceil, hal::u32>({ .num = 7U, .den = zero }));
+      hal::i32 signed_zero = 0;
+      expect(that % -7 == hal::divide<rounding::floor, hal::i32>(
+                            { .num = -7, .den = signed_zero }));
+    };
+
+    "Is usable in constant expressions"_test = [] {
+      static_assert(
+        hal::divide<rounding::ceil, hal::u32>({ .num = 10U, .den = 3U }) == 4U);
+      static_assert(
+        hal::divide<rounding::floor, hal::i32>({ .num = -7, .den = 2 }) == -4);
+      static_assert(
+        hal::divide<rounding::round, hal::i32>({ .num = -5, .den = 2 }) == -2);
+    };
+  };
+}
+
 }  // namespace
 
 int main()
@@ -115,4 +260,5 @@ int main()
   multiply_test();
   distance_test();
   equals_test();
+  divide_test();
 }

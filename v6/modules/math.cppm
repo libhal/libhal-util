@@ -94,49 +94,122 @@ export template<typename T>
   }
 }
 
-export template<typename T>
-struct division
-{
-  T numerator;
-  T denominator;
+/**
+ * @ingroup Math
+ * @brief How `hal::divide()` rounds a quotient that isn't a whole number.
+ *
+ * The modes round the way `std::chrono::floor`, `std::chrono::ceil` and
+ * `std::chrono::round` round a duration. Truncation, rounding toward zero, is
+ * plain `/`, as `std::chrono::duration_cast` truncates, so it isn't a mode. For
+ * unsigned types, `floor` is the same as `/`.
+ */
+export enum class rounding : u8 {
+  /// Toward negative infinity: 7 / 2 is 3, and -7 / 2 is -4
+  floor,
+  /// Toward positive infinity: 7 / 2 is 4, and -7 / 2 is -3
+  ceil,
+  /// To the nearest integer, a half to the even neighbor: 7 / 3 is 2, 5 / 2
+  /// is 2, 7 / 2 is 4, and -5 / 2 is -2
+  round,
 };
 
 /**
  * @ingroup Math
- * @brief Perform integer division and round the value up if the next decimal
- * place is greater than or equal to 0.5.
+ * @brief The two operands of a division, named so a call site can't swap them.
  *
- * @tparam T - integral type of the two operands
- * @param p_terms - numerator and denominator to be divided
- * @return T - rounded quotient between numerator and denominator.
- * Returns 0 if the denominator is greater than the numerator.
+ * @tparam T - integral type of the operands
  */
-export template<typename T>
-[[nodiscard]] constexpr T rounding_division(division<T> p_terms)
+export template<std::integral T>
+struct division
 {
-  bool const num_sign = p_terms.numerator >= 0;
-  bool const den_sign = p_terms.denominator >= 0;
+  /// The value to divide (the numerator)
+  T num;
+  /// The value to divide by (the denominator)
+  T den;
+};
 
-  auto const numerator = absolute_value(p_terms.numerator);
-  auto const denominator = absolute_value(p_terms.denominator);
+/**
+ * @ingroup Math
+ * @brief Integer division that rounds the quotient as `Mode` says.
+ *
+ * Use `rounding::ceil` where a result must never fall short: a clock divider
+ * that keeps a bus from running faster than asked, or a tick count for a wait
+ * that must not end early. Unlike `(num + den - 1) / den`, it can't overflow.
+ *
+ * Give the result type and name the operands:
+ *
+ *     auto const counts = hal::divide<hal::rounding::ceil, hal::u64>(
+ *       { .num = cycles, .den = max_count });
+ *
+ * Inside the braces, an operand that would narrow into `T` is a compile error.
+ *
+ * A denominator of 0 divides by 1 instead, so the result is the numerator. In a
+ * constant expression, a denominator of 0 is a compile error.
+ *
+ * For a signed `T`, the smallest value divided by -1 doesn't fit in `T`, the
+ * same as for `/`.
+ *
+ * @tparam Mode - how to round a quotient that isn't a whole number
+ * @tparam T - integral type of the operands and the result
+ * @param p_terms - the numerator and denominator
+ * @return T - the rounded quotient
+ */
+export template<rounding Mode, std::integral T>
+[[nodiscard]] constexpr T divide(division<T> p_terms)
+{
+  using unsigned_t = std::make_unsigned_t<T>;
 
-  if (denominator > numerator || denominator == 0) {
-    return T{ 0 };
+  if (p_terms.den == 0) {
+    if consteval {
+      // Divides by zero, so the compiler reports a division by zero.
+      [[maybe_unused]] auto const zero_denominator = p_terms.num / p_terms.den;
+    }
+    p_terms.den = 1;
   }
 
-  T const remainder = numerator % denominator;
-  T const half_denominator = (denominator / 2);
-  T quotient = numerator / denominator;
-  // Round if remainder is greater than half of the denominator
-  if (half_denominator != 0 && remainder >= half_denominator) {
+  // Work with the magnitudes in the unsigned type, which holds the magnitude
+  // of the smallest signed value, and apply the sign at the end.
+  auto const magnitude = [](T p_value) -> unsigned_t {
+    auto const raw = static_cast<unsigned_t>(p_value);
+    if constexpr (std::is_signed_v<T>) {
+      if (p_value < 0) {
+        return static_cast<unsigned_t>(unsigned_t{ 0 } - raw);
+      }
+    }
+    return raw;
+  };
+
+  bool negative = false;
+  if constexpr (std::is_signed_v<T>) {
+    negative = (p_terms.num < 0) != (p_terms.den < 0);
+  }
+
+  auto const numerator = magnitude(p_terms.num);
+  auto const denominator = magnitude(p_terms.den);
+  unsigned_t quotient = numerator / denominator;
+  unsigned_t const remainder = numerator % denominator;
+
+  // The magnitude is truncated, so each mode decides whether to step it away
+  // from zero.
+  bool step = false;
+  if constexpr (Mode == rounding::floor) {
+    step = negative and (remainder != 0);
+  } else if constexpr (Mode == rounding::ceil) {
+    step = (not negative) and (remainder != 0);
+  } else {
+    // Compares the remainder with `denominator - remainder`, which can't
+    // overflow like `remainder * 2`. More than a half steps; exactly a half
+    // steps only to make the quotient even.
+    auto const rest = denominator - remainder;
+    bool const odd = (quotient & 1U) != 0;
+    step = (remainder > rest) or ((remainder == rest) and odd);
+  }
+  if (step) {
     quotient++;
   }
 
-  if (num_sign != den_sign) {
-    return -quotient;
-  }
-
-  return quotient;
+  return negative ? static_cast<T>(unsigned_t{ 0 } - quotient)
+                  : static_cast<T>(quotient);
 }
 
 /**
