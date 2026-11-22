@@ -244,32 +244,36 @@ public:
   [[nodiscard]] std::optional<hal::can_message> find()
   {
     auto const buffer = m_transceiver->receive_buffer();
-    auto cursor = m_transceiver->receive_cursor();
+    auto count = m_transceiver->receive_count();
     hal::can_message message = {};
 
-    // Run through the circular buffer until the cursor is reached or until
-    // an ID match is found.
-    while (m_receive_cursor != cursor) {
-      if (m_id == buffer[m_receive_cursor].id) {
-        message = buffer[m_receive_cursor];
+    // If more messages arrived than the buffer holds, the oldest ones were
+    // overwritten. Start from the oldest message still in the buffer.
+    if ((count - m_read_count) > buffer.size()) {
+      m_read_count = count - buffer.size();
+    }
+
+    // Run through the circular buffer until every received message has been
+    // read or until an ID match is found. The circular span wraps the index.
+    while (m_read_count != count) {
+      if (m_id == buffer[m_read_count].id) {
+        message = buffer[m_read_count];
         // Can message buffers are typically updated via interrupt which can
         // happen at any time. If the cursor has moved past the received
         // message and changed its bits mid way To ensure that an interrupt
         // has not occurred and modified the bits of the buffer message, a
         // second copy is created in order to perform a stability check.
-        hal::can_message const copy = buffer[m_receive_cursor];
+        hal::can_message const copy = buffer[m_read_count];
         bool const message_is_stable = copy == message;
         bool const copy_id_matches = copy.id == m_id;
         if (message_is_stable and copy_id_matches) {
-          // Perform circular increment of the m_receive_cursor
-          m_receive_cursor = (m_receive_cursor + 1) % buffer.size();
+          m_read_count++;
           return message;
         }
       }
-      // Acquire latest cursor
-      cursor = m_transceiver->receive_cursor();
-      // Perform circular increment of the m_receive_cursor
-      m_receive_cursor = (m_receive_cursor + 1) % buffer.size();
+      // Acquire latest count
+      count = m_transceiver->receive_count();
+      m_read_count++;
     }
 
     return std::nullopt;
@@ -302,7 +306,8 @@ public:
 private:
   hal::can_transceiver* m_transceiver;
   hal::u32 m_id;
-  std::size_t m_receive_cursor = 0;
+  /// receive_count() at the last message this finder read
+  hal::usize m_read_count = 0;
 };
 
 export template<std::size_t SlotCount>
