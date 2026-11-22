@@ -76,12 +76,12 @@ public:
 
   void add_to_received_messages(hal::can_message const& p_message)
   {
-    m_buffer[m_cursor++ % m_buffer.size()] = p_message;
+    m_buffer[m_count++ % m_buffer.size()] = p_message;
   }
 
   hal::can_message m_last_sent_message{};
   std::array<hal::can_message, 12> m_buffer{};
-  std::size_t m_cursor = 0;
+  std::size_t m_count = 0;
 
 private:
   hal::hertz driver_baud_rate() override
@@ -99,9 +99,9 @@ private:
     return m_buffer;
   }
 
-  hal::usize driver_receive_cursor() override
+  hal::usize driver_receive_count() override
   {
-    return m_cursor % m_buffer.size();
+    return m_count;
   }
 };
 
@@ -262,9 +262,9 @@ void message_finder_test()
 
     hal::can_message undesired_message = desired_message;
     undesired_message.id = expected_id + 1;
-    // Setup: With 12 messages to fill the buffer, the cursor will land back
-    // at 0. Meaning that a find will come up with nothing. This is to be
-    // expected with a circular buffer if the receive cursor gets lapped.
+    // Setup: 13 messages into the 12 message buffer overwrite the desired
+    // message, so find() starts from the oldest message still in the buffer
+    // and finds nothing.
 
     // Ensure
     auto const ensure_message0 = reader.find();
@@ -283,6 +283,38 @@ void message_finder_test()
     // Verify
     expect(not found_message0.has_value());
   };
+
+  "hal::can_message_finder::find() after the buffer laps several times"_test =
+    []() {
+      // Setup
+      constexpr hal::u32 expected_id = 0x115;
+      test_can_transceiver test_transceiver;
+      hal::can_message_finder reader(test_transceiver, expected_id);
+      hal::can_message desired_message{
+        .id = expected_id,
+        .extended = false,
+        .remote_request = false,
+        .length = 1,
+        .payload = { 0xAB },
+      };
+      hal::can_message undesired_message = desired_message;
+      undesired_message.id = expected_id + 1;
+
+      // Exercise: 30 messages lap the 12 message buffer twice, then the
+      // desired message arrives among the last 12.
+      for (std::size_t i = 0; i < 30; i++) {
+        test_transceiver.add_to_received_messages(undesired_message);
+      }
+      test_transceiver.add_to_received_messages(desired_message);
+      test_transceiver.add_to_received_messages(undesired_message);
+      auto const found_message = reader.find();
+      auto const no_message_found = reader.find();
+
+      // Verify
+      expect(found_message.has_value());
+      expect(found_message.value() == desired_message);
+      expect(not no_message_found.has_value());
+    };
 
   "hal::can_message_finder::transceiver() should work"_test = []() {
     // Setup

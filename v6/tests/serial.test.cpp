@@ -54,7 +54,7 @@ private:
     return m_receive_buffer;
   }
 
-  hal::usize driver_receive_cursor() override
+  hal::usize driver_receive_count() override
   {
     return 0;
   }
