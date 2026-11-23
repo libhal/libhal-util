@@ -167,6 +167,21 @@ export template<rounding Mode, std::integral T>
     p_terms.den = 1;
   }
 
+  // For an unsigned type, floor and ceil need only the quotient. Finding the
+  // remainder too would cost extra multiplies where the division is a library
+  // call, such as 64-bit division on a 32-bit core.
+  if constexpr (std::is_unsigned_v<T> and (Mode != rounding::round)) {
+    if constexpr (Mode == rounding::floor) {
+      return static_cast<T>(p_terms.num / p_terms.den);
+    } else {
+      // ceil(n / d) is ((n - 1) / d) + 1 for n > 0, and can't overflow.
+      if (p_terms.num == 0) {
+        return 0;
+      }
+      return static_cast<T>(((p_terms.num - 1U) / p_terms.den) + 1U);
+    }
+  }
+
   // Work with the magnitudes in the unsigned type, which holds the magnitude
   // of the smallest signed value, and apply the sign at the end.
   auto const magnitude = [](T p_value) -> unsigned_t {
