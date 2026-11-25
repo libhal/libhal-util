@@ -76,8 +76,8 @@ export [[nodiscard]] constexpr hal::u64 cycles_per(
   if (seconds > max_seconds) {
     return std::numeric_limits<hal::u64>::max();
   }
-  auto const rest_cycles =
-    ((rest * frequency) + (counts_per_second - 1)) / counts_per_second;
+  auto const rest_cycles = hal::divide<hal::rounding::ceil, hal::u64>(
+    { .num = rest * frequency, .den = counts_per_second });
   return (seconds * frequency) + rest_cycles;
 }
 
