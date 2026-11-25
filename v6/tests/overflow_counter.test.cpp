@@ -223,7 +223,7 @@ void lap_counter_test()
       expect(that % 2U == position_reads);
     };
 
-  "lap_counter::total() reads again if a lap finished during the read"_test =
+  "lap_counter::total() returns the lap end if a lap finished during the read"_test =
     []() {
       // Setup
       hal::lap_counter laps;
@@ -247,7 +247,64 @@ void lap_counter_test()
       auto const total = laps.total(10, finished, position);
 
       // Verify
+      // The total when the lap ended, with no second read
       expect(that % 40U == total);
+      expect(that % 1U == position_reads);
+    };
+
+  "lap_counter::total() reads again if the interrupt counted a waiting lap"_test =
+    []() {
+      // Setup
+      hal::lap_counter laps;
+      laps.reset();
+      laps.count_lap();
+      laps.count_lap();
+      laps.count_lap();
+      // A lap is waiting at the start: the total is 4 laps plus the position
+      bool flag = true;
+      unsigned position_reads = 0;
+      auto const position = [&] {
+        position_reads++;
+        if (position_reads == 1) {
+          // The interrupt counts the waiting lap and clears the flag mid-read
+          laps.count_lap();
+          flag = false;
+          return hal::u32{ 5 };
+        }
+        return hal::u32{ 6 };
+      };
+
+      // Exercise
+      auto const total = laps.total(10, [&] { return flag; }, position);
+
+      // Verify
+      // 4 laps times 10 alone would be below the 45 the total had at the start
+      expect(that % 46U == total);
+      expect(that % 2U == position_reads);
+    };
+
+  "lap_counter::total() returns when the interrupt counts a lap on every read"_test =
+    []() {
+      // Setup
+      hal::lap_counter laps;
+      laps.reset();
+      laps.count_lap();
+      laps.count_lap();
+      laps.count_lap();
+      unsigned position_reads = 0;
+      auto const position = [&] {
+        position_reads++;
+        // Laps so short that the interrupt counts one during every read
+        laps.count_lap();
+        return hal::u32{ 7 };
+      };
+
+      // Exercise
+      auto const total = laps.total(10, [] { return false; }, position);
+
+      // Verify
+      // Two laps were counted during the call, so the count passed 50
+      expect(that % 50U == total);
       expect(that % 2U == position_reads);
     };
 

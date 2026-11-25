@@ -104,33 +104,42 @@ private:
 
 /**
  * @ingroup OverflowCounter
- * @brief Count laps of a hardware counter that wraps, and read the total count
- * across laps
+ * @brief Count a hardware counter's laps from the interrupt that fires at the
+ * end of each lap, and read the total count across all laps
  *
- * For hardware that counts through a fixed length and starts over on its own,
- * with an interrupt for each finished lap. Examples are a circular DMA receive,
- * whose lap is the buffer, and a timer, whose lap is its reload value plus one.
- * The interrupt calls `count_lap()`, and `total()` combines the laps with the
- * position in the current lap into a count that keeps growing.
+ * Some hardware counts from 0 up to a fixed length, then starts over at 0 and
+ * sets a flag that raises an interrupt. That's one lap. Examples of this are:
  *
- * Unlike `hal::overflow_counter`, the hardware doesn't have to be read at
- * least once per lap. `total()` is also right while the interrupt can't run,
- * such as with interrupts disabled: a lap the hardware has finished, but the
- * interrupt hasn't counted yet, is added to the result.
+ * - A circular DMA receive. The DMA writes bytes into a buffer and starts over
+ *   at the beginning when it reaches the end. A lap is the buffer length, the
+ *   position is how many bytes it has written in the current lap, and the flag
+ *   is its transfer complete flag.
+ * - A steady clock using a timer that generates an interrupt when it reaches
+ *   the end of its count. A lap is the timer's reload value plus one, the
+ *   position is its counter, and the flag is its update (overflow) flag.
  *
- * The lap length isn't stored: `total()` takes it, because the driver keeps
- * it anyway or can read it back from the hardware (a timer's reload value).
+ * The lap interrupt calls `count_lap()`, then clears the flag. `total()`
+ * returns the laps times the lap length, plus the position in the current lap.
  *
- * Requirements on the hardware:
- * - The hardware sets its lap flag no later than its position starts over.
- *   Otherwise a read in between sees a new lap's position with the flag still
- *   clear, and the total comes out one lap short.
- * - A lap takes much longer than one `total()` read of the flag, the position
- *   and the flag again. Otherwise every read sees a lap end, and `total()`
- *   never returns.
+ * `total()` also counts a lap whose flag is set but whose interrupt hasn't run
+ * yet. So it stays right with interrupts disabled, and unlike
+ * `hal::overflow_counter`, the hardware doesn't have to be read once per lap.
  *
- * @pre Everything runs on one core. An interrupt on another core can change
- * the hardware between reads without `total()` noticing.
+ * The hardware must:
+ *
+ * - Set the flag no later than it starts the next lap.
+ *   Explanation: `total()` adds a lap when it sees the flag set. If the
+ *   position starts over before the flag is set, a read in between sees the
+ *   new lap's position without the flag, and the total comes out one lap short.
+ *
+ * `total()` returns after at most two reads, however short the laps are.
+ *
+ * @pre `count_lap()` and every `total()` call run on the same core.
+ * Explanation: on another core, `total()` can read between `count_lap()` and
+ * the flag clear. It sees the new lap count with the flag still set, and counts
+ * that lap twice. Masking interrupts can't prevent this, because it only stops
+ * interrupts on its own core. Without a memory barrier, another core can also
+ * see the flag cleared before the new lap count, and come out one lap short.
  *
  * ```cpp
  * // Start of a circular DMA receive, before enabling its interrupt
@@ -186,9 +195,22 @@ public:
   /**
    * @brief Read the total count since `reset()`
    *
-   * Reads the lap count, the lap flag and the position again until no lap
-   * ended during the read. A position that moves between reads is fine: the
-   * result is the total at the moment of the last position read.
+   * The result is a total the count actually had at some moment during the
+   * call, so results never go backwards. The position may move between reads.
+   * One read is the lap count, the flag, the position, the flag again and the
+   * lap count again:
+   *
+   * - Nothing changed during the read: the result is the laps, plus the lap
+   *   the flag says has finished, plus the position.
+   * - The flag got set during the read: a lap ended in between. The result is
+   *   the total at that moment: the laps plus one, times the lap length.
+   * - The interrupt counted a lap during the read: it reads once more. If the
+   *   interrupt counts a lap during that read too, the result is the latest
+   *   laps times the lap length. The count passed that value during the call,
+   *   because two laps were counted after the call started.
+   *
+   * So with laps about as short as a read, the result can be a multiple of
+   * the lap length without the position.
    *
    * @pre Not called from an interrupt that can preempt the lap interrupt
    * between `count_lap()` and its flag clear. It would count that lap twice.
@@ -213,23 +235,40 @@ public:
     hal::callable<bool()> auto&& p_lap_finished,
     hal::callable<hal::u32()> auto&& p_position_in_lap) const
   {
-    hal::u32 laps = 0;
+    hal::u32 laps = m_laps;
+    Count completed_laps = 0;
     Count position = 0;
-    bool finished = false;
-    bool finished_during_read = false;
-    do {
-      laps = m_laps;
+    for (int read = 0; read < 2; read++) {
       bool const finished_before = p_lap_finished();
-      position = static_cast<Count>(p_position_in_lap());
-      finished = p_lap_finished();
-      finished_during_read = (finished_before != finished);
-    } while ((laps != m_laps) or finished_during_read);
+      auto const position_read = static_cast<Count>(p_position_in_lap());
+      bool const finished_after = p_lap_finished();
+      hal::u32 const laps_after = m_laps;
 
-    // The hardware has started the next lap, so the position belongs to the
-    // lap after the finished one. Counting it is left to the interrupt.
-    auto const completed_laps =
-      finished ? (static_cast<Count>(laps) + 1U) : static_cast<Count>(laps);
-    return static_cast<Count>((completed_laps * p_lap_length) + position);
+      // If the interrupt counts a lap during both reads, at least two laps
+      // were counted after the call started. When the call started, the total
+      // was below the first lap count plus two, times the lap length: at most
+      // one lap was waiting for the interrupt, and the position is short of a
+      // full lap. At the end it's at least the latest lap count times the lap
+      // length, so the count passed that value during the call.
+      completed_laps = static_cast<Count>(laps_after);
+      position = 0;
+
+      if (laps_after == laps) {
+        // The hardware has started the next lap, so the position belongs to
+        // the lap after the finished one. Counting it is left to the
+        // interrupt.
+        completed_laps = finished_after ? static_cast<Count>(laps + 1U)
+                                        : static_cast<Count>(laps);
+        // If a lap ended between the two flag reads, the position was 0 at
+        // that moment
+        position =
+          (finished_before == finished_after) ? position_read : Count{ 0 };
+        break;
+      }
+      laps = laps_after;
+    }
+    return static_cast<Count>(
+      (completed_laps * static_cast<Count>(p_lap_length)) + position);
   }
 
 private:
