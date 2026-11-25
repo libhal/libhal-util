@@ -28,6 +28,7 @@ libhal_add_library(util
         modules/hal.util.cppm
         modules/as_bytes.cppm
         modules/bit.cppm
+        modules/bit_ranges.cppm
         modules/busy_scope.cppm
         modules/can.cppm
         modules/comparison.cppm
@@ -57,6 +58,7 @@ libhal_add_tests(util
         as_bytes
         bit
         bit_functions
+        bit_ranges
         busy_scope
         can
         enum

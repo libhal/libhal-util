@@ -16,6 +16,8 @@
 #include <ios>
 #include <limits>
 
+#include <bit>
+
 #include <boost/ut.hpp>
 
 import hal;
@@ -222,6 +224,195 @@ void bit_is_set_test()
     expect(u64_set);
   };
 }
+
+void bit_value_assign_test()
+{
+  using namespace boost::ut;
+
+  "hal::bit_value operator= sets the value and returns the instance"_test =
+    []() {
+      // Setup
+      hal::bit_value<std::uint32_t> value;
+
+      // Exercise
+      auto& result = (value = 0x4U);
+      result.set<hal::bit_mask::from<0>()>();
+
+      // Verify
+      expect(&result == &value);
+      expect(that % 0x5U == value.get());
+    };
+}
+
+/// The bit operations written the long way, to check the cheap ones against
+template<std::unsigned_integral T>
+struct reference_bits
+{
+  static constexpr T clear_lowest_set_bit(T p_value)
+  {
+    if (p_value == 0U) {
+      return p_value;
+    }
+    auto const position = static_cast<std::uint32_t>(std::countr_zero(p_value));
+    return hal::bit_value<T>(p_value)
+      .clear(hal::bit_mask::from(position))
+      .get();
+  }
+
+  static constexpr T clear_highest_set_bit(T p_value)
+  {
+    if (p_value == 0U) {
+      return p_value;
+    }
+    auto const position = static_cast<std::uint32_t>(
+      (std::numeric_limits<T>::digits - 1) - std::countl_zero(p_value));
+    return hal::bit_value<T>(p_value)
+      .clear(hal::bit_mask::from(position))
+      .get();
+  }
+};
+
+void lowest_and_highest_bit_test()
+{
+  using namespace boost::ut;
+
+  "hal::bit_value::clear_lowest_set_bit"_test = []() {
+    // Setup
+    hal::bit_value<std::uint32_t> middle = 0b1011'0100U;
+    hal::bit_value<std::uint32_t> top_only = 0x8000'0000U;
+    hal::bit_value<std::uint32_t> zero = 0U;
+
+    // Exercise
+    middle.clear_lowest_set_bit();
+    top_only.clear_lowest_set_bit();
+    zero.clear_lowest_set_bit();
+
+    // Verify
+    expect(that % 0b1011'0000U == middle.get());
+    expect(that % 0U == top_only.get());
+    expect(that % 0U == zero.get());
+  };
+
+  "hal::bit_value::set_lowest_clear_bit"_test = []() {
+    // Setup
+    hal::bit_value<std::uint32_t> middle = 0b1011'0111U;
+    hal::bit_value<std::uint32_t> zero = 0U;
+    hal::bit_value<std::uint32_t> all_ones = 0xFFFF'FFFFU;
+
+    // Exercise
+    middle.set_lowest_clear_bit();
+    zero.set_lowest_clear_bit();
+    all_ones.set_lowest_clear_bit();
+
+    // Verify
+    expect(that % 0b1011'1111U == middle.get());
+    expect(that % 0b1U == zero.get());
+    expect(that % 0xFFFF'FFFFU == all_ones.get());
+  };
+
+  "hal::bit_value::clear_highest_set_bit"_test = []() {
+    // Setup
+    hal::bit_value<std::uint32_t> middle = 0b0010'1100U;
+    hal::bit_value<std::uint32_t> all_ones = 0xFFFF'FFFFU;
+    hal::bit_value<std::uint32_t> zero = 0U;
+
+    // Exercise
+    middle.clear_highest_set_bit();
+    all_ones.clear_highest_set_bit();
+    zero.clear_highest_set_bit();
+
+    // Verify
+    expect(that % 0b0000'1100U == middle.get());
+    expect(that % 0x7FFF'FFFFU == all_ones.get());
+    expect(that % 0U == zero.get());
+  };
+
+  "hal::bit_value::set_highest_clear_bit"_test = []() {
+    // Setup
+    hal::bit_value<std::uint8_t> middle = 0b1101'0011U;
+    hal::bit_value<std::uint32_t> zero = 0U;
+    hal::bit_value<std::uint32_t> all_ones = 0xFFFF'FFFFU;
+
+    // Exercise
+    middle.set_highest_clear_bit();
+    zero.set_highest_clear_bit();
+    all_ones.set_highest_clear_bit();
+
+    // Verify
+    expect(that % 0b1111'0011U == middle.get());
+    expect(that % 0x8000'0000U == zero.get());
+    expect(that % 0xFFFF'FFFFU == all_ones.get());
+  };
+
+  "lowest and highest bit operations chain, and run at compile time"_test =
+    []() {
+      // Setup
+      constexpr auto chained = []() {
+        hal::bit_value<std::uint64_t> value = 0U;
+        value.set_highest_clear_bit()
+          .set_lowest_clear_bit()
+          .set_lowest_clear_bit()
+          .clear_lowest_set_bit();
+        return value.get();
+      };
+
+      // Exercise
+      constexpr std::uint64_t result = chained();
+
+      // Verify
+      expect(that % ((std::uint64_t{ 1 } << 63U) | 0b10U) == result);
+    };
+
+  "lowest and highest bit operations through hal::bit_modify"_test = []() {
+    // Setup
+    std::uint32_t volatile reg = 0b0110U;
+
+    // Exercise
+    hal::bit_modify(reg).clear_lowest_set_bit().set_highest_clear_bit();
+
+    // Verify
+    expect(that % (0x8000'0000U | 0b0100U) == reg);
+  };
+
+  "lowest and highest bit operations match the long way for every u8"_test =
+    []() {
+      using reference = reference_bits<std::uint8_t>;
+      for (unsigned raw = 0; raw <= 0xFFU; raw++) {
+        // Setup
+        auto const value = static_cast<std::uint8_t>(raw);
+        auto const inverted = static_cast<std::uint8_t>(~value);
+
+        // Exercise
+        // Held as unsigned so that a failure prints a number, not a char
+        unsigned const clear_lowest =
+          hal::bit_value(value).clear_lowest_set_bit().get();
+        unsigned const set_lowest =
+          hal::bit_value(value).set_lowest_clear_bit().get();
+        unsigned const clear_highest =
+          hal::bit_value(value).clear_highest_set_bit().get();
+        unsigned const set_highest =
+          hal::bit_value(value).set_highest_clear_bit().get();
+
+        // Verify
+        unsigned const expected_clear_lowest =
+          reference::clear_lowest_set_bit(value);
+        unsigned const expected_clear_highest =
+          reference::clear_highest_set_bit(value);
+        // Setting the lowest 0 is clearing the lowest 1 of the inverse
+        unsigned const expected_set_lowest =
+          static_cast<std::uint8_t>(~reference::clear_lowest_set_bit(inverted));
+        unsigned const expected_set_highest = static_cast<std::uint8_t>(
+          ~reference::clear_highest_set_bit(inverted));
+        expect(that % expected_clear_lowest == clear_lowest)
+          << "value: " << raw;
+        expect(that % expected_clear_highest == clear_highest)
+          << "value: " << raw;
+        expect(that % expected_set_lowest == set_lowest) << "value: " << raw;
+        expect(that % expected_set_highest == set_highest) << "value: " << raw;
+      }
+    };
+}
+
 }  // namespace
 
 int main()
@@ -232,4 +423,6 @@ int main()
   generate_field_of_ones_test();
   bit_limits_test();
   bit_is_set_test();
+  bit_value_assign_test();
+  lowest_and_highest_bit_test();
 }
