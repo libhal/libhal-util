@@ -19,6 +19,7 @@ module;
 #include <cstdint>
 
 #include <algorithm>
+#include <bit>
 #include <concepts>
 #include <limits>
 #include <type_traits>
@@ -547,6 +548,7 @@ public:
   constexpr bit_value& operator=(T p_initial_value)
   {
     m_value = p_initial_value;
+    return *this;
   }
 
   /**
@@ -652,6 +654,66 @@ public:
 
     m_value = m_value ^ mask;
 
+    return *this;
+  }
+
+  /**
+   * @brief Clears (sets to 0) the lowest bit that is 1.
+   *
+   * For example, 0b1011'0100 becomes 0b1011'0000. A value of 0 stays 0.
+   *
+   * Cheaper than `clear(hal::bit_mask::from(std::countr_zero(value)))`: it's a
+   * subtract and an AND, with no shift. To visit every bit that is 1, use
+   * `hal::set_bits_view` from the `hal.util.bit_ranges` module instead.
+   *
+   * @return A reference to this instance for chaining.
+   */
+  constexpr auto& clear_lowest_set_bit()
+  {
+    m_value = static_cast<T>(m_value & (m_value - 1U));
+    return *this;
+  }
+
+  /**
+   * @brief Sets (sets to 1) the lowest bit that is 0.
+   *
+   * For example, 0b1011'0111 becomes 0b1011'1111. A value with every bit 1
+   * stays the same.
+   *
+   * @return A reference to this instance for chaining.
+   */
+  constexpr auto& set_lowest_clear_bit()
+  {
+    m_value = static_cast<T>(m_value | (m_value + 1U));
+    return *this;
+  }
+
+  /**
+   * @brief Clears (sets to 0) the highest bit that is 1.
+   *
+   * For example, 0b0010'1100 becomes 0b0000'1100. A value of 0 stays 0.
+   *
+   * @return A reference to this instance for chaining.
+   */
+  constexpr auto& clear_highest_set_bit()
+  {
+    m_value =
+      static_cast<T>(m_value & static_cast<T>(~std::bit_floor(m_value)));
+    return *this;
+  }
+
+  /**
+   * @brief Sets (sets to 1) the highest bit that is 0.
+   *
+   * For example, 0b1101'0011 becomes 0b1111'0011. A value with every bit 1
+   * stays the same.
+   *
+   * @return A reference to this instance for chaining.
+   */
+  constexpr auto& set_highest_clear_bit()
+  {
+    m_value =
+      static_cast<T>(m_value | std::bit_floor(static_cast<T>(~m_value)));
     return *this;
   }
 
@@ -812,3 +874,4 @@ private:
   T volatile* m_pointer;
 };
 }  // namespace hal::inline v6
+
