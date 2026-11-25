@@ -219,6 +219,17 @@ void divide_test()
                            { .num = max_signed, .den = min32 }));
     };
 
+    "ceil of zero is zero"_test = [] {
+      expect(that % 0U ==
+             hal::divide<rounding::ceil, hal::u32>({ .num = 0U, .den = 3U }));
+      expect(that % 0ULL ==
+             hal::divide<rounding::ceil, hal::u64>({ .num = 0U, .den = 3U }));
+      expect(that % hal::u8{ 0 } ==
+             hal::divide<rounding::ceil, hal::u8>({ .num = 0, .den = 3 }));
+      static_assert(
+        hal::divide<rounding::ceil, hal::u32>({ .num = 0U, .den = 3U }) == 0U);
+    };
+
     "Works for a narrow type"_test = [] {
       expect(that % hal::u8{ 128 } ==
              hal::divide<rounding::ceil, hal::u8>({ .num = 255, .den = 2 }));
