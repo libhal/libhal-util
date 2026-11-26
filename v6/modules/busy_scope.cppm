@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <atomic>
-
 export module hal.util:busy_scope;
+
+import std;
 
 import hal;
 

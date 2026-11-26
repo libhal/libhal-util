@@ -12,16 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <cstdio>
-
-#include <array>
-#include <cstddef>
-#include <span>
-#include <string_view>
-
 export module hal.util:serial;
+
+import std;
 
 import hal;
 import scatter_span;
@@ -113,7 +106,7 @@ void print(hal::serial& p_serial,
  * @param p_format - printf style null terminated format string
  * @param p_parameters - printf arguments
  */
-export template<size_t buffer_size, typename... Parameters>
+export template<std::size_t buffer_size, typename... Parameters>
 void print(hal::serial& p_serial,
            char const* p_format,
            Parameters... p_parameters)

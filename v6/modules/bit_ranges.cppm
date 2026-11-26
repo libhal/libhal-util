@@ -12,15 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <bit>
-#include <concepts>
-#include <cstddef>
-#include <cstdint>
-#include <iterator>
-#include <ranges>
-
 /**
  * @file
  * @brief Standard ranges over the bits of a value.
@@ -31,6 +22,8 @@ module;
  *     import hal.util.bit_ranges;
  */
 export module hal.util.bit_ranges;
+
+import std;
 
 namespace hal::inline v6 {
 /**

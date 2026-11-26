@@ -14,15 +14,14 @@
 
 module;
 
-#include <algorithm>
-#include <array>
-#include <chrono>
-#include <concepts>
-#include <cstddef>
+// The lock types (std::unique_lock, std::lock_guard) come from <mutex>:
+// libc++ built without threads, as on bare-metal targets, leaves them out of
+// the std module.
 #include <mutex>
-#include <type_traits>
 
 export module hal.util:i2c;
+
+import std;
 
 import hal;
 import scatter_span;
@@ -79,7 +78,7 @@ export void read(hal::i2c& p_i2c,
  * @return std::array<hal::byte, bytes_to_read> - array of bytes from target
  * device
  */
-export template<size_t bytes_to_read>
+export template<std::size_t bytes_to_read>
 [[nodiscard]] std::array<hal::byte, bytes_to_read> read(hal::i2c& p_i2c,
                                                         hal::byte p_address)
 {
@@ -121,7 +120,7 @@ export void write_then_read(hal::i2c& p_i2c,
  * @param p_data_out - buffer of bytes to write to the target device
  * @return std::array<hal::byte, bytes_to_read> -
  */
-export template<size_t bytes_to_read>
+export template<std::size_t bytes_to_read>
 [[nodiscard]] std::array<hal::byte, bytes_to_read> write_then_read(
   hal::i2c& p_i2c,
   hal::byte p_address,

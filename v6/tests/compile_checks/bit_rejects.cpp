@@ -14,8 +14,7 @@
 
 // Bit API misuse that the type system rejects.
 
-#include <cstdint>
-
+import std;
 import hal.util;
 
 // "Set" is ambiguous for a field wider than one bit: any bit, or all of them?

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Included, not imported: the operator below uses them and must come before
+// <boost/ut.hpp>, and `import std;` goes after the includes.
 #include <chrono>
 #include <ios>
 
@@ -26,6 +28,7 @@ std::ostream& operator<<(std::ostream& p_os,
 
 #include <boost/ut.hpp>
 
+import std;
 import hal;
 import hal.util;
 

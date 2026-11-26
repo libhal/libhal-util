@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <algorithm>
-#include <utility>
-
 export module hal.util:map;
+
+import std;
 
 /**
  * @defgroup Map Map

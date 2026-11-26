@@ -12,13 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <array>
-#include <cstddef>
-#include <span>
-
 export module hal.util:spi;
+
+import std;
 
 import hal;
 import scatter_span;
@@ -75,7 +71,7 @@ export void read(spi_channel& p_spi,
  * @return std::array<hal::byte, bytes_to_read> - array containing bytes read
  * from the spi bus
  */
-export template<size_t bytes_to_read>
+export template<std::size_t bytes_to_read>
 [[nodiscard]] std::array<hal::byte, bytes_to_read> read(
   spi_channel& p_spi,
   hal::byte p_filler = spi_channel::default_filler)
@@ -130,7 +126,7 @@ export void write_then_read(spi_channel& p_spi,
  * @return std::array<hal::byte, bytes_to_read> - array containing the bytes
  * read from the spi bus.
  */
-export template<size_t bytes_to_read>
+export template<std::size_t bytes_to_read>
 [[nodiscard]] std::array<hal::byte, bytes_to_read> write_then_read(
   spi_channel& p_spi,
   mem::scatter_span<hal::byte const> p_data_out,
