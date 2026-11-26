@@ -215,7 +215,7 @@ export struct bit_mask
    * @return constexpr auto - bit_mask value as an unsigned integer
    */
   template<std::unsigned_integral T>
-  constexpr auto origin() const
+  [[nodiscard]] constexpr auto origin() const
   {
     // At compile time, generate variable containing all 1s with the size of the
     // target parameter.
@@ -248,7 +248,7 @@ export struct bit_mask
    * @return constexpr auto - mask value as an unsigned integer
    */
   template<std::unsigned_integral T>
-  constexpr auto value() const
+  [[nodiscard]] constexpr auto value() const
   {
     return static_cast<T>(origin<T>() << position);
   }
@@ -302,6 +302,37 @@ export struct bit_mask
     hal::bit_mask result = *this;
     result.position += p_shift_amount;
     return result;
+  }
+
+  /**
+   * @brief Set a mask's bits in an integer
+   *
+   * The integer sets the width of the result, so a chain of masks starts with
+   * one. The masks don't have to be next to each other, so the result can
+   * hold bits that one bit_mask can't, such as one flag per transmit mailbox:
+   *
+   *      constexpr auto request_completed0 = hal::bit_mask::from<0>();
+   *      constexpr auto request_completed1 = hal::bit_mask::from<8>();
+   *      constexpr auto request_completed2 = hal::bit_mask::from<16>();
+   *      // 0x0001'0101
+   *      constexpr auto requests_completed = std::uint32_t{ 0 } |
+   *                                          request_completed0 |
+   *                                          request_completed1 |
+   *                                          request_completed2;
+   *
+   * @pre The mask fits in T. A mask that runs past T's top bit loses the bits
+   * that don't fit. One that starts at or past T's width, or is wider than T,
+   * is undefined behavior, and a compile error in a constant expression.
+   *
+   * @tparam T - unsigned integral type of the bits and the result
+   * @param p_bits - bits to add the mask's bits to
+   * @param p_mask - mask whose bits to set
+   * @return constexpr T - p_bits with the mask's bits set
+   */
+  template<std::unsigned_integral T>
+  friend constexpr T operator|(T p_bits, bit_mask p_mask)
+  {
+    return static_cast<T>(p_bits | p_mask.value<T>());
   }
 };
 

@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <ios>
 #include <limits>
+#include <type_traits>
 
 #include <bit>
 
@@ -225,6 +226,53 @@ void bit_is_set_test()
   };
 }
 
+void bit_mask_or_test()
+{
+  using namespace boost::ut;
+
+  "hal::bit_mask operator| combines masks that aren't next to each other"_test =
+    []() {
+      // Setup
+      constexpr auto request_completed0 = hal::bit_mask::from<0>();
+      constexpr auto request_completed1 = hal::bit_mask::from<8>();
+      constexpr auto request_completed2 = hal::bit_mask::from<16>();
+      constexpr auto mailbox_empty = hal::bit_mask::from<26, 28>();
+      std::uint32_t volatile status_register = 0;
+
+      // Exercise
+      constexpr auto requests_completed =
+        std::uint32_t{ 0 } | request_completed0 | request_completed1 |
+        request_completed2;
+      constexpr auto with_field =
+        std::uint32_t{ 0 } | mailbox_empty | request_completed0;
+      status_register = requests_completed;
+
+      // Verify
+      static_assert(
+        std::is_same_v<decltype(requests_completed), std::uint32_t const>);
+      expect(that % 0x0001'0101U == requests_completed);
+      expect(that % 0x1C00'0001U == with_field);
+      expect(that % 0x0001'0101U == status_register);
+    };
+
+  "hal::bit_mask operator| keeps the integer's width"_test = []() {
+    // Setup
+    constexpr auto lowest = hal::bit_mask::from<0>();
+    constexpr auto top_of_u64 = hal::bit_mask::from<63>();
+    constexpr auto top_of_byte = hal::bit_mask::from<7>();
+
+    // Exercise
+    constexpr auto wide = std::uint64_t{ 0 } | top_of_u64 | lowest;
+    constexpr auto byte = std::uint8_t{ 0b0000'0010 } | top_of_byte;
+
+    // Verify
+    static_assert(std::is_same_v<decltype(wide), std::uint64_t const>);
+    static_assert(std::is_same_v<decltype(byte), std::uint8_t const>);
+    expect(that % 0x8000'0000'0000'0001U == wide);
+    expect(that % 0b1000'0010U == byte);
+  };
+}
+
 void bit_value_assign_test()
 {
   using namespace boost::ut;
@@ -423,6 +471,7 @@ int main()
   generate_field_of_ones_test();
   bit_limits_test();
   bit_is_set_test();
+  bit_mask_or_test();
   bit_value_assign_test();
   lowest_and_highest_bit_test();
 }
