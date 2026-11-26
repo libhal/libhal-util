@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <limits>
-
 export module hal.util:steady_clock;
+
+import std;
 
 import hal;
 

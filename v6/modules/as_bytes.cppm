@@ -12,13 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <cstddef>
-
-#include <span>
-
 export module hal.util:as_bytes;
+
+import std;
 
 import hal;
 
@@ -38,11 +34,12 @@ namespace hal::inline v6 {
  * @return constexpr std::span<hal::byte> - span of elements
  */
 export template<typename T>
-constexpr std::span<hal::byte> as_writable_bytes(T* p_address,
-                                                 size_t p_number_of_elements)
+constexpr std::span<hal::byte> as_writable_bytes(
+  T* p_address,
+  std::size_t p_number_of_elements)
 {
   auto* start = reinterpret_cast<hal::byte*>(p_address);
-  size_t number_of_bytes = sizeof(T) * p_number_of_elements;
+  std::size_t number_of_bytes = sizeof(T) * p_number_of_elements;
   return { start, number_of_bytes };
 }
 
@@ -57,10 +54,10 @@ constexpr std::span<hal::byte> as_writable_bytes(T* p_address,
  */
 export template<typename T>
 constexpr std::span<hal::byte const> as_bytes(T const* p_address,
-                                              size_t p_number_of_elements)
+                                              std::size_t p_number_of_elements)
 {
   auto* start = reinterpret_cast<hal::byte const*>(p_address);
-  size_t number_of_bytes = sizeof(T) * p_number_of_elements;
+  std::size_t number_of_bytes = sizeof(T) * p_number_of_elements;
   return { start, number_of_bytes };
 }
 

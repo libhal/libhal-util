@@ -12,18 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <algorithm>
-#include <array>
-#include <bit>
-#include <concepts>
-#include <cstddef>
-#include <cstdint>
-#include <iterator>
-#include <ranges>
-#include <type_traits>
-
 #include <boost/ut.hpp>
 
+import std;
 import hal.util.bit_ranges;
 
 namespace {

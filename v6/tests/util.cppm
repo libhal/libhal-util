@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <ios>
-
 export module test_util;
+
+import std;
 
 import hal.util;
 import scatter_span;

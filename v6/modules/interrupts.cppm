@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <array>
-#include <cstddef>
-
 export module hal.util:interrupts;
+
+import std;
 
 import hal;
 

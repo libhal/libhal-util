@@ -17,17 +17,9 @@
  * @brief Compile time generic math utility functions
  * @defgroup Math Math
  */
-module;
-
-#include <cmath>
-
-#include <algorithm>
-#include <concepts>
-#include <limits>
-#include <optional>
-#include <type_traits>
-
 export module hal.util:math;
+
+import std;
 
 import hal;
 
@@ -272,26 +264,26 @@ export template<std::integral T>
 [[nodiscard]] constexpr std::make_unsigned_t<T> distance(T p_left, T p_right)
 {
   // NOLINTEND(bugprone-easily-swappable-parameters)
-  static_assert(sizeof(T) <= sizeof(int32_t));
+  static_assert(sizeof(T) <= sizeof(std::int32_t));
 
   using unsigned_t = std::make_unsigned_t<T>;
   // Put left and right values into 64-bit containers to prevent overflow
-  int64_t const left{ p_left };
-  int64_t const right{ p_right };
+  std::int64_t const left{ p_left };
+  std::int64_t const right{ p_right };
 
   if (right > left) {
     // Subtraction operation on right to left in this order can never overflow
     // because the maximum resultant of left and right being INT32_MAX and
     // INT32_MIN, will equal UINT32_MAX which can be stored within an int64_t
     // value.
-    int64_t const difference = right - left;
+    std::int64_t const difference = right - left;
     // Casting this value to the unsigned variant will always fit as the
     // distance between any 32-bit signed numbers can always fit in a 32-bit
     // unsigned number.
     return static_cast<unsigned_t>(difference);
   } else {
     // Same logic as the if statement block above.
-    int64_t const difference = left - right;
+    std::int64_t const difference = left - right;
     return static_cast<unsigned_t>(difference);
   }
 }
@@ -344,7 +336,7 @@ export [[nodiscard]] constexpr bool equals(std::floating_point auto p_value1,
 export template<std::unsigned_integral int_t, usize bit_width>
 [[nodiscard]] constexpr int_t upscale(int_t p_value)
 {
-  constexpr usize resultant_bit_width = sizeof(int_t) * CHAR_BIT;
+  constexpr usize resultant_bit_width = std::numeric_limits<int_t>::digits;
   static_assert(bit_width > 0 && bit_width <= resultant_bit_width,
                 "Bit width must be between 1 and 32");
   // If already 32 bits, return as-is

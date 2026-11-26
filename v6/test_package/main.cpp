@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <array>
-#include <print>
-#include <string_view>
-
+import std;
 import hal;
 import hal.util;
 

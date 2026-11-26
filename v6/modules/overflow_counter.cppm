@@ -12,13 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <concepts>
-#include <cstddef>
-#include <cstdint>
-
 export module hal.util:overflow_counter;
+
+import std;
 
 import hal;
 import :bit;
@@ -39,7 +35,7 @@ namespace hal::inline v6 {
  * @tparam count_bit_width - the bit width of the counter before the count
  * value overflows.
  */
-export template<size_t count_bit_width = 32>
+export template<std::size_t count_bit_width = 32>
 class overflow_counter
 {
 public:
@@ -56,13 +52,14 @@ public:
    * @return constexpr uint64_t - 64-bit count combining the new count value
    * and the overflow count value.
    */
-  constexpr uint64_t update(uint32_t p_new_count)
+  constexpr std::uint64_t update(std::uint32_t p_new_count)
   {
     // Sanitize the new count value to make sure it does not exceed the
     // designated bit width. Without this check when the count is combined
     // with the overflow value the upper bits may effect the bits of the
     // overflow count, getting an incorrect count value.
-    constexpr auto mask = generate_field_of_ones<count_bit_width, uint32_t>();
+    constexpr auto mask =
+      generate_field_of_ones<count_bit_width, std::uint32_t>();
     p_new_count = p_new_count & mask;
 
     // Detect the overflow by checking if the new count is smaller than the
@@ -78,7 +75,7 @@ public:
 
     // Move overflow count up to the upper bits of the 64-bit number based on
     // count_bit_width
-    uint64_t combined_count = m_overflow_count;
+    std::uint64_t combined_count = m_overflow_count;
     combined_count <<= count_bit_width;
     // Add the p_new_count into the combined count to complete it.
     combined_count |= p_new_count;
@@ -98,8 +95,8 @@ public:
   }
 
 private:
-  uint32_t m_previous_count = 0;
-  uint32_t m_overflow_count = 0;
+  std::uint32_t m_previous_count = 0;
+  std::uint32_t m_overflow_count = 0;
 };
 
 /**

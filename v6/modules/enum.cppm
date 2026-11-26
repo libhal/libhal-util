@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <type_traits>
-
 export module hal.util:enumeration;
+
+import std;
 
 import hal;
 

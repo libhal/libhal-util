@@ -12,19 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <climits>
-#include <cstddef>
-#include <cstdint>
-
-#include <algorithm>
-#include <bit>
-#include <concepts>
-#include <limits>
-#include <type_traits>
-
 export module hal.util:bit;
+
+import std;
 
 // NOTE: DO not include libhal/units.hpp here. We want this file to stay as a
 // dropp in header only library that just uses C++'s stdlib.
@@ -42,13 +32,13 @@ namespace hal::inline v6 {
  * @tparam T - the type
  * @return consteval uint32_t - mask with 1s at the LSB
  */
-export template<size_t BitWidth, std::integral T>
+export template<std::size_t BitWidth, std::integral T>
 [[nodiscard]] consteval T generate_field_of_ones()
 {
   // Shift an unsigned type of T's width: shifting int fails past 31 bits.
   using unsigned_t = std::make_unsigned_t<T>;
   unsigned_t result = 0;
-  for (size_t i = 0; i < BitWidth; i++) {
+  for (std::size_t i = 0; i < BitWidth; i++) {
     result |= unsigned_t{ 1 } << i;
   }
   return static_cast<T>(result);
@@ -63,7 +53,7 @@ export template<size_t BitWidth, std::integral T>
  * @tparam int_t - the containing type. Will generate a compile error if the
  * containing type's bit width is smaller than the BitWidth value.
  */
-export template<size_t BitWidth, std::integral int_t>
+export template<std::size_t BitWidth, std::integral int_t>
 struct bit_limits
 {
   // Check that the bit width is less than or equal to the size of the int_t.
@@ -358,7 +348,7 @@ export struct bit_mask
  * @tparam ByteIndex1 - starting byte position
  * @tparam ByteIndex2 - ending byte position
  */
-export template<size_t ByteIndex1, size_t ByteIndex2 = ByteIndex1>
+export template<std::size_t ByteIndex1, std::size_t ByteIndex2 = ByteIndex1>
 struct byte_mask
 {
   static constexpr auto bits_per_byte = 8;
@@ -382,7 +372,7 @@ struct byte_mask
  * @tparam ByteIndex1 - the byte position to make a mask for
  * @tparam ByteIndex2 - the byte position to make a mask for
  */
-export template<size_t ByteIndex1, size_t ByteIndex2 = ByteIndex1>
+export template<std::size_t ByteIndex1, std::size_t ByteIndex2 = ByteIndex1>
 constexpr hal::bit_mask byte_m = byte_mask<ByteIndex1, ByteIndex2>::value;
 
 /**
@@ -557,10 +547,10 @@ public:
   /**
    * @brief The total number of bits in the represented value.
    *
-   * This is calculated as the product of the size of `T` and the number of bits
-   * per byte (`CHAR_BIT`).
+   * The number of value bits of `T`, which for an unsigned type is all of its
+   * bits.
    */
-  static constexpr std::uint32_t width = sizeof(T) * CHAR_BIT;
+  static constexpr std::uint32_t width = std::numeric_limits<T>::digits;
 
   /**
    * @brief Constructs a new bit_value instance with an initial value.

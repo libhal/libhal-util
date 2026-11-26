@@ -12,14 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module;
-
-#include <algorithm>
-#include <array>
-#include <cstddef>
-#include <string_view>
-
 export module hal.util:to_array;
+
+import std;
 
 /**
  * @defgroup ToArray To Array
@@ -36,11 +31,11 @@ export namespace hal::inline v6 {
  * @param p_view - string to be placed into a char array
  * @return constexpr std::array<char, N + 1> - the char array object
  */
-template<size_t N>
+template<std::size_t N>
 [[nodiscard]] constexpr std::array<char, N + 1> to_array(
   std::string_view p_view)
 {
-  size_t const min = std::min(N, p_view.size());
+  std::size_t const min = std::min(N, p_view.size());
   std::array<char, N + 1> result;
 
   auto out_iterator = std::copy_n(p_view.begin(), min, result.begin());
