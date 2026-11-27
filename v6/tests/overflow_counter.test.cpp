@@ -347,6 +347,43 @@ void lap_counter_test()
     expect(that % 0x1'0001'0010ULL == total);
   };
 
+  "basic_lap_counter<u64>::total() counts past 2^32 laps"_test = []() {
+    // Setup
+    // A 16-bit timer clock at 72 MHz with no prescaler gets here in 45 days.
+    // Counting the laps one by one takes about 2 s.
+    hal::basic_lap_counter<hal::u64> laps;
+    laps.reset();
+    for (hal::u64 lap = 0; lap < 0x1'0000'0001ULL; lap++) {
+      laps.count_lap();
+    }
+
+    // Exercise
+    auto const total = laps.total(
+      0x1'0000, [] { return false; }, [] { return hal::u32{ 0x10 }; });
+
+    // Verify
+    static_assert(std::is_same_v<decltype(total), hal::u64 const>);
+    // (2^32 + 1) laps of 2^16, plus the position
+    expect(that % 0x1'0000'0001'0010ULL == total);
+  };
+
+  "basic_lap_counter<u64>::total() takes a 2^32 count lap"_test = []() {
+    // Setup
+    // Two chained 16-bit timers: the lap is the whole 32-bit count
+    hal::basic_lap_counter<hal::u64> laps;
+    laps.reset();
+    laps.count_lap();
+    laps.count_lap();
+
+    // Exercise
+    auto const total = laps.total(
+      0x1'0000'0000ULL, [] { return true; }, [] { return hal::u32{ 0x20 }; });
+
+    // Verify
+    // Two counted laps, one waiting for the interrupt, plus the position
+    expect(that % 0x3'0000'0020ULL == total);
+  };
+
   "lap_counter::total() differences stay right when the result wraps"_test =
     []() {
       // Setup

@@ -131,6 +131,19 @@ private:
  *
  * `total()` returns after at most two reads, however short the laps are.
  *
+ * `Laps` is the type of the lap count and the lap length. `hal::lap_counter`
+ * counts laps in a `hal::u32`, which suits a `hal::u32` total, such as bytes
+ * received. A 64-bit total needs `basic_lap_counter<hal::u64>`: with 32-bit
+ * laps, a `hal::u64` total wraps back to 0 after 2^32 laps. A 16-bit timer
+ * steady clock with no prescaler gets there in 45 days at 72 MHz. The 64-bit
+ * lap length also allows a 2^32 count lap, such as two chained 16-bit timers.
+ *
+ * On a 32-bit core, reading a 64-bit lap count can tear when `count_lap()`
+ * carries into its upper half. `total()` then sees two different lap counts
+ * and reads again. A tear in that second read goes unnoticed, but it needs
+ * the interrupt to count a lap during both reads, with laps about as short as
+ * a read, and the carry to land on the second of them: once every 2^32 laps.
+ *
  * @pre `count_lap()` and every `total()` call run on the same core.
  * Explanation: on another core, `total()` can read between `count_lap()` and
  * the flag clear. It sees the new lap count with the flag still set, and counts
@@ -152,16 +165,23 @@ private:
  *   [&] { return transfer_complete_flag_is_set(); },
  *   [&] { return buffer_length - remaining_transfers(); });
  * ```
+ *
+ * @tparam Laps - the lap count and lap length type: `hal::u32` or `hal::u64`
  */
-export class lap_counter
+export template<std::unsigned_integral Laps>
+class basic_lap_counter
 {
 public:
-  constexpr lap_counter() = default;
-  lap_counter(lap_counter const&) = delete;
-  lap_counter& operator=(lap_counter const&) = delete;
-  lap_counter(lap_counter&&) = delete;
-  lap_counter& operator=(lap_counter&&) = delete;
-  ~lap_counter() = default;
+  static_assert(std::is_same_v<Laps, hal::u32> or
+                  std::is_same_v<Laps, hal::u64>,
+                "Laps must be hal::u32 or hal::u64");
+
+  constexpr basic_lap_counter() = default;
+  basic_lap_counter(basic_lap_counter const&) = delete;
+  basic_lap_counter& operator=(basic_lap_counter const&) = delete;
+  basic_lap_counter(basic_lap_counter&&) = delete;
+  basic_lap_counter& operator=(basic_lap_counter&&) = delete;
+  ~basic_lap_counter() = default;
 
   /**
    * @brief Start over at a total of 0
@@ -214,32 +234,33 @@ public:
    * The lap interrupt can rule this out by calling `count_lap()` and clearing
    * the flag with interrupts masked.
    *
-   * @tparam Count - the type of the result, `hal::u32` unless given. The
-   * result wraps at its maximum, so differences between two results stay
-   * right with unsigned arithmetic.
+   * @tparam Count - the type of the result, `Laps` unless given. The result
+   * wraps at its maximum, so differences between two results stay right with
+   * unsigned arithmetic, as long as `Count` is no wider than `Laps`.
    * @param p_lap_length - how many counts the hardware goes through before it
    * starts over. For a circular DMA receive, the buffer length. For a timer,
-   * its reload value plus one.
+   * its reload value plus one. For two chained 16-bit timers, 2^32, which
+   * needs `Laps = hal::u64`.
    * @param p_lap_finished - returns true if the hardware's lap flag is set: a
    * lap has finished, but the interrupt hasn't counted it yet
    * @param p_position_in_lap - returns, as a `hal::u32`, how far the hardware
    * is into the current lap, counting up from 0 to the lap length minus one
    * @return Count - the total count since `reset()`
    */
-  template<std::unsigned_integral Count = hal::u32>
+  template<std::unsigned_integral Count = Laps>
   [[nodiscard]] Count total(
-    hal::u32 p_lap_length,
+    Laps p_lap_length,
     hal::callable<bool()> auto&& p_lap_finished,
     hal::callable<hal::u32()> auto&& p_position_in_lap) const
   {
-    hal::u32 laps = m_laps;
+    Laps laps = m_laps;
     Count completed_laps = 0;
     Count position = 0;
     for (int read = 0; read < 2; read++) {
       bool const finished_before = p_lap_finished();
       auto const position_read = static_cast<Count>(p_position_in_lap());
       bool const finished_after = p_lap_finished();
-      hal::u32 const laps_after = m_laps;
+      Laps const laps_after = m_laps;
 
       // If the interrupt counts a lap during both reads, at least two laps
       // were counted after the call started. When the call started, the total
@@ -269,6 +290,13 @@ public:
   }
 
 private:
-  hal::u32 volatile m_laps = 0;
+  Laps volatile m_laps = 0;
 };
+
+/**
+ * @ingroup OverflowCounter
+ * @brief A `hal::basic_lap_counter` with a 32-bit lap count, for 32-bit
+ * totals
+ */
+export using lap_counter = basic_lap_counter<hal::u32>;
 }  // namespace hal::inline v6
